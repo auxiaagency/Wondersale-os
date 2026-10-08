@@ -400,6 +400,9 @@ class EmployeeViewSet(ManagerOrOwnerMixin, viewsets.ModelViewSet):
         elif status_filter == 'inactive':
             qs = qs.filter(is_active=False)
 
+        # Strictly exclude owners from Employee management & attendance
+        qs = qs.exclude(staff_member__role__is_owner=True).exclude(staff_member__role__name__iexact='owner').exclude(designation__iexact='owner').exclude(department__iexact='owner')
+
         return qs.order_by('employee_code')
 
     def perform_create(self, serializer):
@@ -727,6 +730,9 @@ class DailyAttendanceViewSet(ManagerOrOwnerMixin, viewsets.ViewSet):
         if search:
             qs = qs.filter(employee__name__icontains=search) | qs.filter(employee__employee_code__icontains=search)
 
+        # Strictly exclude owners from daily attendance view
+        qs = qs.exclude(employee__staff_member__role__is_owner=True).exclude(employee__staff_member__role__name__iexact='owner').exclude(employee__designation__iexact='owner').exclude(employee__department__iexact='owner')
+
         serializer = AttendanceDaySerializer(qs.order_by('employee__name'), many=True)
         return Response({
             'date': target_date.isoformat(),
@@ -892,7 +898,15 @@ class AttendanceReportViewSet(ManagerOrOwnerMixin, viewsets.ViewSet):
             attendance_day__store_id=store_id,
             attendance_day__business_date=today,
             out_at__isnull=True
-        ).select_related('attendance_day__employee', 'attendance_day__employee__staff_member', 'attendance_day__employee__staff_member__role', 'attendance_day')
+        ).select_related('attendance_day__employee', 'attendance_day__employee__staff_member', 'attendance_day__employee__staff_member__role', 'attendance_day').exclude(
+            attendance_day__employee__staff_member__role__is_owner=True
+        ).exclude(
+            attendance_day__employee__staff_member__role__name__iexact='owner'
+        ).exclude(
+            attendance_day__employee__designation__iexact='owner'
+        ).exclude(
+            attendance_day__employee__department__iexact='owner'
+        )
 
         results = []
         now_utc = timezone.now()
@@ -950,7 +964,15 @@ class AttendanceReportViewSet(ManagerOrOwnerMixin, viewsets.ViewSet):
         start_date = date(year, month, 1)
         end_date = date(year, month, last_day)
 
-        employees = Employee.objects.filter(store_id=store_id, is_active=True).order_by('name')
+        employees = Employee.objects.filter(store_id=store_id, is_active=True).exclude(
+            staff_member__role__is_owner=True
+        ).exclude(
+            staff_member__role__name__iexact='owner'
+        ).exclude(
+            designation__iexact='owner'
+        ).exclude(
+            department__iexact='owner'
+        ).order_by('name')
         days_qs = AttendanceDay.objects.filter(
             store_id=store_id,
             business_date__gte=start_date,
@@ -1099,7 +1121,15 @@ class AttendanceReportViewSet(ManagerOrOwnerMixin, viewsets.ViewSet):
         year = int(request.query_params.get('year', today.year))
         month = int(request.query_params.get('month', today.month))
 
-        employees = Employee.objects.filter(store_id=store_id, is_active=True).order_by('name')
+        employees = Employee.objects.filter(store_id=store_id, is_active=True).exclude(
+            staff_member__role__is_owner=True
+        ).exclude(
+            staff_member__role__name__iexact='owner'
+        ).exclude(
+            designation__iexact='owner'
+        ).exclude(
+            department__iexact='owner'
+        ).order_by('name')
         summaries = [get_month_attendance(emp, year, month) for emp in employees]
 
         return Response({

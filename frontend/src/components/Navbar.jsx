@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Store as StoreIcon,
   RotateCcw,
+  Move,
 } from 'lucide-react';
 import { isModuleAccessible, SYSTEM_MODULES, getLauncherOrderStorageKey } from './AppLauncher';
 
@@ -39,6 +40,7 @@ export default function Navbar({
   }, [currentUser]);
 
   const [hasCustomLauncherOrder, setHasCustomLauncherOrder] = useState(checkCustomLauncherOrder);
+  const [isMoveModeActive, setIsMoveModeActive] = useState(false);
 
   useEffect(() => {
     setHasCustomLauncherOrder(checkCustomLauncherOrder());
@@ -51,6 +53,22 @@ export default function Navbar({
     window.addEventListener('wondersale_launcher_order_changed', handleOrderChange);
     return () => window.removeEventListener('wondersale_launcher_order_changed', handleOrderChange);
   }, [checkCustomLauncherOrder]);
+
+  useEffect(() => {
+    const handleMoveModeChange = (e) => {
+      if (typeof e.detail?.active === 'boolean') {
+        setIsMoveModeActive(e.detail.active);
+      }
+    };
+    window.addEventListener('wondersale_launcher_move_mode_changed', handleMoveModeChange);
+    return () => window.removeEventListener('wondersale_launcher_move_mode_changed', handleMoveModeChange);
+  }, []);
+
+  const toggleMoveMode = () => {
+    const next = !isMoveModeActive;
+    setIsMoveModeActive(next);
+    window.dispatchEvent(new CustomEvent('wondersale_launcher_toggle_move_mode', { detail: { active: next } }));
+  };
 
   const handleResetLauncherOrder = () => {
     const storageKey = getLauncherOrderStorageKey(currentUser);
@@ -224,6 +242,19 @@ export default function Navbar({
             </div>
           )}
 
+          {/* Mobile Rearrange / Move Apps Button: Only visible on launcher view in mobile after Store Location & Employee Badge */}
+          {activeView === 'launcher' && (
+            <button
+              type="button"
+              onClick={toggleMoveMode}
+              className={`btn btn-secondary btn-icon app-navbar-btn app-navbar-move-btn ${isMoveModeActive ? 'active' : ''}`}
+              title={isMoveModeActive ? 'Disable app reordering' : 'Enable app reordering'}
+              aria-label="Toggle Move Apps Mode"
+            >
+              <Move size={14} style={{ color: isMoveModeActive ? 'var(--brand-accent)' : 'inherit' }} />
+            </button>
+          )}
+
           {/* Action Buttons Container */}
           <div className="app-navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {/* Reset App Order Button: Visible ONLY on launcher view when custom order exists */}
@@ -231,7 +262,7 @@ export default function Navbar({
               <button
                 type="button"
                 onClick={handleResetLauncherOrder}
-                className="btn btn-secondary btn-sm"
+                className="btn btn-secondary btn-sm app-navbar-reset-order-btn"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -247,9 +278,10 @@ export default function Navbar({
                   marginRight: '4px',
                 }}
                 title="Reset app icons to default order"
+                aria-label="Reset app icons to default order"
               >
                 <RotateCcw size={13} />
-                <span>Reset App Order</span>
+                <span className="app-navbar-reset-text">Reset App Order</span>
               </button>
             )}
 

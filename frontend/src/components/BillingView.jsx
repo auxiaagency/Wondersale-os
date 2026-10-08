@@ -300,6 +300,11 @@ export default function BillingView({
 
   // Sale Confirmation Modal State
   const [isConfirmSaleModalOpen, setIsConfirmSaleModalOpen] = useState(false);
+  const isConfirmSaleModalOpenRef = useRef(false);
+  isConfirmSaleModalOpenRef.current = isConfirmSaleModalOpen;
+
+  const handleInitiateCheckoutRef = useRef();
+  const handleCompleteCheckoutRef = useRef();
 
   // Digital Receipt Modal State
   const [completedOrder, setCompletedOrder] = useState(null);
@@ -387,18 +392,43 @@ export default function BillingView({
   // Barcode Scanner Listener (Detects USB barcode guns, 2D imagers, Bluetooth & serial wedges)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Escape to close image lightbox
+      // Escape to close image lightbox or confirmation modal
       if (e.key === 'Escape') {
         if (lightboxImage) {
           setLightboxImage(null);
           return;
         }
+        if (isConfirmSaleModalOpenRef.current) {
+          setIsConfirmSaleModalOpen(false);
+          return;
+        }
       }
 
-      // Global shortcut for checkout: F2 (Focus on phone number in inline checkout)
-      if (e.key === 'F2') {
+      // Alt + X (or F2): Initiate complete sale & print receipt (opens confirmation modal)
+      const isAltX = e.altKey && !e.ctrlKey && (e.key === 'x' || e.key === 'X' || e.code === 'KeyX');
+      if (isAltX || e.key === 'F2') {
         e.preventDefault();
-        phoneInputRef.current?.focus();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+          e.stopImmediatePropagation();
+        }
+        if (!isConfirmSaleModalOpenRef.current) {
+          handleInitiateCheckoutRef.current?.();
+        }
+        return;
+      }
+
+      // Alt + C: Progress further / Confirm sale & complete checkout in confirmation modal
+      const isAltC = e.altKey && !e.ctrlKey && (e.key === 'c' || e.key === 'C' || e.code === 'KeyC');
+      if (isAltC) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+          e.stopImmediatePropagation();
+        }
+        if (isConfirmSaleModalOpenRef.current) {
+          handleCompleteCheckoutRef.current?.();
+        }
         return;
       }
 
@@ -1376,6 +1406,9 @@ export default function BillingView({
       setIsSubmitting(false);
     }
   };
+
+  handleInitiateCheckoutRef.current = handleInitiateCheckout;
+  handleCompleteCheckoutRef.current = handleCompleteCheckout;
 
   // ---------------- Draft / Hold Cart (Park Bill) Handlers ----------------
 
@@ -4685,7 +4718,7 @@ export default function BillingView({
               </button>
 
               <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Press <strong>Enter</strong> in phone field or <strong>F2</strong> to finalize
+                Press <strong>Enter</strong> in phone field or <strong>Alt + X</strong> to finalize
               </div>
             </div>
           </form>
@@ -5559,6 +5592,7 @@ export default function BillingView({
                   disabled={isSubmitting}
                   onClick={handleCompleteCheckout}
                   className="btn btn-primary"
+                  title="Press Alt + C to finalize sale"
                   style={{
                     padding: '10px 24px',
                     fontSize: '0.94rem',
@@ -5572,7 +5606,23 @@ export default function BillingView({
                 >
                   <CheckCircle2 size={18} />
                   <span>{isSubmitting ? 'Finalizing Sale...' : 'Confirm & Complete Sale'}</span>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      padding: '2px 7px',
+                      borderRadius: '5px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    Alt + C
+                  </span>
                 </button>
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'right', marginTop: '2px' }}>
+                Press <strong>Alt + C</strong> to confirm sale or <strong>Esc</strong> to cancel
               </div>
             </div>
           </div>

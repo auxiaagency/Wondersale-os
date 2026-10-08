@@ -193,7 +193,20 @@ export default function EmployeeManagementView({ currentUser, stores = [], selec
         search: empSearch,
         status: empStatusFilter !== 'all' ? empStatusFilter : undefined,
       });
-      setEmployees(data);
+      const filtered = Array.isArray(data)
+        ? data.filter((emp) => {
+            const roleName = emp.role_name || emp.role?.name || emp.role || emp.designation || emp.department || '';
+            const isOwner =
+              emp.is_owner ||
+              emp.staff_member?.is_owner ||
+              emp.staff_member?.role?.is_owner ||
+              String(roleName).toLowerCase().trim() === 'owner' ||
+              String(emp.designation || '').toLowerCase().trim() === 'owner' ||
+              String(emp.department || '').toLowerCase().trim() === 'owner';
+            return !isOwner;
+          })
+        : [];
+      setEmployees(filtered);
     } catch (err) {
       showToast(err.message, 'danger');
     } finally {
@@ -221,7 +234,13 @@ export default function EmployeeManagementView({ currentUser, stores = [], selec
     setWhoLoading(true);
     try {
       const data = await fetchWhoIsIn(selectedStoreId);
-      setWhoIsIn(data);
+      const filtered = Array.isArray(data)
+        ? data.filter((emp) => {
+            const roleName = emp.role_name || emp.designation || emp.department || '';
+            return String(roleName).toLowerCase().trim() !== 'owner';
+          })
+        : [];
+      setWhoIsIn(filtered);
     } catch (err) {
       showToast(err.message, 'danger');
     } finally {
@@ -266,7 +285,12 @@ export default function EmployeeManagementView({ currentUser, stores = [], selec
         date: dailyDate,
         status: dailyStatusFilter || undefined,
       });
-      setDailyRecords(res.records || []);
+      const rawRecords = res.records || [];
+      const filteredRecords = rawRecords.filter((r) => {
+        const roleName = r.employee?.designation || r.employee?.department || r.employee?.staff_member?.role?.name || r.role_name || '';
+        return String(roleName).toLowerCase().trim() !== 'owner';
+      });
+      setDailyRecords(filteredRecords);
     } catch (err) {
       showToast(err.message, 'danger');
     } finally {
@@ -305,6 +329,12 @@ export default function EmployeeManagementView({ currentUser, stores = [], selec
     setMatrixLoading(true);
     try {
       const res = await fetchMonthlyGrid(selectedStoreId, matrixYear, matrixMonth);
+      if (res && Array.isArray(res.matrix)) {
+        res.matrix = res.matrix.filter((row) => {
+          const roleName = row.designation || row.department || row.role_name || '';
+          return String(roleName).toLowerCase().trim() !== 'owner';
+        });
+      }
       setMatrixData(res);
     } catch (err) {
       showToast(err.message, 'danger');
@@ -392,7 +422,12 @@ export default function EmployeeManagementView({ currentUser, stores = [], selec
     setPunchLoading(true);
     try {
       const res = await fetchPunchLog(selectedStoreId);
-      setPunches(res.punches || []);
+      const rawPunches = res.punches || [];
+      const filteredPunches = rawPunches.filter((p) => {
+        const roleName = p.employee?.designation || p.employee?.department || p.employee?.staff_member?.role?.name || p.role_name || '';
+        return String(roleName).toLowerCase().trim() !== 'owner';
+      });
+      setPunches(filteredPunches);
       setUnknownTaps(res.unknown_taps || []);
     } catch (err) {
       showToast(err.message, 'danger');
@@ -451,7 +486,13 @@ export default function EmployeeManagementView({ currentUser, stores = [], selec
         fetchLeaveTypes(),
         fetchHolidays(selectedStoreId),
       ]);
-      setLeaveRequests(reqs);
+      const filteredReqs = Array.isArray(reqs)
+        ? reqs.filter((r) => {
+            const roleName = r.employee?.designation || r.employee?.department || r.employee?.staff_member?.role?.name || '';
+            return String(roleName).toLowerCase().trim() !== 'owner';
+          })
+        : [];
+      setLeaveRequests(filteredReqs);
       setLeaveTypes(types);
       setHolidays(hols);
       if (types.length > 0) {

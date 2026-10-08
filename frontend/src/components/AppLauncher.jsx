@@ -259,13 +259,17 @@ function SortableLauncherCard({
   module: m,
   onCardClick,
   activeId,
+  moveModeActive = true,
 }) {
   const {
     attributes,
     listeners,
     setNodeRef,
     isDragging,
-  } = useSortable({ id: m.id });
+  } = useSortable({
+    id: m.id,
+    disabled: !moveModeActive,
+  });
 
   const isCurrentCardActive = isDragging || activeId === m.id;
 
@@ -284,7 +288,7 @@ function SortableLauncherCard({
         '--card-glow': m.bgGlow,
         opacity: isCurrentCardActive ? 0.2 : 1,
         zIndex: isCurrentCardActive ? 0 : 1,
-        touchAction: 'none',
+        touchAction: moveModeActive ? 'none' : 'auto',
         aspectRatio: '1 / 1',
         display: 'flex',
         flexDirection: 'column',
@@ -304,7 +308,7 @@ function SortableLauncherCard({
         userSelect: 'none',
       }}
       {...attributes}
-      {...listeners}
+      {...(moveModeActive ? listeners : {})}
       onClick={() => {
         if (!isCurrentCardActive && onCardClick) {
           onCardClick(m.id);
@@ -330,7 +334,46 @@ export default function AppLauncher({ currentUser, onNavigate }) {
   const [modules, setModules] = useState(() => getInitialModulesOrder(currentUser));
   const [activeId, setActiveId] = useState(null);
 
+  // On desktop (>640px) dragging is always enabled.
+  // On mobile (<=640px) it requires the move-mode button toggle.
+  const isMobile = () => window.innerWidth <= 640;
+  const [isMoveModeActive, setIsMoveModeActive] = useState(() => !isMobile());
+
   const [stakeholdersActive, setStakeholdersActive] = useState(() => isStakeholdersEnabled());
+
+  // Listen for mobile move mode toggle events from Navbar
+  useEffect(() => {
+    const handleMoveToggle = (e) => {
+      // Only apply toggle from the button on mobile; desktop is always enabled
+      if (isMobile() && typeof e.detail?.active === 'boolean') {
+        setIsMoveModeActive(e.detail.active);
+      }
+    };
+    window.addEventListener('wondersale_launcher_toggle_move_mode', handleMoveToggle);
+    return () => window.removeEventListener('wondersale_launcher_toggle_move_mode', handleMoveToggle);
+  }, []);
+
+  // When the viewport resizes, sync move mode to correct default
+  useEffect(() => {
+    const handleResize = () => {
+      if (!isMobile()) {
+        // Desktop: always keep drag enabled
+        setIsMoveModeActive(true);
+      }
+      // Mobile: leave it as-is (controlled by the button)
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Broadcast state changes if needed
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('wondersale_launcher_move_mode_changed', {
+        detail: { active: isMoveModeActive },
+      })
+    );
+  }, [isMoveModeActive]);
 
   // Keep modules in sync whenever currentUser changes (login, switch user, role permissions change)
   useEffect(() => {
@@ -478,7 +521,7 @@ export default function AppLauncher({ currentUser, onNavigate }) {
 
   return (
     <div
-      className={`app-launcher-container ${activeId ? 'is-dragging' : ''}`}
+      className={`app-launcher-container ${activeId ? 'is-dragging' : ''} ${isMoveModeActive ? 'is-reorder-mode' : ''}`}
       style={{
         maxWidth: '1100px',
         margin: '0 auto',
@@ -523,6 +566,7 @@ export default function AppLauncher({ currentUser, onNavigate }) {
                   module={m}
                   onCardClick={handleCardClick}
                   activeId={activeId}
+                  moveModeActive={isMoveModeActive}
                 />
               ))}
 
@@ -678,6 +722,7 @@ export default function AppLauncher({ currentUser, onNavigate }) {
                           module={m}
                           onCardClick={handleCardClick}
                           activeId={activeId}
+                          moveModeActive={isMoveModeActive}
                         />
                       ))}
                     </motion.div>

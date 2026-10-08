@@ -39,6 +39,10 @@ def sync_single_staff_member(sm: StaffMember) -> Employee:
     Instantly synchronizes a single StaffMember into the Employee directory.
     Creates or updates the Employee record, store assignment, phone, photo, department, and designation.
     """
+    if sm.is_owner or (sm.role and (sm.role.is_owner or sm.role.name.lower() == 'owner')):
+        Employee.objects.filter(staff_member=sm).delete()
+        return None
+
     with transaction.atomic():
         emp = Employee.objects.filter(staff_member=sm).first()
         if not emp and sm.staff_id:
@@ -122,10 +126,18 @@ def sync_employees_from_staff_members(store: Store | None = None) -> dict[str, A
     if store:
         staff_qs = staff_qs.filter(store=store)
 
+    # Strictly exclude owners from Employee management sync
+    staff_qs = staff_qs.exclude(role__is_owner=True).exclude(role__name__iexact='owner')
+
     created_count = 0
     updated_count = 0
 
     with transaction.atomic():
+        # Clean up any existing Employee records for owners
+        Employee.objects.filter(staff_member__role__is_owner=True).delete()
+        Employee.objects.filter(staff_member__role__name__iexact='owner').delete()
+        Employee.objects.filter(designation__iexact='owner').delete()
+
         for sm in staff_qs:
             # 1. Try finding existing Employee linked to this StaffMember
             emp = Employee.objects.filter(staff_member=sm).first()

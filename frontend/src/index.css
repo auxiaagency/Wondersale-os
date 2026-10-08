@@ -8722,5 +8722,92 @@ input[type=number] {
   }
 }
 
+/* ==========================================================================
+   MOBILE LAUNCHER REORDER (MOVE) TOGGLE & ICON-ONLY RESET BUTTON
+   Strictly applies to mobile screens (<= 640px) without touching desktop.
+   ========================================================================== */
+
+/* By default on desktop / tablet, the mobile move button is hidden */
+.app-navbar-move-btn {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  /* Reveal mobile move toggle button right after store & employee badges */
+  .app-navbar-move-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    border-radius: var(--radius-pill) !important;
+    padding: 0 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .app-navbar-move-btn.active {
+    background: rgba(254, 197, 1, 0.16) !important;
+    border-color: var(--brand-accent) !important;
+    box-shadow: 0 0 10px rgba(254, 197, 1, 0.3) !important;
+  }
+
+  /* Reset App Order button: in mobile view, show ONLY the icon */
+  .app-navbar-reset-order-btn {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    padding: 0 !important;
+    border-radius: var(--radius-pill) !important;
+    justify-content: center !important;
+    margin-right: 0 !important;
+  }
+
+  .app-navbar-reset-order-btn .app-navbar-reset-text {
+    display: none !important;
+  }
+
+  .app-navbar-reset-order-btn svg {
+    width: 13px !important;
+    height: 13px !important;
+  }
+
+  /* Subtle jiggle animation when reorder mode is active on mobile */
+  @keyframes launcherWiggle {
+    0% { transform: rotate(0deg); }
+    25% { transform: rotate(-1.1deg); }
+    75% { transform: rotate(1.1deg); }
+    100% { transform: rotate(0deg); }
+  }
+
+  .app-launcher-container.is-reorder-mode .app-launcher-card:not(.app-launcher-toggle-btn) {
+    animation: launcherWiggle 0.38s ease-in-out infinite alternate !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-navbar-move-btn {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+  }
+
+  .app-navbar-move-btn svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  .app-navbar-reset-order-btn {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+  }
+
+  .app-navbar-reset-order-btn svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+}
+
 
 
