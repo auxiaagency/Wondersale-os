@@ -490,10 +490,17 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
             margin: 0;
           }
           #printable-barcode-label {
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
             width: ${labelFormat === '38x25_2up' ? '80mm' : labelFormat === '38x25_1up' ? '38mm' : '3.5in'} !important;
             max-width: ${labelFormat === '38x25_2up' ? '80mm' : labelFormat === '38x25_1up' ? '38mm' : '3.5in'} !important;
-            margin: 0 !important;
+            margin: 0 auto !important;
             padding: 0 !important;
+            background: #FFFFFF !important;
+            border: none !important;
+            box-shadow: none !important;
+            min-height: 0 !important;
           }
         }
       `}</style>
