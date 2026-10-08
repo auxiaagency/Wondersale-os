@@ -1,0 +1,14 @@
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+db.sqlite3
+db.sqlite3-journal
+media/
+scratch/
+venv/
+.env
+.env.*
+!.env.example
+backups/
+logs/

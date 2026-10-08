@@ -1,0 +1,11 @@
+S_No,Category,Product,Barcode,Qty,Cost_Price,Sell_Price,Cost_Total,Sell_Total
+1,Apparel,Classic Cotton T-Shirt Navy M,10245,15,450.00,799.00,6750.00,11985.00
+2,Apparel,Denim Jacket Vintage Blue,10246,8,1200.00,2499.00,9600.00,19992.00
+3,Electronics,Wireless Earbuds ANC Black,8901234567890,20,950.00,1899.00,19000.00,37980.00
+4,Stationery,Executive Leather Notebook A5,10247,25,180.00,350.00,4500.00,8750.00
+5,Accessories,Eco Canvas Tote Bag 1,Tote Bag 1,12,120.00,299.00,1440.00,3588.00
+6,Drinkware,Stainless Steel Sipper 750ml,Sipper,18,220.00,499.00,3960.00,8982.00
+7,Home & Kitchen,Ceramic Coffee Mug Matte,0,30,85.00,199.00,2550.00,5970.00
+8,Footwear,Comfort Running Shoes Grey 9,,10,1100.00,2199.00,11000.00,21990.00
+9,Apparel,Classic Cotton T-Shirt Navy M,10245,5,450.00,799.00,2250.00,3995.00
+10,Stationery,Premium Gel Pen Blue 0.5,10247,50,25.00,50.00,1250.00,2500.00

@@ -1,0 +1,40 @@
+# Python & Django
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+db.sqlite3
+db.sqlite3-journal
+media/
+scratch/
+venv/
+.env
+
+# Node & Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Environment variables & secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Security Audit & Knowledge Graph output
+security/
+graphify-out/
+*.log
+logs/
+backups/
+
+# Local AI Agent & IDE configs
+.agents/
