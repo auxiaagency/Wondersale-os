@@ -49,7 +49,7 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
   const handlePrint = async () => {
     if (!imageLoaded && !imageError) {
       setPrintFeedback('Preparing barcode image for crisp printing...');
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 800));
     }
 
     if (autoMarkPrinted && item.needs_new_barcode_printed) {
@@ -65,7 +65,241 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
       }
     }
 
-    window.print();
+    // ── Print via isolated popup window so no app CSS can interfere ──
+    const printEl = document.getElementById('printable-barcode-label');
+    if (!printEl) { window.print(); return; }
+
+    const pageSize   = labelFormat === '38x25_2up' ? '80mm 25mm'   : labelFormat === '38x25_1up' ? '38mm 25mm'  : '3.5in 1.5in';
+    const pageWidth  = labelFormat === '38x25_2up' ? '80mm'         : labelFormat === '38x25_1up' ? '38mm'       : '3.5in';
+    const pageHeight = labelFormat === '38x25_2up' ? '25mm'         : labelFormat === '38x25_1up' ? '25mm'       : '1.5in';
+
+    // Resolve absolute URLs for images in the cloned HTML
+    const clone = printEl.cloneNode(true);
+    clone.style.cssText = ''; // strip screen inline styles entirely
+    clone.querySelectorAll('img').forEach((img) => {
+      const src = img.getAttribute('src') || '';
+      if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+        img.src = `${window.location.origin}${src.startsWith('/') ? '' : '/'}${src}`;
+      }
+    });
+
+    const pw = window.open('', '_blank', 'width=800,height=600');
+    if (!pw) { window.print(); return; }
+
+    pw.document.open();
+    pw.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    @font-face {
+      font-family: 'OCR-B';
+      src: url('${window.location.origin}/fonts/OCR-B.ttf') format('truetype');
+      font-weight: 700;
+      font-style: normal;
+    }
+
+    @page {
+      size: ${pageSize};
+      margin: 0;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #FFFFFF;
+      font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif;
+      width: ${pageWidth};
+    }
+
+    /* ── Printable label container ── */
+    #printable-barcode-label {
+      display: block;
+      width: ${pageWidth};
+      max-width: ${pageWidth};
+      margin: 0;
+      padding: 0;
+      background: #FFFFFF;
+      overflow: visible;
+    }
+
+    /* ── 38×25 2UP row ── */
+    .barcode-2up-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      width: 80mm;
+      max-width: 80mm;
+      height: 24.8mm;
+      max-height: 25mm;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      overflow: hidden;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: always;
+      break-after: page;
+    }
+    .barcode-2up-row:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    /* ── Single 38×25 sticker ── */
+    .barcode-sticker-38x25 {
+      width: 38mm;
+      min-width: 38mm;
+      max-width: 38mm;
+      height: 24.5mm;
+      max-height: 24.5mm;
+      padding: 0.6mm 1mm;
+      margin: 0;
+      box-sizing: border-box;
+      background: #FFFFFF;
+      color: #000000;
+      border: 1px solid #000000;
+      border-radius: 2px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: center;
+    }
+
+    /* ── Barcode graphic box ── */
+    .barcode-graphic-box {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 11mm;
+      max-height: 11mm;
+      width: 100%;
+      overflow: hidden;
+      background: #FFFFFF;
+    }
+
+    /* ── Logo image ── */
+    img.barcode-logo-img {
+      height: 11px;
+      width: auto;
+      object-fit: contain;
+      image-rendering: auto;
+    }
+
+    /* ── Barcode code image ── */
+    img.barcode-code-img,
+    .barcode-sticker-38x25 img:not(.barcode-logo-img) {
+      width: 100%;
+      max-width: 100%;
+      height: 10.8mm;
+      max-height: 10.8mm;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+
+    /* ── 1UP container ── */
+    .barcode-1up-container {
+      display: block;
+      margin: 0;
+      padding: 0;
+    }
+    .barcode-1up-container .barcode-sticker-38x25 {
+      margin: 0;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: always;
+      break-after: page;
+    }
+    .barcode-1up-container .barcode-sticker-38x25:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    /* ── Standard 3.5×1.5in sticker ── */
+    .barcode-standard-container {
+      display: block;
+      margin: 0;
+      padding: 0;
+    }
+    .barcode-single-sticker {
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: always;
+      break-after: page;
+      width: 3.5in;
+      height: 1.48in;
+      max-height: 1.5in;
+      margin: 0;
+      padding: 8px 12px;
+      border: 1px solid #000000;
+      border-radius: 4px;
+      background: #FFFFFF;
+      color: #000000;
+      text-align: center;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .barcode-single-sticker:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+
+    /* ── Font assignments ── */
+    .barcode-price-value,
+    .barcode-price-value * {
+      font-family: 'OCR-B', 'OCRB', monospace !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.03em !important;
+    }
+    .barcode-currency-symbol {
+      font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      font-weight: 400 !important;
+    }
+
+    /* ── Ghost (empty) sticker ── */
+    .barcode-sticker-38x25[style*="opacity"] {
+      visibility: hidden;
+    }
+
+    /* ── Spinner (hide in print) ── */
+    .spin { display: none; }
+  </style>
+</head>
+<body>
+${clone.outerHTML}
+</body>
+</html>`);
+    pw.document.close();
+
+    // Wait for fonts + images to load, then print
+    pw.onload = () => {
+      pw.focus();
+      setTimeout(() => {
+        pw.print();
+        setTimeout(() => pw.close(), 1000);
+      }, 600);
+    };
+    // Fallback if onload doesn't fire
+    setTimeout(() => {
+      if (!pw.closed) {
+        pw.focus();
+        pw.print();
+        setTimeout(() => pw.close(), 1000);
+      }
+    }, 1800);
   };
 
   const handleManualMarkPrinted = async () => {
