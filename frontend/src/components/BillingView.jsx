@@ -53,6 +53,7 @@ import {
 } from 'lucide-react';
 import {
   fetchItems,
+  fetchItemByUid,
   processCheckout,
   lookupCustomer,
   getBarcodeUrl,
@@ -330,6 +331,13 @@ export default function BillingView({
   const barcodeBufferRef = useRef('');
   const lastKeyTimeRef = useRef(0);
   const lastScanProcessedRef = useRef({ code: '', time: 0 });
+  const itemsRef = useRef(items);
+  const handleBarcodeScannedRef = useRef(null);
+
+  // Keep itemsRef synchronized immediately with items state
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   // Load Inventory for Active Store
   useEffect(() => {
@@ -444,9 +452,9 @@ export default function BillingView({
       // Handle barcode termination keys: Enter or Tab (configured by different barcode scanner manufacturers)
       if (e.key === 'Enter' || e.key === 'Tab') {
         const buffer = barcodeBufferRef.current.trim();
-        // Hardware scanners typically burst characters within <70ms per key
-        // A valid barcode/UID is >= 3 characters
-        if (buffer.length >= 3 && diff < 85) {
+        // Hardware scanners typically burst characters within rapid keystrokes (<250ms per key, terminator <350ms)
+        // A valid barcode/UID is >= 2 characters
+        if (buffer.length >= 2 && diff < 350) {
           e.preventDefault();
           e.stopPropagation();
           if (typeof e.stopImmediatePropagation === 'function') {
@@ -461,14 +469,14 @@ export default function BillingView({
               searchInputRef.current.value = '';
             }
           }
-          handleBarcodeScanned(buffer);
+          handleBarcodeScannedRef.current?.(buffer);
           return;
         }
         barcodeBufferRef.current = '';
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        // Most handheld scanners send keys with interval <= 50ms (Bluetooth/virtual COM can reach 60-70ms)
-        // Reset buffer if delay between keystrokes exceeds 100ms (human typing)
-        if (diff > 100) {
+        // Most handheld scanners send keys with interval <= 50ms (Bluetooth/virtual COM can reach 60-120ms)
+        // Reset buffer if delay between keystrokes exceeds 250ms (human typing)
+        if (diff > 250) {
           barcodeBufferRef.current = e.key;
         } else {
           barcodeBufferRef.current += e.key;
@@ -481,52 +489,105 @@ export default function BillingView({
   }, [items, cart]);
 
   // Handle scanned or searched Barcode / UID (works with all 1D/2D symbologies, Code128, EAN-13, QR, and legacy codes)
-  const handleBarcodeScanned = (code) => {
-    if (!code) return;
+  const handleBarcodeScanned = async (code) => {
+    if (!code) return false;
     const now = Date.now();
-    // Strip common scanner control prefixes/suffixes like AIM symbology identifiers (e.g. ]C1, ]e0, \r, \n)
-    let cleaned = String(code).trim().replace(/^\][A-Za-z0-9]{2}/, '').trim().toLowerCase();
-    if (!cleaned) return;
+    // Strip control characters & AIM symbology identifiers (e.g. ]C1, ]e0, \r, \n) and quotes
+    let cleaned = String(code)
+      .replace(/[\x00-\x1f\x7f-\x9f]/g, '')
+      .trim()
+      .replace(/^\][A-Za-z0-9]{2}/, '')
+      .trim()
+      .replace(/^['"]+|['"]+$/g, '')
+      .toLowerCase();
+    if (!cleaned) return false;
 
     // Strict Debounce & Rate Limiting Guard:
-    // 1. Same barcode scanned within 800ms: Ignore duplicate (hardware trigger bounce / repeat pulse / \r\n double fire)
+    // 1. Same barcode scanned within 600ms: Ignore duplicate (hardware trigger bounce / repeat pulse / \r\n double fire)
     if (
       lastScanProcessedRef.current.code === cleaned &&
-      now - lastScanProcessedRef.current.time < 800
+      now - lastScanProcessedRef.current.time < 600
     ) {
-      return;
+      return true;
     }
-    // 2. Rate limit ANY barcode scan within 300ms to prevent buffer overlap or noise bursts
-    if (now - lastScanProcessedRef.current.time < 300) {
-      return;
+    // 2. Rate limit ANY barcode scan within 200ms to prevent buffer overlap or noise bursts
+    if (now - lastScanProcessedRef.current.time < 200) {
+      return false;
     }
     lastScanProcessedRef.current = { code: cleaned, time: now };
 
-    // 1. Direct exact match by UID or legacy_uid
-    let foundItem = items.find(
-      (item) => item.uid?.toLowerCase() === cleaned || item.legacy_uid?.toLowerCase() === cleaned
+    const pool = itemsRef.current && itemsRef.current.length > 0 ? itemsRef.current : items;
+
+    // 1. Direct exact match by UID or legacy_uid in local items pool
+    let foundItem = pool.find(
+      (item) => item.uid?.trim().toLowerCase() === cleaned || item.legacy_uid?.trim().toLowerCase() === cleaned
     );
 
     // 2. Fallback: match without leading zeroes (e.g. UPC-A / EAN-13 conversions where scanner drops or prepends 0)
     if (!foundItem && /^0+[0-9a-z]+$/i.test(cleaned)) {
       const stripped = cleaned.replace(/^0+/, '');
-      foundItem = items.find(
-        (item) => item.uid?.toLowerCase() === stripped || item.legacy_uid?.toLowerCase() === stripped
+      foundItem = pool.find(
+        (item) => item.uid?.trim().toLowerCase() === stripped || item.legacy_uid?.trim().toLowerCase() === stripped
       );
     }
 
     // 3. Fallback: match by padded 7-digit UID if scanner sent numeric string
     if (!foundItem && /^\d+$/.test(cleaned) && cleaned.length < 7) {
       const padded = cleaned.padStart(7, '0');
-      foundItem = items.find(
-        (item) => item.uid?.toLowerCase() === padded || item.legacy_uid?.toLowerCase() === padded
+      foundItem = pool.find(
+        (item) => item.uid?.trim().toLowerCase() === padded || item.legacy_uid?.trim().toLowerCase() === padded
       );
+    }
+
+    // 4. Fallback: alphanumeric match (ignoring dashes, slashes, spaces)
+    if (!foundItem) {
+      const cleanAlpha = cleaned.replace(/[^a-z0-9]/g, '');
+      if (cleanAlpha && cleanAlpha.length >= 3) {
+        foundItem = pool.find(
+          (item) =>
+            item.uid?.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanAlpha ||
+            item.legacy_uid?.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === cleanAlpha
+        );
+      }
+    }
+
+    // 5. CRITICAL ASYNC BACKEND FALLBACK:
+    // If not found in current local items state (e.g. items still loading over network, or added in another session),
+    // query backend /api/inventory/items/by-uid/<cleaned>/
+    if (!foundItem) {
+      try {
+        const storeParam = effectiveStoreId ? { store: effectiveStoreId } : {};
+        let fetched = await fetchItemByUid(cleaned, storeParam).catch(() => null);
+        if (!fetched && /^0+[0-9a-z]+$/i.test(cleaned)) {
+          fetched = await fetchItemByUid(cleaned.replace(/^0+/, ''), storeParam).catch(() => null);
+        }
+        if (!fetched && /^\d+$/.test(cleaned) && cleaned.length < 7) {
+          fetched = await fetchItemByUid(cleaned.padStart(7, '0'), storeParam).catch(() => null);
+        }
+        if (!fetched) {
+          const cleanAlpha = cleaned.replace(/[^a-z0-9]/g, '');
+          if (cleanAlpha && cleanAlpha.length >= 3 && cleanAlpha !== cleaned) {
+            fetched = await fetchItemByUid(cleanAlpha, storeParam).catch(() => null);
+          }
+        }
+        if (fetched && fetched.id) {
+          foundItem = fetched;
+          // Dynamically add to cached items so future lookups are immediate
+          setItems((prev) => {
+            if (prev.some((it) => it.id === fetched.id)) return prev;
+            return [fetched, ...prev];
+          });
+          itemsRef.current = [fetched, ...(itemsRef.current || []).filter((it) => it.id !== fetched.id)];
+        }
+      } catch (err) {
+        console.warn('Backend by-uid fallback lookup failed:', err);
+      }
     }
 
     if (!foundItem) {
       playVipRejectedSound();
       showNotification('error', `No product assigned to barcode / UID "${code}".`);
-      return;
+      return false;
     }
 
     // Direct-to-Cart Flow: Never open the staging "selected product" card on barcode scan
@@ -537,7 +598,7 @@ export default function BillingView({
     if (foundItem.quantity <= 0) {
       playVipRejectedSound();
       showNotification('error', `Cannot add "${foundItem.name}": Out of Stock (0 units in inventory).`);
-      return;
+      return false;
     }
 
     // Check if ALL stock units are already in the cart
@@ -549,13 +610,22 @@ export default function BillingView({
         'warning',
         `Cannot add more: All ${foundItem.quantity} available units of "${foundItem.name}" are already in the cart.`
       );
-      return;
+      return false;
     }
 
     // Add directly to cart with audio chime
     playVipReadySound();
     handleAddToCart(foundItem, 1);
+    setSearchQuery('');
+    setIsDropdownOpen(false);
+    if (searchInputRef.current) {
+      searchInputRef.current.value = '';
+    }
+    return true;
   };
+
+  // Keep handleBarcodeScannedRef synchronized
+  handleBarcodeScannedRef.current = handleBarcodeScanned;
 
   // Add Item to Cart
   const handleAddToCart = (itemToAdd, qtyToAdd = 1) => {
@@ -1971,21 +2041,25 @@ export default function BillingView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
+              onKeyDown={async (e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  const q = searchQuery.trim().toLowerCase();
+                  const rawVal = searchInputRef.current?.value || searchQuery || '';
+                  const q = rawVal.trim().toLowerCase();
                   if (!q) return;
 
-                  // Check if this query is an exact barcode/UID match
-                  const exactMatch = items.find(
-                    (it) => it.uid?.toLowerCase() === q || it.legacy_uid?.toLowerCase() === q
-                  );
-                  if (exactMatch) {
-                    handleBarcodeScanned(q);
+                  // 1. Attempt exact barcode/UID scan lookup first (handles in-memory cache and async backend fallback)
+                  const handled = await handleBarcodeScanned(q);
+                  if (handled) {
+                    setSearchQuery('');
+                    setIsDropdownOpen(false);
+                    if (searchInputRef.current) {
+                      searchInputRef.current.value = '';
+                    }
                     return;
                   }
 
+                  // 2. If not a barcode/UID match, check if searchResults has a matching product
                   if (searchResults.length > 0) {
                     const topItem = searchResults[0];
                     setSelectedProduct(topItem);
@@ -2003,8 +2077,11 @@ export default function BillingView({
                       return;
                     }
                     handleAddToCart(topItem, 1);
-                  } else {
-                    handleBarcodeScanned(q);
+                    setSearchQuery('');
+                    setIsDropdownOpen(false);
+                    if (searchInputRef.current) {
+                      searchInputRef.current.value = '';
+                    }
                   }
                 }
               }}

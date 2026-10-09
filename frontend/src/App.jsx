@@ -8,7 +8,7 @@ import NetworkStatusBanner from './components/NetworkStatusBanner';
 import NotFoundView from './components/NotFoundView';
 import { SkeletonStatsCards } from './components/Skeleton';
 import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetchSections, fetchItems, fetchItem, getStaffMe, logoutStaff, previewExpiredStock, writeOffExpiredStock } from './api';
-import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3 } from 'lucide-react';
+import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X } from 'lucide-react';
 
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from './utils/stakeholdersSettings';
 

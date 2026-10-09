@@ -32,7 +32,7 @@ import {
   Truck,
   Lock,
 } from 'lucide-react';
-import { createItem, uploadItemImages, checkItemUidExists } from '../api';
+import { createItem, bulkCreateItems, uploadItemImages, checkItemUidExists } from '../api';
 import ItemImageModal from './ItemImageModal';
 import SubcategoryPickerPopover from './SubcategoryPickerPopover';
 import ImportCsvModal from './ImportCsvModal';
@@ -976,6 +976,73 @@ export default function AddItemSection({
     setBatchSuccessCount(null);
     setError('');
 
+    // Check if any staged items have images attached
+    const hasAnyImages = stagedItems.some(
+      (item) =>
+        (item.imageFiles && item.imageFiles.length > 0) ||
+        (item.storedImages && item.storedImages.length > 0) ||
+        (item.imagePreviews && item.imagePreviews.length > 0)
+    );
+
+    // OPTIMIZED FAST PATH: If items don't have local image files to upload (e.g. from CSV import or quick lists)
+    // Send all of them to the high-performance atomic bulk-create endpoint in ONE single fast request!
+    if (!hasAnyImages) {
+      try {
+        setBatchProgress({
+          current: stagedItems.length,
+          total: stagedItems.length,
+          name: `Saving all ${stagedItems.length} products...`,
+        });
+
+        const storeTargetId = currentStoreObj?.id || effectiveStoreId;
+        const bulkPayload = stagedItems.map((item) => ({
+          name: item.name.trim(),
+          store: item.store || storeTargetId,
+          subcategories: item.subcategories || [],
+          supplier: item.supplierId || item.supplier || null,
+          section: isSectionRestricted && currentUser?.section ? currentUser.section : (item.sectionId || item.section || null),
+          cost_price: parseFloat(item.cost_price) || 0,
+          selling_price: parseFloat(item.selling_price) || 0,
+          mrp: item.mrp_val ? parseFloat(item.mrp_val) : (item.mrp ? parseFloat(item.mrp) : null),
+          initial_quantity: parseInt(
+            item.initialQuantity !== undefined && item.initialQuantity !== ''
+              ? item.initialQuantity
+              : (item.initial_quantity !== undefined && item.initial_quantity !== '' ? item.initial_quantity : item.quantity),
+            10
+          ) || 0,
+          location_section: item.locationSection ? item.locationSection.trim() : '',
+          expiry_date: item.expiryDate || null,
+          weight: item.weight ? parseFloat(item.weight) : null,
+          length: item.length ? parseFloat(item.length) : null,
+          width: item.width ? parseFloat(item.width) : null,
+          height: item.height ? parseFloat(item.height) : null,
+          description: item.description ? String(item.description).trim() : '',
+          ...(item.uid && String(item.uid).trim() ? { uid: String(item.uid).trim() } : {}),
+        }));
+
+        const bulkRes = await bulkCreateItems(bulkPayload, storeTargetId);
+
+        setBatchSuccessCount(bulkRes.created_count || stagedItems.length);
+        setStagedItems([]);
+        setSelectedStagedIds([]);
+        try {
+          localStorage.removeItem(STAGED_STORAGE_KEY);
+        } catch (e) {}
+        onProductCreated?.(null);
+        onMetaUpdated?.();
+        setBatchSubmitting(false);
+        setBatchProgress(null);
+        return;
+      } catch (err) {
+        console.error('Bulk create items failed:', err);
+        setError(`Failed to bulk register products: ${err.message}`);
+        setBatchSubmitting(false);
+        setBatchProgress(null);
+        return;
+      }
+    }
+
+    // REGULAR PATH (with photos): Loops through items with retry backoff for rate limits
     let successCount = 0;
     let lastCreated = null;
 
@@ -1014,7 +1081,21 @@ export default function AddItemSection({
           ...(item.uid && String(item.uid).trim() ? { uid: String(item.uid).trim() } : {}),
         };
 
-        const created = await createItem(payload);
+        // Create item with automatic backoff retry if throttled
+        let created = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            created = await createItem(payload);
+            break;
+          } catch (createErr) {
+            if (createErr.message && createErr.message.toLowerCase().includes('throttled') && attempt < 2) {
+              await new Promise((r) => setTimeout(r, 2500));
+            } else {
+              throw createErr;
+            }
+          }
+        }
+
         lastCreated = created;
 
         // Restore or convert image files for upload
@@ -1060,7 +1141,7 @@ export default function AddItemSection({
 
     if (successCount > 0) {
       setBatchSuccessCount(successCount);
-      setStagedItems([]);
+      setStagedItems((prev) => prev.slice(successCount));
       setSelectedStagedIds([]);
       try {
         localStorage.removeItem(STAGED_STORAGE_KEY);
@@ -2147,6 +2228,37 @@ export default function AddItemSection({
               >
                 <FileSpreadsheet size={13} />
                 <span>Import CSV</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAddAllProducts}
+                disabled={totalErrorRows > 0 || batchSubmitting}
+                className="btn btn-primary btn-sm"
+                style={{
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  padding: '6px 16px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  opacity: totalErrorRows > 0 ? 0.65 : 1,
+                  cursor: totalErrorRows > 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: totalErrorRows === 0 ? '0 2px 10px var(--brand-ruby-glow)' : 'none',
+                }}
+                title={totalErrorRows > 0 ? `Fix ${totalErrorRows} error row(s) before saving` : `Save all ${stagedItems.length} products into inventory`}
+              >
+                {batchSubmitting ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={13} />
+                    <span>Save All ({stagedItems.length})</span>
+                  </>
+                )}
               </button>
 
               {selectedStagedIds.length > 0 && (
@@ -3282,18 +3394,24 @@ export default function AddItemSection({
             </div>
           </div>
 
-          {/* Staged Summary & ADD ALL Button */}
+          {/* Staged Summary & ADD ALL Button (Sticky Floating Bar) */}
           <div
             style={{
-              padding: '16px 20px',
-              background: 'var(--bg-surface-hover)',
+              position: 'sticky',
+              bottom: '16px',
+              zIndex: 30,
+              padding: '14px 22px',
+              background: 'var(--bg-card)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
               borderRadius: 'var(--radius-lg)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               flexWrap: 'wrap',
               gap: '14px',
-              border: '1px solid var(--border-subtle)',
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.28)',
             }}
           >
             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>

@@ -606,8 +606,16 @@ export async function fetchItems(params = {}) {
 
 export const getItems = fetchItems;
 
-export async function fetchItemByUid(uid) {
-  const res = await fetch(`${API_BASE}/items/by-uid/${encodeURIComponent(uid)}/`, {
+export async function fetchItemByUid(uid, params = {}) {
+  const cleanUid = String(uid || '').trim();
+  if (!cleanUid) return null;
+  const url = new URL(`${window.location.origin}${API_BASE}/items/by-uid/${encodeURIComponent(cleanUid)}/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+  const res = await fetch(url.toString(), {
     headers: getAuthHeaders(),
   });
   if (!res.ok) {
@@ -660,6 +668,23 @@ export async function createItem(data) {
   }
   return res.json();
 }
+
+export async function bulkCreateItems(items, storeId = null) {
+  const res = await fetch(`${API_BASE}/items/bulk-create/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ items, store: storeId }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const message = errData.error || Object.entries(errData)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('; ') || 'Failed to bulk create items';
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 
 export async function updateItem(id, data) {
   const res = await fetch(`${API_BASE}/items/${id}/`, {

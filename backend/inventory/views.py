@@ -596,26 +596,41 @@ class ItemViewSet(viewsets.ModelViewSet):
         """
         Instant lookup endpoint for barcode scanner input.
         Jumps directly to item matching the scanned UID or legacy UID.
-        Gracefully handles scanner symbology prefixes, leading zeroes, and zero-padding.
+        Gracefully handles scanner symbology prefixes, control characters, leading zeroes, and zero-padding.
         """
         raw_uid = (uid or '').strip()
         import re
-        # Strip common scanner symbology prefixes (e.g. ]C1, ]e0, \r, \n)
-        clean_uid = re.sub(r'^\][A-Za-z0-9]{2}', '', raw_uid).strip()
+        # Strip control characters & common scanner symbology prefixes (e.g. ]C1, ]e0, \r, \n)
+        clean_uid = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', raw_uid)
+        clean_uid = re.sub(r'^\][A-Za-z0-9]{2}', '', clean_uid).strip().strip("'\" \t\r\n")
 
         qs = self.get_queryset()
+        member = get_current_staff(request)
+
         # 1. Exact match on uid or legacy_uid
-        item = qs.filter(uid__iexact=clean_uid).first() or qs.filter(legacy_uid__iexact=clean_uid).first()
+        item = qs.filter(Q(uid__iexact=clean_uid) | Q(legacy_uid__iexact=clean_uid)).first()
 
         # 2. Padded 7-digit fallback if numeric string
         if not item and clean_uid.isdigit() and len(clean_uid) < 7:
             padded = clean_uid.zfill(7)
-            item = qs.filter(uid__iexact=padded).first() or qs.filter(legacy_uid__iexact=padded).first()
+            item = qs.filter(Q(uid__iexact=padded) | Q(legacy_uid__iexact=padded)).first()
 
         # 3. Stripped leading zeroes fallback
         if not item and clean_uid.startswith('0') and len(clean_uid) > 1:
             stripped = clean_uid.lstrip('0')
-            item = qs.filter(uid__iexact=stripped).first() or qs.filter(legacy_uid__iexact=stripped).first()
+            item = qs.filter(Q(uid__iexact=stripped) | Q(legacy_uid__iexact=stripped)).first()
+
+        # 4. Alphanumeric match (ignore special characters/spaces)
+        if not item:
+            clean_alpha = re.sub(r'[^a-zA-Z0-9]', '', clean_uid)
+            if clean_alpha and len(clean_alpha) >= 3:
+                item = qs.filter(Q(uid__iexact=clean_alpha) | Q(legacy_uid__iexact=clean_alpha)).first()
+
+        # 5. Global fallback across stores if user is owner and item wasn't in currently filtered store
+        if not item and member and getattr(member, 'is_owner', False):
+            item = Item.objects.filter(Q(uid__iexact=clean_uid) | Q(legacy_uid__iexact=clean_uid)).first()
+            if not item and clean_uid.isdigit() and len(clean_uid) < 7:
+                item = Item.objects.filter(Q(uid__iexact=clean_uid.zfill(7)) | Q(legacy_uid__iexact=clean_uid.zfill(7))).first()
 
         if not item:
             raise Http404(f"Item with barcode/UID '{uid}' was not found.")
@@ -699,6 +714,242 @@ class ItemViewSet(viewsets.ModelViewSet):
                 return Response({'error': str(r_err)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as ex:
             return Response({'error': str(ex)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='bulk-create')
+    def bulk_create_items(self, request):
+        """
+        High-performance bulk item registration endpoint.
+        Creates hundreds or thousands of products in one transactional request,
+        preventing rate-limiting (429) errors and eliminating single-item network overhead.
+        """
+        items_data = request.data.get('items', [])
+        if not items_data or not isinstance(items_data, list):
+            return Response({'error': 'A non-empty "items" list is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        member = get_current_staff(request)
+        default_store = None
+        if member and member.store:
+            default_store = member.store
+        else:
+            first_store_id = request.data.get('store') or (items_data[0].get('store') if items_data else None)
+            if first_store_id:
+                default_store = Store.objects.filter(pk=first_store_id).first()
+            if not default_store:
+                default_store = Store.objects.first()
+
+        if not default_store:
+            return Response({'error': 'No active store found to associate items with.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Enforce section restriction if user has assigned_section scope
+        forced_section = None
+        if member and not member.is_owner and member.effective_inventory_scope == 'assigned_section':
+            if not member.section:
+                return Response({'error': 'Your account is restricted to your assigned section, but none is set.'}, status=status.HTTP_403_FORBIDDEN)
+            forced_section = member.section
+
+        # Fetch known existing UIDs in one query to prevent duplicate clashes
+        existing_uids_set = set(
+            Item.objects.values_list('uid', flat=True)
+        )
+        existing_uids_lower = {u.lower() for u in existing_uids_set if u}
+
+        # Cache existing lookup entities for maximum query speed
+        all_subcategories = {s.id: s for s in SubCategory.objects.all()}
+        all_suppliers = {s.id: s for s in Supplier.objects.all()}
+        all_sections = {s.id: s for s in Section.objects.all()}
+
+        from .models import GlobalSequence
+        from decimal import Decimal
+
+        created_items = []
+        created_movements = []
+        m2m_subcategories_map = []  # list of (item, subcat_ids)
+        errors = []
+
+        with transaction.atomic():
+            # Reserve sequential UIDs for all items needing an auto-generated UID
+            items_needing_uid = [item for item in items_data if not (item.get('uid') and str(item.get('uid')).strip())]
+            
+            allocated_uids = []
+            if items_needing_uid:
+                base_start = 1000000
+                seq_obj, _ = GlobalSequence.objects.select_for_update().get_or_create(
+                    name="item_uid",
+                    defaults={'current_value': base_start - 1}
+                )
+                if seq_obj.current_value < (base_start - 1):
+                    existing_nums = [
+                        int(u) for u in existing_uids_set if u and u.isdigit() and base_start <= int(u) < 100000000
+                    ]
+                    seq_obj.current_value = max(existing_nums) if existing_nums else (base_start - 1)
+
+                curr_num = seq_obj.current_value
+                for _ in items_needing_uid:
+                    curr_num += 1
+                    while str(curr_num).lower() in existing_uids_lower:
+                        curr_num += 1
+                    allocated_uids.append(str(curr_num))
+                    existing_uids_lower.add(str(curr_num).lower())
+
+                seq_obj.current_value = curr_num
+                seq_obj.save(update_fields=['current_value', 'updated_at'])
+
+            allocated_uid_idx = 0
+            staff_name = member.name if member else 'Owner / Admin'
+            staff_role = getattr(member.role, 'name', 'Owner') if (member and member.role) else 'Owner'
+
+            for idx, raw in enumerate(items_data):
+                item_name = str(raw.get('name', '')).strip()
+                if not item_name:
+                    errors.append({'index': idx, 'error': 'Product name is required.'})
+                    continue
+
+                custom_uid = str(raw.get('uid', '')).strip() if raw.get('uid') else ''
+                if custom_uid:
+                    if custom_uid.lower() in existing_uids_lower:
+                        errors.append({'index': idx, 'name': item_name, 'error': f"UID/Barcode '{custom_uid}' already exists."})
+                        continue
+                    final_uid = custom_uid
+                    final_source = Item.SOURCE_LEGACY
+                    final_legacy_uid = custom_uid
+                    existing_uids_lower.add(custom_uid.lower())
+                else:
+                    final_uid = allocated_uids[allocated_uid_idx]
+                    allocated_uid_idx += 1
+                    final_source = Item.SOURCE_NEW
+                    final_legacy_uid = None
+
+                # Store resolution
+                raw_store_id = raw.get('store')
+                item_store = default_store
+                if not (member and member.store) and raw_store_id:
+                    s_found = Store.objects.filter(pk=raw_store_id).first()
+                    if s_found:
+                        item_store = s_found
+
+                # Section resolution
+                item_section = forced_section
+                if not item_section:
+                    sec_id = raw.get('sectionId') or raw.get('section')
+                    if sec_id:
+                        item_section = all_sections.get(int(sec_id) if str(sec_id).isdigit() else sec_id)
+
+                # Supplier resolution
+                sup_id = raw.get('supplierId') or raw.get('supplier')
+                item_supplier = all_suppliers.get(int(sup_id) if str(sup_id).isdigit() else sup_id) if sup_id else None
+
+                # Prices and Stock
+                try:
+                    c_price = Decimal(str(raw.get('cost_price', 0) or 0))
+                except Exception:
+                    c_price = Decimal('0.00')
+
+                try:
+                    s_price = Decimal(str(raw.get('selling_price', 0) or 0))
+                except Exception:
+                    s_price = Decimal('0.00')
+
+                raw_mrp = raw.get('mrp_val') if raw.get('mrp_val') is not None else raw.get('mrp')
+                try:
+                    mrp_dec = Decimal(str(raw_mrp)) if (raw_mrp is not None and str(raw_mrp).strip() != '') else None
+                except Exception:
+                    mrp_dec = None
+
+                # Quantities
+                init_qty = raw.get('initialQuantity')
+                if init_qty is None or str(init_qty).strip() == '':
+                    init_qty = raw.get('initial_quantity')
+                if init_qty is None or str(init_qty).strip() == '':
+                    init_qty = raw.get('quantity', 0)
+                try:
+                    qty_int = int(init_qty)
+                except Exception:
+                    qty_int = 0
+
+                # Subcategories
+                subcat_ids = raw.get('subcategories') or []
+                primary_sub = None
+                valid_subcat_ids = []
+                for sc_id in subcat_ids:
+                    num_sc_id = int(sc_id) if str(sc_id).isdigit() else sc_id
+                    if num_sc_id in all_subcategories:
+                        valid_subcat_ids.append(num_sc_id)
+                        if not primary_sub:
+                            primary_sub = all_subcategories[num_sc_id]
+
+                item_obj = Item(
+                    uid=final_uid,
+                    name=item_name,
+                    quantity=qty_int,
+                    cost_price=c_price,
+                    selling_price=s_price,
+                    mrp=mrp_dec,
+                    store=item_store,
+                    supplier=item_supplier,
+                    section=item_section,
+                    primary_subcategory=primary_sub,
+                    location_section=str(raw.get('location_section') or raw.get('locationSection') or '').strip(),
+                    expiry_date=raw.get('expiry_date') or raw.get('expiryDate') or None,
+                    weight=Decimal(str(raw.get('weight'))) if raw.get('weight') else None,
+                    length=Decimal(str(raw.get('length'))) if raw.get('length') else None,
+                    width=Decimal(str(raw.get('width'))) if raw.get('width') else None,
+                    height=Decimal(str(raw.get('height'))) if raw.get('height') else None,
+                    description=str(raw.get('description') or '').strip(),
+                    source=final_source,
+                    legacy_uid=final_legacy_uid,
+                    needs_new_barcode_printed=True,
+                )
+                created_items.append((item_obj, qty_int, valid_subcat_ids))
+
+            if errors and len(created_items) == 0:
+                return Response({'error': 'Failed to validate batch items.', 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Bulk save all items in a single query
+            to_save_models = [it[0] for it in created_items]
+            Item.objects.bulk_create(to_save_models)
+
+            # Re-fetch items to get assigned primary keys for StockMovement and M2M subcategories
+            saved_uids = [it.uid for it in to_save_models]
+            saved_items_by_uid = {it.uid: it for it in Item.objects.filter(uid__in=saved_uids)}
+
+            # Create immutable ledger records for all products
+            for item_obj, qty_int, valid_subcat_ids in created_items:
+                persisted = saved_items_by_uid.get(item_obj.uid)
+                if not persisted:
+                    continue
+                created_movements.append(StockMovement(
+                    item=persisted,
+                    change=qty_int,
+                    reason=StockMovement.REASON_RESTOCK,
+                    note="Initial stock assigned upon bulk product creation." if qty_int > 0 else "Product registered with 0 initial stock.",
+                    performed_by=member if (member and hasattr(member, 'pk')) else None,
+                    performed_by_name=staff_name,
+                    performed_by_role=staff_role
+                ))
+                if valid_subcat_ids:
+                    m2m_subcategories_map.append((persisted, valid_subcat_ids))
+
+            if created_movements:
+                StockMovement.objects.bulk_create(created_movements)
+
+            # Bulk populate subcategories ManyToMany relationships
+            ItemSubCategoryThrough = Item.subcategories.through
+            through_objects = []
+            for persisted, sub_ids in m2m_subcategories_map:
+                for sid in sub_ids:
+                    through_objects.append(ItemSubCategoryThrough(
+                        item_id=persisted.id,
+                        subcategory_id=sid
+                    ))
+            if through_objects:
+                ItemSubCategoryThrough.objects.bulk_create(through_objects, ignore_conflicts=True)
+
+        return Response({
+            'success': True,
+            'created_count': len(created_items),
+            'skipped_count': len(errors),
+            'errors': errors
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get', 'post'], url_path='test-gemini-key')
     def test_gemini_key(self, request):
