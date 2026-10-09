@@ -368,6 +368,7 @@ class Item(models.Model):
         max_length=64,
         null=True,
         blank=True,
+        db_index=True,
         help_text="Original code from legacy system if different from UID."
     )
     needs_new_barcode_printed = models.BooleanField(
@@ -452,6 +453,9 @@ class Item(models.Model):
         """
         if self.primary_subcategory_id:
             return self.primary_subcategory
+        if hasattr(self, '_prefetched_objects_cache') and 'subcategories' in self._prefetched_objects_cache:
+            subs = list(self.subcategories.all())
+            return subs[0] if subs else None
         return self.subcategories.first()
 
     @property
@@ -465,11 +469,28 @@ class Item(models.Model):
     @property
     def parent_categories(self):
         """Returns distinct parent Category instances for the item's subcategories."""
+        if hasattr(self, '_prefetched_objects_cache') and 'subcategories' in self._prefetched_objects_cache:
+            cats = []
+            seen = set()
+            for sub in self.subcategories.all():
+                if sub.category and sub.category.id not in seen:
+                    seen.add(sub.category.id)
+                    cats.append(sub.category)
+            return cats
         return Category.objects.filter(subcategories__items=self).distinct()
 
     @property
     def primary_image(self):
         """Returns primary image or first available image."""
+        if hasattr(self, '_prefetched_objects_cache') and 'images' in self._prefetched_objects_cache:
+            imgs = list(self.images.all())
+            for img in imgs:
+                if img.is_primary:
+                    return img
+            if imgs:
+                imgs.sort(key=lambda x: (x.order or 0, x.id or 0))
+                return imgs[0]
+            return None
         primary = self.images.filter(is_primary=True).first()
         if primary:
             return primary

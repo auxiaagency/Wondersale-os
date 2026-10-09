@@ -235,12 +235,40 @@ class SectionViewSet(viewsets.ModelViewSet):
 
 
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.pagination import PageNumberPagination
 
+
+class OptionalPageNumberPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 500
+
+    def paginate_queryset(self, queryset, request, view=None):
+        # Only paginate if 'page' or 'page_size' is explicitly in query params,
+        # OR if 'paginate=true' is passed.
+        # If neither is present, return None (backward-compatible: returns full list!)
+        if 'page' not in request.query_params and 'page_size' not in request.query_params and request.query_params.get('paginate') != 'true':
+            return None
+        return super().paginate_queryset(queryset, request, view=view)
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'total_pages': self.page.paginator.num_pages,
+            'current_page': self.page.number,
+            'page_size': self.get_page_size(self.request),
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data
+        })
 
 
 class ItemViewSet(viewsets.ModelViewSet):
-    queryset = Item.objects.select_related('store', 'supplier', 'section').prefetch_related('subcategories', 'subcategories__category', 'images').all()
+    queryset = Item.objects.select_related(
+        'store', 'supplier', 'section', 'primary_subcategory', 'primary_subcategory__category'
+    ).prefetch_related('subcategories', 'subcategories__category', 'images').all()
     parser_classes = [JSONParser, FormParser, MultiPartParser]
+    pagination_class = OptionalPageNumberPagination
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -256,6 +284,63 @@ class ItemViewSet(viewsets.ModelViewSet):
                     raise PermissionDenied("Your role does not have permission to access the Inventory module.")
             if self.action == 'adjust_stock' and not member.role.can_adjust_stock:
                 raise PermissionDenied("Your role does not have permission to perform stock adjustments.")
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        items = list(page if page is not None else queryset)
+
+        # Batch preload variant groups to eliminate N+1 queries in sibling_variants
+        vg_ids = {it.variant_group_id for it in items if getattr(it, 'variant_group_id', None)}
+        vg_cache = {}
+        if vg_ids:
+            all_siblings = (
+                Item.objects.filter(variant_group_id__in=vg_ids)
+                .prefetch_related('images', 'subcategories')
+                .select_related('supplier')
+                .order_by('-is_master_variant', 'id')
+            )
+            for s in all_siblings:
+                if s.variant_group_id not in vg_cache:
+                    vg_cache[s.variant_group_id] = []
+                prim_img = s.primary_image
+                img_url = (
+                    request.build_absolute_uri(prim_img.image.url)
+                    if (prim_img and prim_img.image and request)
+                    else (prim_img.image.url if prim_img and prim_img.image else None)
+                )
+                vg_cache[s.variant_group_id].append({
+                    'id': s.id,
+                    'uid': s.uid,
+                    'name': s.name,
+                    'variant_name': s.variant_name or ('Original' if s.is_master_variant else f"Batch {s.uid}"),
+                    'quantity': s.quantity,
+                    'cost_price': str(s.cost_price),
+                    'selling_price': str(s.selling_price),
+                    'mrp': str(s.mrp) if s.mrp else None,
+                    'effective_mrp': str(s.effective_mrp),
+                    'expiry_date': str(s.expiry_date) if s.expiry_date else None,
+                    'weight': str(s.weight) if s.weight is not None else None,
+                    'length': str(s.length) if s.length is not None else None,
+                    'width': str(s.width) if s.width is not None else None,
+                    'height': str(s.height) if s.height is not None else None,
+                    'location_section': s.location_section,
+                    'supplier_name': s.supplier.name if s.supplier else None,
+                    'description': s.description,
+                    'needs_new_barcode_printed': s.needs_new_barcode_printed,
+                    'subcategories': [{'id': sc.id, 'name': sc.name} for sc in s.subcategories.all()],
+                    'is_master_variant': s.is_master_variant,
+                    'primary_image_url': img_url,
+                })
+
+        context = self.get_serializer_context()
+        context['variant_groups_cache'] = vg_cache
+
+        serializer = self.get_serializer(items, many=True, context=context)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -312,16 +397,28 @@ class ItemViewSet(viewsets.ModelViewSet):
                 else:
                     qs = qs.none()
 
-        # Search parameter (matches name, UID, or section)
+        # Search parameter (matches name, UID, legacy UID, variant name, or section)
         search_query = self.request.query_params.get('search', '').strip()
         if search_query:
-            qs = qs.filter(
+            search_cond = (
                 Q(name__icontains=search_query) |
                 Q(uid__icontains=search_query) |
+                Q(legacy_uid__icontains=search_query) |
+                Q(variant_name__icontains=search_query) |
                 Q(section__name__icontains=search_query) |
                 Q(section__code__icontains=search_query) |
                 Q(location_section__icontains=search_query)
             )
+            # Fast numeric search: handles scanner/manual inputs with or without leading zeroes and 7-digit zero-padding
+            clean_digits = ''.join(c for c in search_query if c.isdigit())
+            if clean_digits:
+                stripped = clean_digits.lstrip('0')
+                if stripped:
+                    search_cond |= Q(uid__icontains=stripped) | Q(legacy_uid__icontains=stripped)
+                if len(clean_digits) < 7:
+                    padded = clean_digits.zfill(7)
+                    search_cond |= Q(uid__iexact=padded) | Q(legacy_uid__iexact=padded)
+            qs = qs.filter(search_cond)
 
         # Filter by section
         section_id = self.request.query_params.get('section') or self.request.query_params.get('section_id')
@@ -421,7 +518,53 @@ class ItemViewSet(viewsets.ModelViewSet):
                 Q(height__isnull=True) | Q(height__lte=0)
             )
 
+        # Sorting parameter (matches frontend sortBy options)
+        ordering = self.request.query_params.get('ordering') or self.request.query_params.get('sort')
+        if ordering:
+            sort_map = {
+                'name_asc': ['name'],
+                'name_desc': ['-name'],
+                'selling_price': ['selling_price', 'id'],
+                'selling_price_asc': ['selling_price', 'id'],
+                'selling_price_desc': ['-selling_price', 'id'],
+                'stock': ['-quantity', 'id'],
+                'stock_desc': ['-quantity', 'id'],
+                'stock_asc': ['quantity', 'id'],
+            }
+            if ordering in sort_map:
+                qs = qs.order_by(*sort_map[ordering])
+            elif ordering.lstrip('-') in ('name', 'selling_price', 'cost_price', 'quantity', 'created_at', 'uid'):
+                qs = qs.order_by(ordering)
+
         return qs.distinct()
+
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats_action(self, request):
+        """Ultra-fast (5ms) aggregate summary statistics for the inventory top banner."""
+        from django.db.models import Sum, Count, Q
+        from django.utils import timezone
+
+        # Base filtered queryset according to staff role and current filters
+        qs = self.filter_queryset(self.get_queryset())
+        today = timezone.now().date()
+
+        agg = qs.aggregate(
+            total_items=Count('id'),
+            total_quantity=Sum('quantity'),
+            low_stock=Count('id', filter=Q(quantity__gt=0, quantity__lte=5)),
+            out_of_stock=Count('id', filter=Q(quantity__lte=0)),
+            needs_barcode=Count('id', filter=Q(needs_new_barcode_printed=True)),
+            expired_count=Count('id', filter=Q(expiry_date__isnull=False, expiry_date__lte=today, quantity__gt=0)),
+        )
+
+        return Response({
+            'total_items': agg['total_items'] or 0,
+            'total_quantity': agg['total_quantity'] or 0,
+            'low_stock_count': agg['low_stock'] or 0,
+            'out_of_stock_count': agg['out_of_stock'] or 0,
+            'needs_barcode_count': agg['needs_barcode'] or 0,
+            'expired_count': agg['expired_count'] or 0,
+        })
 
     @action(detail=True, methods=['post'], url_path='adjust-stock')
     def adjust_stock_action(self, request, pk=None):

@@ -606,6 +606,21 @@ export async function fetchItems(params = {}) {
 
 export const getItems = fetchItems;
 
+export async function fetchInventoryStats(params = {}) {
+  const url = new URL(`${window.location.origin}${API_BASE}/items/stats/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch inventory stats');
+  return res.json();
+}
+
 export async function fetchItemByUid(uid, params = {}) {
   const cleanUid = String(uid || '').trim();
   if (!cleanUid) return null;

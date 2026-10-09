@@ -365,7 +365,7 @@ export default function BillingView({
     }, 4500);
   };
 
-  // Search Filter
+  // Search Filter with Debouncing, Multi-field & Numeric Zero-padding Support, and Remote Fallback
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -373,18 +373,86 @@ export default function BillingView({
       return;
     }
 
-    const q = searchQuery.toLowerCase().trim();
-    const filtered = items.filter((item) => {
-      const nameMatch = item.name?.toLowerCase().includes(q);
-      const uidMatch = item.uid?.toLowerCase().includes(q);
-      const sectionMatch = item.location_section?.toLowerCase().includes(q);
-      const catMatch = item.subcategories?.some((sc) => sc.name?.toLowerCase().includes(q));
-      return nameMatch || uidMatch || sectionMatch || catMatch;
-    });
+    const timer = setTimeout(async () => {
+      const rawQ = searchQuery.trim();
+      const q = rawQ.toLowerCase();
+      const cleanDigits = rawQ.replace(/\D/g, '');
+      const strippedDigits = cleanDigits ? cleanDigits.replace(/^0+/, '') : '';
+      const paddedDigits = cleanDigits && cleanDigits.length < 7 ? cleanDigits.padStart(7, '0') : '';
 
-    setSearchResults(filtered.slice(0, 10));
-    setIsDropdownOpen(true);
-  }, [searchQuery, items]);
+      const pool = itemsRef.current && itemsRef.current.length > 0 ? itemsRef.current : items;
+
+      const matches = [];
+      for (const item of pool) {
+        const itemUid = (item.uid || '').toLowerCase();
+        const itemLegacy = (item.legacy_uid || '').toLowerCase();
+        const itemName = (item.name || '').toLowerCase();
+        const itemVar = (item.variant_name || '').toLowerCase();
+        const itemSec = (item.location_section || item.section_name || '').toLowerCase();
+
+        let score = 0;
+
+        // Exact match on UID or legacy UID has highest priority
+        if (itemUid === q || itemLegacy === q) {
+          score = 100;
+        } else if (cleanDigits && (itemUid === cleanDigits || itemLegacy === cleanDigits || (paddedDigits && itemUid === paddedDigits) || (strippedDigits && itemUid === strippedDigits))) {
+          score = 90;
+        } else if (itemUid.includes(q) || itemLegacy.includes(q)) {
+          score = 80;
+        } else if (cleanDigits && strippedDigits && (itemUid.includes(strippedDigits) || itemLegacy.includes(strippedDigits))) {
+          score = 75;
+        } else if (itemName.startsWith(q)) {
+          score = 60;
+        } else if (itemName.includes(q)) {
+          score = 50;
+        } else if (itemVar.includes(q)) {
+          score = 40;
+        } else if (itemSec.includes(q)) {
+          score = 30;
+        } else if (item.subcategories && item.subcategories.some((sc) => (sc.name || '').toLowerCase().includes(q))) {
+          score = 20;
+        }
+
+        if (score > 0) {
+          matches.push({ item, score });
+        }
+      }
+
+      matches.sort((a, b) => b.score - a.score);
+      const topItems = matches.slice(0, 15).map((m) => m.item);
+
+      if (topItems.length > 0) {
+        setSearchResults(topItems);
+        setIsDropdownOpen(true);
+      } else if (q.length >= 2) {
+        // Asynchronous remote fallback query if no local match (e.g. newly added item)
+        try {
+          const remoteData = await fetchItems({ search: rawQ, store: effectiveStoreId || undefined });
+          const remoteList = Array.isArray(remoteData) ? remoteData : remoteData?.results || [];
+          if (remoteList.length > 0) {
+            setSearchResults(remoteList.slice(0, 15));
+            setIsDropdownOpen(true);
+            setItems((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const fresh = remoteList.filter((r) => !existingIds.has(r.id));
+              return fresh.length > 0 ? [...prev, ...fresh] : prev;
+            });
+          } else {
+            setSearchResults([]);
+            setIsDropdownOpen(false);
+          }
+        } catch {
+          setSearchResults([]);
+          setIsDropdownOpen(false);
+        }
+      } else {
+        setSearchResults([]);
+        setIsDropdownOpen(false);
+      }
+    }, 70);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, items, effectiveStoreId]);
 
   // Click Outside Dropdown Handler
   useEffect(() => {

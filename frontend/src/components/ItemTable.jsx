@@ -119,6 +119,16 @@ export default function ItemTable({
   onOpenExportCsv,
   onItemsChanged,
   onStartAIDescriptionJob,
+  // Server-side pagination & sorting props
+  serverPagination = false,
+  serverPage = 1,
+  serverPageSize = 25,
+  serverTotalCount = 0,
+  serverTotalPages = 1,
+  onPageChange: propOnPageChange,
+  onPageSizeChange: propOnPageSizeChange,
+  sortBy: propSortBy,
+  onSortByChange: propOnSortByChange,
 }) {
   const isSectionRestricted = Boolean(
     propIsSectionRestricted ?? (
@@ -134,6 +144,7 @@ export default function ItemTable({
   // Inline Edit Mode State
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
+  const [dirtyItemIds, setDirtyItemIds] = useState(() => new Set());
   const [hoveredItemId, setHoveredItemId] = useState(null);
   const [editBuffer, setEditBuffer] = useState({}); // { [itemId]: { name, cost_price, selling_price, mrp, location_section, expiry_date, weight, subcategory_ids } }
   const [savingEdits, setSavingEdits] = useState(false);
@@ -141,7 +152,9 @@ export default function ItemTable({
   const [generatingAI, setGeneratingAI] = useState(false);
   const [subcatPickerAnchor, setSubcatPickerAnchor] = useState(null); // { itemId, anchorRect }
   const [activeSubcatViewer, setActiveSubcatViewer] = useState(null); // { itemId, itemName, anchorEl, anchorRect, primarySubcat, allSubcategories }
-  const [sortBy, setSortBy] = useState('');
+  const [internalSortBy, setInternalSortBy] = useState('');
+  const sortBy = propSortBy !== undefined ? propSortBy : internalSortBy;
+  const setSortBy = propOnSortByChange || setInternalSortBy;
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
   const [isSubcatFilterOpen, setIsSubcatFilterOpen] = useState(false);
   const [subcatFilterQuery, setSubcatFilterQuery] = useState('');
@@ -384,18 +397,33 @@ export default function ItemTable({
     );
   }, [subcategories, subcatFilterQuery]);
 
-  // Pagination State
-  const [pageSize, setPageSize] = useState(() => {
+  // Pagination State (supports serverPagination mode or internal fallback)
+  const [internalPageSize, setInternalPageSize] = useState(() => {
     const saved = localStorage.getItem('wondersale_inventory_page_size');
     return saved ? parseInt(saved, 10) || 25 : 25;
   });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [internalCurrentPage, setInternalCurrentPage] = useState(1);
+
+  const pageSize = serverPagination ? serverPageSize : internalPageSize;
+  const currentPage = serverPagination ? serverPage : internalCurrentPage;
+
+  const handlePageChange = (newPage) => {
+    if (serverPagination && propOnPageChange) {
+      propOnPageChange(newPage);
+    } else {
+      setInternalCurrentPage(newPage);
+    }
+  };
 
   const handlePageSizeChange = (newSize) => {
     const sizeNum = parseInt(newSize, 10) || 25;
-    setPageSize(sizeNum);
     localStorage.setItem('wondersale_inventory_page_size', String(sizeNum));
-    setCurrentPage(1);
+    if (serverPagination && propOnPageSizeChange) {
+      propOnPageSizeChange(sizeNum);
+    } else {
+      setInternalPageSize(sizeNum);
+      setInternalCurrentPage(1);
+    }
   };
 
   // Draggable Floating Action Toolbar State (Smooth Horizontal Snapping)
@@ -494,6 +522,7 @@ export default function ItemTable({
       setEditBuffer(initial);
     } else {
       setSelectedItemIds([]);
+      setDirtyItemIds(new Set());
       setEditBuffer({});
       setSubcatPickerAnchor(null);
     }
@@ -501,7 +530,7 @@ export default function ItemTable({
 
   // Reset to page 1 whenever search, filters, or sorting change
   useEffect(() => {
-    setCurrentPage(1);
+    handlePageChange(1);
   }, [searchQuery, activeSubcatIds, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, hasNoImageFilter, hasNoSubcategoryFilter, needsBarcodeFilter, hasNoWeightFilter, hasNoVolumeFilter, sortBy]);
 
   // Count active filters
@@ -700,14 +729,18 @@ export default function ItemTable({
 
     if (!sortBy) return list;
     if (sortBy === 'name_asc') {
-      return list.sort((a, b) =>
-        (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
-      );
+      return list.sort((a, b) => {
+        const aN = (a.name || '').toLowerCase();
+        const bN = (b.name || '').toLowerCase();
+        return aN < bN ? -1 : (aN > bN ? 1 : 0);
+      });
     }
     if (sortBy === 'name_desc') {
-      return list.sort((a, b) =>
-        (b.name || '').localeCompare(a.name || '', undefined, { sensitivity: 'base' })
-      );
+      return list.sort((a, b) => {
+        const aN = (a.name || '').toLowerCase();
+        const bN = (b.name || '').toLowerCase();
+        return aN > bN ? -1 : (aN < bN ? 1 : 0);
+      });
     }
     if (sortBy === 'selling_price' || sortBy === 'selling_price_asc') {
       return list.sort(
@@ -728,15 +761,19 @@ export default function ItemTable({
     return list;
   }, [items, sortBy, hasNoImageFilter, hasNoSubcategoryFilter, hasNoSupplierFilter, selectedSupplier, activeSubcatIds, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoWeightFilter, hasNoVolumeFilter, activeVariantIdByGroup]);
 
-  // Pagination calculations
-  const totalItems = sortedItems.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  // Pagination calculations (supports server-side pagination with client fallback)
+  const totalItems = serverPagination ? serverTotalCount : sortedItems.length;
+  const totalPages = serverPagination ? Math.max(1, serverTotalPages) : Math.max(1, Math.ceil(totalItems / pageSize));
   const safePage = Math.min(Math.max(1, currentPage), totalPages);
 
   const paginatedItems = useMemo(() => {
+    if (serverPagination) {
+      // In serverPagination mode, sortedItems is already the single requested page from backend!
+      return sortedItems;
+    }
     const start = (safePage - 1) * pageSize;
     return sortedItems.slice(start, start + pageSize);
-  }, [sortedItems, safePage, pageSize]);
+  }, [serverPagination, sortedItems, safePage, pageSize]);
 
   const showFeedback = (msg) => {
     setFeedback(msg);
@@ -747,6 +784,11 @@ export default function ItemTable({
     if (isSectionRestricted && field === 'section_id') {
       return;
     }
+    setDirtyItemIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
     setEditBuffer((prev) => ({
       ...prev,
       [itemId]: {
@@ -757,6 +799,11 @@ export default function ItemTable({
   };
 
   const toggleSubcategory = (itemId, subcatId) => {
+    setDirtyItemIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
     setEditBuffer((prev) => {
       const currentIds = prev[itemId]?.subcategory_ids || [];
       let currentPrimary = prev[itemId]?.primary_subcategory_id;
@@ -786,6 +833,11 @@ export default function ItemTable({
   };
 
   const setItemPrimarySubcategory = (itemId, subcatId) => {
+    setDirtyItemIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
     setEditBuffer((prev) => ({
       ...prev,
       [itemId]: {
@@ -821,38 +873,97 @@ export default function ItemTable({
     }
   };
 
+  // Helper to test if an edited item has genuine differences compared to original item
+  const hasItemChanged = (original, edited) => {
+    if (!original || !edited) return false;
+    const norm = (val) => (val === null || val === undefined ? '' : String(val).trim());
+    const normNum = (val) => {
+      if (val === null || val === undefined || val === '') return '';
+      const num = parseFloat(val);
+      return isNaN(num) ? '' : String(num);
+    };
+
+    if (norm(edited.name) !== norm(original.name)) return true;
+    if (normNum(edited.cost_price) !== normNum(original.cost_price)) return true;
+    if (normNum(edited.selling_price) !== normNum(original.selling_price)) return true;
+    if (normNum(edited.mrp) !== normNum(original.mrp)) return true;
+    if (norm(edited.expiry_date) !== norm(original.expiry_date)) return true;
+    if (normNum(edited.weight) !== normNum(original.weight)) return true;
+    if (normNum(edited.length) !== normNum(original.length)) return true;
+    if (normNum(edited.width) !== normNum(original.width)) return true;
+    if (normNum(edited.height) !== normNum(original.height)) return true;
+    if (norm(edited.description) !== norm(original.description)) return true;
+
+    // Supplier comparison
+    const origSupplierId = original.supplier ? (typeof original.supplier === 'object' ? original.supplier.id : original.supplier) : '';
+    if (norm(edited.supplier_id) !== norm(origSupplierId)) return true;
+
+    // Section comparison
+    if (!isSectionRestricted) {
+      const origSectionId = original.section ? (typeof original.section === 'object' ? original.section.id : original.section) : (original.section_details?.id || '');
+      if (norm(edited.section_id) !== norm(origSectionId)) return true;
+    }
+
+    // Subcategories comparison
+    const origSubcatIds = (original.subcategories || []).map((sc) => String(sc.id || sc)).sort().join(',');
+    const editedSubcatIds = (edited.subcategory_ids || []).map(String).sort().join(',');
+    if (origSubcatIds !== editedSubcatIds) return true;
+
+    const origPrimId = original.primary_subcategory?.id || original.primary_subcategory_id || '';
+    if (norm(edited.primary_subcategory_id) !== norm(origPrimId)) return true;
+
+    return false;
+  };
+
   // Save All Changes made in Edit Mode (stocks are managed via immutable ledger in StockAdjustmentModal)
   const handleSaveAllEdits = async () => {
     setSavingEdits(true);
     setError('');
     try {
+      // Find candidate items: either marked dirty or whose values actually differ
+      const itemsToSave = [];
       for (const item of items) {
         const edited = editBuffer[item.id];
         if (!edited) continue;
-
-        // Check if item properties changed
-        const payload = {
-          name: edited.name.trim(),
-          cost_price: edited.cost_price,
-          selling_price: edited.selling_price,
-          mrp: edited.mrp === '' ? null : edited.mrp,
-          section: isSectionRestricted && currentUser?.section ? currentUser.section : (edited.section_id || null),
-          expiry_date: edited.expiry_date || null,
-          weight: edited.weight === '' ? null : edited.weight,
-          length: edited.length === '' ? null : edited.length,
-          width: edited.width === '' ? null : edited.width,
-          height: edited.height === '' ? null : edited.height,
-          description: (edited.description || '').trim(),
-          supplier: edited.supplier_id || null,
-          subcategories: edited.subcategory_ids,
-          primary_subcategory: edited.primary_subcategory_id || null,
-        };
-
-        await updateItem(item.id, payload);
+        const isDirty = dirtyItemIds.has(item.id);
+        if (isDirty || hasItemChanged(item, edited)) {
+          const payload = {
+            name: edited.name.trim(),
+            cost_price: edited.cost_price,
+            selling_price: edited.selling_price,
+            mrp: edited.mrp === '' ? null : edited.mrp,
+            section: isSectionRestricted && currentUser?.section ? currentUser.section : (edited.section_id || null),
+            expiry_date: edited.expiry_date || null,
+            weight: edited.weight === '' ? null : edited.weight,
+            length: edited.length === '' ? null : edited.length,
+            width: edited.width === '' ? null : edited.width,
+            height: edited.height === '' ? null : edited.height,
+            description: (edited.description || '').trim(),
+            supplier: edited.supplier_id || null,
+            subcategories: edited.subcategory_ids,
+            primary_subcategory: edited.primary_subcategory_id || null,
+          };
+          itemsToSave.push({ id: item.id, payload });
+        }
       }
 
-      showFeedback('All product changes saved successfully.');
+      if (itemsToSave.length === 0) {
+        showFeedback('No changes detected to save.');
+        setIsEditMode(false);
+        setDirtyItemIds(new Set());
+        return;
+      }
+
+      // Execute updates in parallel batches of 5 for blazing speed without overwhelming server
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < itemsToSave.length; i += BATCH_SIZE) {
+        const batch = itemsToSave.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(({ id, payload }) => updateItem(id, payload)));
+      }
+
+      showFeedback(`Saved changes for ${itemsToSave.length} product(s) successfully.`);
       setIsEditMode(false);
+      setDirtyItemIds(new Set());
       onItemsChanged?.();
     } catch (err) {
       setError(err.message || 'Failed to save product changes.');
@@ -3606,7 +3717,7 @@ export default function ItemTable({
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <button
                 type="button"
-                onClick={() => setCurrentPage(1)}
+                onClick={() => handlePageChange(1)}
                 disabled={safePage <= 1}
                 className="btn btn-secondary btn-sm"
                 style={{ height: '28px', width: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
@@ -3616,7 +3727,7 @@ export default function ItemTable({
               </button>
               <button
                 type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => handlePageChange(Math.max(1, safePage - 1))}
                 disabled={safePage <= 1}
                 className="btn btn-secondary btn-sm"
                 style={{ height: '28px', width: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
@@ -3632,7 +3743,7 @@ export default function ItemTable({
 
               <button
                 type="button"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => handlePageChange(Math.min(totalPages, safePage + 1))}
                 disabled={safePage >= totalPages}
                 className="btn btn-secondary btn-sm"
                 style={{ height: '28px', width: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
@@ -3642,7 +3753,7 @@ export default function ItemTable({
               </button>
               <button
                 type="button"
-                onClick={() => setCurrentPage(totalPages)}
+                onClick={() => handlePageChange(totalPages)}
                 disabled={safePage >= totalPages}
                 className="btn btn-secondary btn-sm"
                 style={{ height: '28px', width: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
@@ -3841,6 +3952,11 @@ export default function ItemTable({
         }}
         onClear={() => {
           if (subcatPickerAnchor) {
+            setDirtyItemIds((prev) => {
+              const next = new Set(prev);
+              next.add(subcatPickerAnchor.itemId);
+              return next;
+            });
             setEditBuffer((prev) => ({
               ...prev,
               [subcatPickerAnchor.itemId]: {

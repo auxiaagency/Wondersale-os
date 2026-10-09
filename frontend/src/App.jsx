@@ -7,7 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import NetworkStatusBanner from './components/NetworkStatusBanner';
 import NotFoundView from './components/NotFoundView';
 import { SkeletonStatsCards } from './components/Skeleton';
-import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetchSections, fetchItems, fetchItem, getStaffMe, logoutStaff, previewExpiredStock, writeOffExpiredStock } from './api';
+import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetchSections, fetchItems, fetchItem, fetchInventoryStats, getStaffMe, logoutStaff, previewExpiredStock, writeOffExpiredStock } from './api';
 import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X } from 'lucide-react';
 
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from './utils/stakeholdersSettings';
@@ -276,6 +276,18 @@ export default function App() {
   const [hasNoSubcategoryFilter, setHasNoSubcategoryFilter] = useState(false);
   const [hasNoWeightFilter, setHasNoWeightFilter] = useState(false);
   const [hasNoVolumeFilter, setHasNoVolumeFilter] = useState(false);
+  const [inventorySortBy, setInventorySortBy] = useState('');
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [inventoryPageSize, setInventoryPageSize] = useState(() => {
+    const saved = localStorage.getItem('wondersale_inventory_page_size');
+    return saved ? parseInt(saved, 10) || 25 : 25;
+  });
+  const [inventoryPaginationMeta, setInventoryPaginationMeta] = useState({
+    count: 0,
+    totalPages: 1,
+    currentPage: 1,
+    pageSize: 25,
+  });
 
   // Modal dialog states
   const [activeDetailItem, setActiveDetailItem] = useState(null);
@@ -284,6 +296,7 @@ export default function App() {
   const [activeBarcodeItem, setActiveBarcodeItem] = useState(null);
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [isExportCsvOpen, setIsExportCsvOpen] = useState(false);
+  const [exportItems, setExportItems] = useState([]);
   const [reviewJobId, setReviewJobId] = useState(null);
 
   // Expired stock write-off UI state (declared at top to strictly follow React Rules of Hooks)
@@ -353,43 +366,85 @@ export default function App() {
     }
   }, [isSectionRestricted, inventorySubTab]);
 
-  // Fetch items only if user is authorized for inventory
+  // Inventory aggregate stats (calculated live by server in ~5ms)
+  const [inventoryStats, setInventoryStats] = useState(null);
+
+  // Fetch items with true server-side pagination & lazy loading
   const loadItems = useCallback(async () => {
     if (!currentUser || !isModuleAccessible(currentUser, 'inventory')) return;
     setLoading(true);
     try {
-      const params = {};
-      if (searchQuery.trim()) params.search = searchQuery.trim();
-      if (selectedStore) params.store = selectedStore;
-      if (selectedCategory) params.category = selectedCategory;
+      // 1. Common filter params
+      const filterParams = {};
+      if (searchQuery.trim()) filterParams.search = searchQuery.trim();
+      if (selectedStore) filterParams.store = selectedStore;
+      if (selectedCategory) filterParams.category = selectedCategory;
       if (selectedSubcategories && selectedSubcategories.length > 0) {
-        params.subcategories = selectedSubcategories.join(',');
+        filterParams.subcategories = selectedSubcategories.join(',');
       }
-      if (selectedSupplier) params.supplier = selectedSupplier;
-      if (hasNoSupplierFilter) params.has_no_supplier = 'true';
+      if (selectedSupplier) filterParams.supplier = selectedSupplier;
+      if (hasNoSupplierFilter) filterParams.has_no_supplier = 'true';
       if (isSectionRestricted) {
-        params.section = currentUser.section;
+        filterParams.section = currentUser.section;
       } else {
-        if (selectedSection) params.section = selectedSection;
-        if (hasNoSectionFilter) params.has_no_section = 'true';
+        if (selectedSection) filterParams.section = selectedSection;
+        if (hasNoSectionFilter) filterParams.has_no_section = 'true';
       }
-      if (selectedStockStatus) params.stock_status = selectedStockStatus;
-      if (minStockFilter !== '') params.min_stock = minStockFilter;
-      if (maxStockFilter !== '') params.max_stock = maxStockFilter;
-      if (needsBarcodeFilter) params.needs_new_barcode_printed = 'true';
-      if (hasNoImageFilter) params.has_no_image = 'true';
-      if (hasNoSubcategoryFilter) params.has_no_subcategory = 'true';
-      if (hasNoWeightFilter) params.has_no_weight = 'true';
-      if (hasNoVolumeFilter) params.has_no_volume = 'true';
+      if (selectedStockStatus) filterParams.stock_status = selectedStockStatus;
+      if (minStockFilter !== '') filterParams.min_stock = minStockFilter;
+      if (maxStockFilter !== '') filterParams.max_stock = maxStockFilter;
+      if (needsBarcodeFilter) filterParams.needs_new_barcode_printed = 'true';
+      if (hasNoImageFilter) filterParams.has_no_image = 'true';
+      if (hasNoSubcategoryFilter) filterParams.has_no_subcategory = 'true';
+      if (hasNoWeightFilter) filterParams.has_no_weight = 'true';
+      if (hasNoVolumeFilter) filterParams.has_no_volume = 'true';
 
-      const data = await fetchItems(params);
-      setItems(data);
+      // 2. Paginated item query params
+      const itemParams = {
+        ...filterParams,
+        page: inventoryPage,
+        page_size: inventoryPageSize,
+      };
+      if (inventorySortBy) itemParams.sort = inventorySortBy;
+
+      const [data, statsData] = await Promise.all([
+        fetchItems(itemParams),
+        fetchInventoryStats(filterParams).catch(() => null),
+      ]);
+
+      if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.results)) {
+        setItems(data.results);
+        setInventoryPaginationMeta({
+          count: data.count || 0,
+          totalPages: data.total_pages || 1,
+          currentPage: data.current_page || inventoryPage,
+          pageSize: data.page_size || inventoryPageSize,
+        });
+      } else {
+        const list = Array.isArray(data) ? data : (data?.results || []);
+        setItems(list);
+        setInventoryPaginationMeta({
+          count: list.length,
+          totalPages: Math.max(1, Math.ceil(list.length / inventoryPageSize)),
+          currentPage: 1,
+          pageSize: inventoryPageSize,
+        });
+      }
+
+      if (statsData) {
+        setInventoryStats(statsData);
+      }
     } catch (err) {
       console.error('Error fetching inventory items', err);
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter]);
+  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventoryPage, inventoryPageSize, inventorySortBy]);
+
+  // Reset to page 1 whenever any filter or search changes
+  useEffect(() => {
+    setInventoryPage(1);
+  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventorySortBy]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -447,16 +502,16 @@ export default function App() {
     );
   }
 
-  // Compute summary stats for inventory
-  const totalItemsCount = items.length;
-  const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-  const lowStockCount = items.filter((i) => i.quantity > 0 && i.quantity <= 5).length;
-  const outOfStockCount = items.filter((i) => i.quantity <= 0).length;
-  const needsBarcodeCount = items.filter((i) => i.needs_new_barcode_printed).length;
+  // Compute summary stats for inventory (prefers instant server aggregate, falls back to loaded list)
+  const totalItemsCount = inventoryStats ? inventoryStats.total_items : items.length;
+  const totalQuantity = inventoryStats ? inventoryStats.total_quantity : items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  const lowStockCount = inventoryStats ? inventoryStats.low_stock_count : items.filter((i) => i.quantity > 0 && i.quantity <= 5).length;
+  const outOfStockCount = inventoryStats ? inventoryStats.out_of_stock_count : items.filter((i) => i.quantity <= 0).length;
+  const needsBarcodeCount = inventoryStats ? inventoryStats.needs_barcode_count : items.filter((i) => i.needs_new_barcode_printed).length;
   // Expired items with stock > 0
   const today = new Date(); today.setHours(0,0,0,0);
   const expiredWithStock = items.filter((i) => i.expiry_date && i.quantity > 0 && new Date(i.expiry_date) <= today);
-  const expiredCount = expiredWithStock.length;
+  const expiredCount = inventoryStats ? inventoryStats.expired_count : expiredWithStock.length;
 
   // Derive effectiveStoreId for current session
   const effectiveStoreId = (!currentUser?.is_owner && currentUser?.store)
@@ -1072,12 +1127,59 @@ export default function App() {
                 onPrintBarcode={(item) => setActiveBarcodeItem(item)}
                 onOpenImageModal={(item) => setActiveImageItem(item)}
                 onQuickAdjust={(item) => setActiveStockItem(item)}
-                onOpenExportCsv={() => setIsExportCsvOpen(true)}
+                onOpenExportCsv={async () => {
+                  try {
+                    const exportFilterParams = {};
+                    if (searchQuery.trim()) exportFilterParams.search = searchQuery.trim();
+                    if (selectedStore) exportFilterParams.store = selectedStore;
+                    if (selectedCategory) exportFilterParams.category = selectedCategory;
+                    if (selectedSubcategories && selectedSubcategories.length > 0) {
+                      exportFilterParams.subcategories = selectedSubcategories.join(',');
+                    }
+                    if (selectedSupplier) exportFilterParams.supplier = selectedSupplier;
+                    if (hasNoSupplierFilter) exportFilterParams.has_no_supplier = 'true';
+                    if (isSectionRestricted) {
+                      exportFilterParams.section = currentUser.section;
+                    } else {
+                      if (selectedSection) exportFilterParams.section = selectedSection;
+                      if (hasNoSectionFilter) exportFilterParams.has_no_section = 'true';
+                    }
+                    if (selectedStockStatus) exportFilterParams.stock_status = selectedStockStatus;
+                    if (minStockFilter !== '') exportFilterParams.min_stock = minStockFilter;
+                    if (maxStockFilter !== '') exportFilterParams.max_stock = maxStockFilter;
+                    if (needsBarcodeFilter) exportFilterParams.needs_new_barcode_printed = 'true';
+                    if (hasNoImageFilter) exportFilterParams.has_no_image = 'true';
+                    if (hasNoSubcategoryFilter) exportFilterParams.has_no_subcategory = 'true';
+                    if (hasNoWeightFilter) exportFilterParams.has_no_weight = 'true';
+                    if (hasNoVolumeFilter) exportFilterParams.has_no_volume = 'true';
+
+                    // Fetch unpaginated dataset (backward-compatible, no page param)
+                    const fullData = await fetchItems(exportFilterParams);
+                    const fullList = Array.isArray(fullData) ? fullData : (fullData?.results || []);
+                    setExportItems(fullList);
+                  } catch (e) {
+                    console.error('Error preparing CSV export data', e);
+                    setExportItems(items);
+                  }
+                  setIsExportCsvOpen(true);
+                }}
                 onItemsChanged={loadItems}
                 onStartAIDescriptionJob={(job) => {
                   if (job?.id) setReviewJobId(job.id);
                   loadItems();
                 }}
+                serverPagination={true}
+                serverPage={inventoryPage}
+                serverPageSize={inventoryPageSize}
+                serverTotalCount={inventoryPaginationMeta.count}
+                serverTotalPages={inventoryPaginationMeta.totalPages}
+                onPageChange={(p) => setInventoryPage(p)}
+                onPageSizeChange={(sz) => {
+                  setInventoryPageSize(sz);
+                  setInventoryPage(1);
+                }}
+                sortBy={inventorySortBy}
+                onSortByChange={(s) => setInventorySortBy(s)}
               />
             </>
           )}
@@ -1275,7 +1377,7 @@ export default function App() {
         <ExportCsvModal
           isOpen={isExportCsvOpen}
           onClose={() => setIsExportCsvOpen(false)}
-          items={items}
+          items={exportItems.length > 0 ? exportItems : items}
           categories={categories}
           subcategories={subcategories}
           suppliers={suppliers}

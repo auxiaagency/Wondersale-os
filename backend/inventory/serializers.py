@@ -330,16 +330,65 @@ class BrokenItemReportSerializer(serializers.ModelSerializer):
 
 
 
+class StoreNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Store
+        fields = [
+            'id', 'name', 'address', 'city', 'state', 'pincode', 'phone', 'email',
+            'gst_number', 'gst_rate', 'gst_calculation_mode', 'enable_gst',
+            'enable_stakeholders', 'is_active', 'allow_manual_uid', 'created_at', 'updated_at'
+        ]
+
+
+class SectionNestedSerializer(serializers.ModelSerializer):
+    store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = Section
+        fields = [
+            'id', 'name', 'code', 'description', 'color', 'store', 'store_name', 'is_active',
+            'created_at', 'updated_at'
+        ]
+
+
+class SupplierNestedSerializer(serializers.ModelSerializer):
+    store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = Supplier
+        fields = [
+            'id', 'name', 'contact_person', 'phone', 'email', 'address', 'city',
+            'state', 'pincode', 'gst_number', 'notes', 'store', 'store_name', 'is_active',
+            'created_at', 'updated_at'
+        ]
+
+
+class SubCategoryNestedSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+
+    class Meta:
+        model = SubCategory
+        fields = ['id', 'name', 'category', 'category_name', 'created_at', 'updated_at']
+
+
+class CategoryNestedSerializer(serializers.ModelSerializer):
+    subcategories = SubCategoryNestedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'description', 'subcategories', 'created_at', 'updated_at']
+
+
 class ItemSerializer(serializers.ModelSerializer):
     effective_mrp = serializers.DecimalField(
         max_digits=12,
         decimal_places=2,
         read_only=True
     )
-    subcategories = SubCategorySerializer(many=True, read_only=True)
-    categories = CategorySerializer(source='parent_categories', many=True, read_only=True)
-    primary_subcategory = SubCategorySerializer(source='effective_primary_subcategory', read_only=True)
-    primary_category = CategorySerializer(source='effective_primary_category', read_only=True)
+    subcategories = SubCategoryNestedSerializer(many=True, read_only=True)
+    categories = CategoryNestedSerializer(source='parent_categories', many=True, read_only=True)
+    primary_subcategory = SubCategoryNestedSerializer(source='effective_primary_subcategory', read_only=True)
+    primary_category = CategoryNestedSerializer(source='effective_primary_category', read_only=True)
     primary_subcategory_id = serializers.PrimaryKeyRelatedField(
         queryset=SubCategory.objects.all(),
         source='primary_subcategory',
@@ -358,7 +407,7 @@ class ItemSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
-    supplier_details = SupplierSerializer(source='supplier', read_only=True)
+    supplier_details = SupplierNestedSerializer(source='supplier', read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True, allow_null=True)
     section = serializers.PrimaryKeyRelatedField(
         queryset=Section.objects.all(),
@@ -371,11 +420,11 @@ class ItemSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
-    section_details = SectionSerializer(source='section', read_only=True)
+    section_details = SectionNestedSerializer(source='section', read_only=True)
     section_name = serializers.CharField(source='section.name', read_only=True, allow_null=True)
     section_color = serializers.CharField(source='section.color', read_only=True, allow_null=True)
     section_code = serializers.CharField(source='section.code', read_only=True, allow_null=True)
-    store_details = StoreSerializer(source='store', read_only=True)
+    store_details = StoreNestedSerializer(source='store', read_only=True)
     store = serializers.PrimaryKeyRelatedField(queryset=Store.objects.all())
     images = ItemImageSerializer(many=True, read_only=True)
     primary_image_url = serializers.SerializerMethodField()

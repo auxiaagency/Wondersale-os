@@ -109,7 +109,7 @@ def get_dashboard_analytics(store_id=None, start_date=None, end_date=None, year=
     ).select_related('item', 'item__primary_subcategory__category', 'sale_order').prefetch_related('item__subcategories__category')
 
     # All active items in store / catalog
-    items_qs = Item.objects.all().select_related('primary_subcategory__category').prefetch_related('subcategories__category')
+    items_qs = Item.objects.all().select_related('primary_subcategory', 'primary_subcategory__category').prefetch_related('subcategories__category')
     if store_obj:
         items_qs = items_qs.filter(store=store_obj)
 
@@ -313,6 +313,7 @@ def get_dashboard_analytics(store_id=None, start_date=None, end_date=None, year=
     # 3. SLOW MOVING & DEAD INVENTORY ("which products are not selling")
     # -------------------------------------------------------------
     sold_item_ids = set(order_items_qs.values_list('item_id', flat=True))
+    best_selling_by_id = {b['item_id']: b for b in best_selling_list if b.get('item_id')}
 
     slow_moving_list = []
     total_dead_stock_capital = Decimal('0.00')
@@ -323,7 +324,7 @@ def get_dashboard_analytics(store_id=None, start_date=None, end_date=None, year=
 
         if item.id in sold_item_ids:
             # Check how many units were sold
-            match = next((b for b in best_selling_list if b['item_id'] == item.id), None)
+            match = best_selling_by_id.get(item.id)
             if match:
                 units_sold = match['units_sold']
                 revenue_generated = match['revenue']
@@ -373,7 +374,7 @@ def get_dashboard_analytics(store_id=None, start_date=None, end_date=None, year=
     for item in items_qs:
         qty = item.quantity
         units_sold = 0
-        match = next((b for b in best_selling_list if b['item_id'] == item.id), None)
+        match = best_selling_by_id.get(item.id)
         if match:
             units_sold = match['units_sold']
 
