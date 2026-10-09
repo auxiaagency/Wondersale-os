@@ -238,8 +238,20 @@ export async function deleteStaffMember(id) {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to delete staff member.');
-  return true;
+  if (!res.ok) {
+    let errDetail = 'Failed to delete staff member.';
+    try {
+      const data = await res.json();
+      if (data?.detail) errDetail = data.detail;
+      else if (data?.error) errDetail = data.error;
+    } catch (_) {}
+    throw new Error(errDetail);
+  }
+  try {
+    return await res.json();
+  } catch (_) {
+    return { success: true };
+  }
 }
 
 // ----------------- Staff Roles & Categories (Owner Only) -----------------

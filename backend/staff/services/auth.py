@@ -98,6 +98,11 @@ def ensure_default_roles_and_owner() -> StaffMember:
     default_owner_id = os.environ.get('DEFAULT_OWNER_ID', 'Salman')
     default_owner_pass = os.environ.get('DEFAULT_OWNER_PASSWORD', '7869186388')
 
+    # If any Owner account already exists in the system, do not recreate a deleted owner
+    existing_owner = StaffMember.objects.filter(role__is_owner=True).first()
+    if existing_owner:
+        return existing_owner
+
     # Check for existing Owner account
     owner_member = StaffMember.objects.filter(staff_id__iexact=default_owner_id).first()
     if not owner_member:

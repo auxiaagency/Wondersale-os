@@ -75,6 +75,8 @@ export default function StaffManagementView({ currentUser, onBackToLauncher }) {
   // Modals
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+  const [deletingMember, setDeletingMember] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
 
@@ -112,6 +114,29 @@ export default function StaffManagementView({ currentUser, onBackToLauncher }) {
   const showFeedback = (msg) => {
     setFeedback(msg);
     setTimeout(() => setFeedback(''), 3500);
+  };
+
+  const handleDeleteMember = async (member) => {
+    if (!member) return;
+    setIsDeleting(true);
+    setError('');
+    try {
+      const res = await deleteStaffMember(member.id);
+      showFeedback(
+        typeof res === 'object' && res?.message
+          ? res.message
+          : `Staff member "${member.name}" (${member.staff_id}) and all associated records have been completely deleted.`
+      );
+      setDeletingMember(null);
+      if (editingMember?.id === member.id) {
+        setEditingMember(null);
+      }
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Failed to delete staff member.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Helper to extract clean section details { id, name, code, color } from a staff member
@@ -827,7 +852,7 @@ export default function StaffManagementView({ currentUser, onBackToLauncher }) {
 
                         {/* Actions */}
                         <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                          <div style={{ display: 'inline-flex', gap: '8px' }}>
+                          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>
                             <button
                               type="button"
                               onClick={() => setEditingMember(m)}
@@ -836,6 +861,19 @@ export default function StaffManagementView({ currentUser, onBackToLauncher }) {
                             >
                               <Edit2 size={13} />
                               <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingMember(m)}
+                              className="btn btn-secondary btn-sm"
+                              style={{
+                                color: 'var(--color-danger, #ef4444)',
+                                borderColor: 'rgba(239, 68, 68, 0.25)',
+                              }}
+                              title="Delete Staff Member & Wipe Records"
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
                             </button>
                           </div>
                         </td>
@@ -1018,11 +1056,29 @@ export default function StaffManagementView({ currentUser, onBackToLauncher }) {
           sections={sections}
           currentUser={currentUser}
           onClose={() => setEditingMember(null)}
+          onDelete={(m) => {
+            setEditingMember(null);
+            setDeletingMember(m);
+          }}
           onSuccess={(updated) => {
             setEditingMember(null);
             showFeedback(`Staff member "${updated.name}" updated.`);
             loadData();
           }}
+        />
+      )}
+
+      {/* Modal: Delete Staff Confirmation */}
+      {deletingMember && (
+        <DeleteStaffConfirmationModal
+          member={deletingMember}
+          currentUser={currentUser}
+          allMembers={members}
+          isDeleting={isDeleting}
+          onClose={() => {
+            if (!isDeleting) setDeletingMember(null);
+          }}
+          onConfirm={() => handleDeleteMember(deletingMember)}
         />
       )}
 
@@ -1062,9 +1118,299 @@ export default function StaffManagementView({ currentUser, onBackToLauncher }) {
   );
 }
 
+// ----------------- Sub-Modal: Delete Staff Confirmation -----------------
+
+function DeleteStaffConfirmationModal({
+  member,
+  currentUser,
+  allMembers = [],
+  isDeleting,
+  onClose,
+  onConfirm,
+}) {
+  if (!member) return null;
+
+  const isSelf =
+    (currentUser?.id && String(currentUser.id) === String(member.id)) ||
+    (currentUser?.staff_id &&
+      currentUser.staff_id.toLowerCase() === (member.staff_id || '').toLowerCase());
+
+  const isMemberOwner = Boolean(
+    member.is_owner || member.role_details?.is_owner || member.role_name?.toLowerCase() === 'owner'
+  );
+  const totalOwners = allMembers.filter(
+    (m) => m.is_owner || m.role_details?.is_owner || m.role_name?.toLowerCase() === 'owner'
+  ).length;
+  const isOnlyOwner = isMemberOwner && totalOwners <= 1;
+
+  const cannotDelete = isSelf || isOnlyOwner;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.78)',
+        backdropFilter: 'blur(8px)',
+        zIndex: 1100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+        animation: 'fadeIn 0.2s ease',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="glass-panel"
+        style={{
+          backgroundColor: 'var(--bg-surface, #151922)',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          borderRadius: 'var(--radius-xl, 18px)',
+          maxWidth: '520px',
+          width: '100%',
+          boxShadow: '0 25px 60px -10px rgba(0, 0, 0, 0.8), 0 0 35px rgba(239, 68, 68, 0.15)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: '20px 24px',
+            borderBottom: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-danger, #ef4444)',
+                flexShrink: 0,
+              }}
+            >
+              <Trash2 size={20} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Delete Staff Member
+              </h3>
+              <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Permanent removal and data wipe
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+            }}
+          >
+            <XCircle size={20} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '22px 24px' }}>
+          {/* Member Card */}
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: 'var(--radius-lg, 12px)',
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              marginBottom: '18px',
+            }}
+          >
+            <div
+              style={{
+                width: '44px',
+                height: '44px',
+                borderRadius: '12px',
+                backgroundColor: 'var(--bg-surface-hover, #232936)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: '1rem',
+                color: 'var(--text-primary)',
+                flexShrink: 0,
+              }}
+            >
+              {member.name ? member.name.substring(0, 2).toUpperCase() : 'ST'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--text-primary)' }}>
+                  {member.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '2px 7px',
+                    borderRadius: '4px',
+                    backgroundColor: isMemberOwner ? 'rgba(254, 197, 1, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                    color: isMemberOwner ? '#FEC501' : '#38BDF8',
+                    border: `1px solid ${isMemberOwner ? 'rgba(254, 197, 1, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
+                    fontWeight: 600,
+                  }}
+                >
+                  {member.role_name || (isMemberOwner ? 'Owner' : 'Staff')}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                ID: <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{member.staff_id}</span>
+                {member.store_name ? ` • ${member.store_name}` : ' • All Locations'}
+              </div>
+            </div>
+          </div>
+
+          {/* Warnings & Invalidation list */}
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-md, 8px)',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              marginBottom: '18px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: 'var(--color-danger, #ef4444)',
+                fontWeight: 600,
+                fontSize: '0.86rem',
+                marginBottom: '8px',
+              }}
+            >
+              <AlertCircle size={16} />
+              <span>Everything assigned to this user will be deleted:</span>
+            </div>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: '20px',
+                fontSize: '0.8rem',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}
+            >
+              <li>User login credentials and active sessions revoked and deleted.</li>
+              <li>Linked workforce profile, biometric/RFID cards, and shift schedules removed.</li>
+              <li>All clock-in punches, attendance records, leaves, and salary statements cleared.</li>
+              <li>Assigned tasks, pending verifications, and ledger entries purged.</li>
+              <li>Historical sales &amp; stock records safely preserved with user unlinked.</li>
+            </ul>
+          </div>
+
+          {/* Safeguard alerts */}
+          {isSelf && (
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-md, 8px)',
+                backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                color: '#f59e0b',
+                fontSize: '0.82rem',
+                lineHeight: 1.4,
+                marginBottom: '10px',
+              }}
+            >
+              ⚠️ <strong>Action Blocked:</strong> You cannot delete your own active account while logged in. Please sign in with another Owner account to perform this action.
+            </div>
+          )}
+
+          {!isSelf && isOnlyOwner && (
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-md, 8px)',
+                backgroundColor: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                color: '#f59e0b',
+                fontSize: '0.82rem',
+                lineHeight: 1.4,
+                marginBottom: '10px',
+              }}
+            >
+              ⚠️ <strong>Action Blocked:</strong> Cannot delete the last remaining Store Owner account. At least one Owner must remain in the system.
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: '16px 24px',
+            borderTop: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '12px',
+          }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="btn btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={cannotDelete || isDeleting}
+            className="btn btn-primary"
+            style={{
+              backgroundColor: 'var(--color-danger, #ef4444)',
+              borderColor: 'var(--color-danger, #ef4444)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              opacity: cannotDelete ? 0.5 : 1,
+              cursor: cannotDelete ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <Trash2 size={15} />
+            <span>{isDeleting ? 'Deleting Permanently…' : 'Delete Permanently'}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ----------------- Sub-Modal: Staff Member Editor -----------------
 
-function StaffMemberModal({ member, roles, stores, sections = [], currentUser, onClose, onSuccess }) {
+function StaffMemberModal({ member, roles, stores, sections = [], currentUser, onClose, onDelete, onSuccess }) {
   const [staffId, setStaffId] = useState(member?.staff_id || '');
   const [name, setName] = useState(member?.name || '');
   const [phone, setPhone] = useState(member?.phone || '');
@@ -1537,7 +1883,26 @@ function StaffMemberModal({ member, roles, stores, sections = [], currentUser, o
             </label>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '12px' }}>
+            {isEditing && onDelete && (
+              <button
+                type="button"
+                onClick={() => onDelete(member)}
+                className="btn btn-secondary"
+                style={{
+                  marginRight: 'auto',
+                  color: 'var(--color-danger, #ef4444)',
+                  borderColor: 'rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                title="Delete Staff Member & Wipe Records"
+              >
+                <Trash2 size={14} />
+                <span>Delete Account</span>
+              </button>
+            )}
             <button type="button" onClick={onClose} className="btn btn-secondary">
               Cancel
             </button>

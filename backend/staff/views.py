@@ -243,13 +243,34 @@ class StaffMemberViewSet(OwnerOnlyMixin, viewsets.ModelViewSet):
         from .services.sync import sync_single_staff_member
         sync_single_staff_member(member)
 
-    def perform_destroy(self, instance):
-        emp = Employee.objects.filter(staff_member=instance).first()
-        if emp:
-            emp.staff_member = None
-            emp.is_active = False
-            emp.save()
-        instance.delete()
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        current_staff = get_current_staff(request)
+
+        # Safeguard: prevent deleting your own active account while logged in
+        if current_staff and current_staff.id == instance.id:
+            return Response(
+                {'detail': 'You cannot delete your own active account while logged in. Please use another Owner account.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Safeguard: cannot delete the last remaining Owner account
+        if instance.is_owner:
+            owner_count = StaffMember.objects.filter(role__is_owner=True).count()
+            if owner_count <= 1:
+                return Response(
+                    {'detail': 'Cannot delete the last remaining Store Owner account. At least one Owner must remain in the system.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        from .services.staff_delete import delete_staff_member_completely
+        staff_name = instance.name
+        staff_id = instance.staff_id
+        delete_staff_member_completely(instance)
+
+        return Response({
+            'message': f"Staff member '{staff_name}' ({staff_id}) and all associated records have been completely deleted from the system."
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='revoke-sessions')
     def revoke_sessions(self, request, pk=None):
@@ -439,6 +460,10 @@ class EmployeeViewSet(ManagerOrOwnerMixin, viewsets.ModelViewSet):
             if emp.store:
                 sm.store = emp.store
             sm.save()
+
+    def perform_destroy(self, instance):
+        from .services.staff_delete import delete_employee_records
+        delete_employee_records(instance)
 
     @action(detail=True, methods=['post'], url_path='assign-card')
     def assign_card_action(self, request, pk=None):
