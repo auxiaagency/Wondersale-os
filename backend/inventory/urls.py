@@ -16,6 +16,7 @@ from .views import (
     DashboardAnalyticsView,
     ExpiryAnalyticsView,
     BrokenItemReportViewSet,
+    WhatsAppWebhookView,
 )
 
 router = DefaultRouter()
@@ -37,6 +38,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('dashboard-analytics/', DashboardAnalyticsView.as_view(), name='dashboard-analytics'),
     path('expiry-analytics/', ExpiryAnalyticsView.as_view(), name='expiry-analytics'),
+    path('whatsapp/webhook/', WhatsAppWebhookView.as_view(), name='whatsapp-webhook'),
 ]
 
 

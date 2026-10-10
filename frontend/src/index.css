@@ -7392,6 +7392,22 @@ input[type=number] {
     font-size: 1.35rem !important;
   }
 
+  /* Split POS Layout (Side-by-side collapses on tablet) */
+  .billing-pos-main-split {
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: auto !important;
+    gap: 14px !important;
+  }
+
+  .billing-pos-main-split .billing-cart-card,
+  .billing-pos-main-split .billing-checkout-card {
+    width: 100% !important;
+    flex: 1 1 auto !important;
+    height: auto !important;
+  }
+
   /* Cart Table */
   .billing-cart-card {
     padding: 12px 14px !important;
@@ -7759,6 +7775,22 @@ input[type=number] {
   .billing-add-to-cart-btn svg {
     width: 14px !important;
     height: 14px !important;
+  }
+
+  /* Split POS Layout (Stack on mobile) */
+  .billing-pos-main-split {
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: auto !important;
+    gap: 10px !important;
+  }
+
+  .billing-pos-main-split .billing-cart-card,
+  .billing-pos-main-split .billing-checkout-card {
+    width: 100% !important;
+    flex: 1 1 auto !important;
+    height: auto !important;
   }
 
   /* Cart Table */

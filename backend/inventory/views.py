@@ -2331,6 +2331,116 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
 
         return qs.order_by('-created_at')
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        Deletes a SaleOrder and reverses all associated side-effects:
+        - Reverses inventory deductions via StockMovement ledger and recalculates Item.quantity.
+        - Deletes StockMovement ledger entries created specifically for this sale.
+        - Adjusts Customer total_spent and total_purchases_count (decrements by 1).
+        - Reverses VIP Card debits / restores VIP Card credit balance.
+        - Enforces Shift Immutability Rule: only orders belonging to an open shift can be deleted.
+        """
+        from django.db import transaction
+        from django.db.models import Sum
+        from inventory.models import StockMovement, DailyRegisterShift, VIPCardTransaction
+
+        order = self.get_object()
+
+        # 1. Enforce Shift Immutability & Return Safety Rules
+        if (order.invoice_number and order.invoice_number.startswith('RET-')) or order.return_reference or order.status == 'refunded':
+            return Response(
+                {"error": "Return / refund invoices cannot be deleted directly."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if any return orders have already been processed against this sale order
+        existing_returns = SaleOrder.objects.filter(return_reference=order.invoice_number)
+        if existing_returns.exists():
+            return Response(
+                {"error": f"Cannot delete invoice #{order.invoice_number} because return/refund orders ({', '.join(existing_returns.values_list('invoice_number', flat=True)[:3])}) have already been processed against it. Deleting it would cause inventory & financial inconsistency."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if any line items have returned_quantity > 0
+        has_returned_items = order.items.filter(returned_quantity__gt=0).exists()
+        if has_returned_items:
+            return Response(
+                {"error": f"Cannot delete invoice #{order.invoice_number} because items from this invoice have already been returned."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        open_shift = DailyRegisterShift.objects.filter(
+            store=order.store,
+            status=DailyRegisterShift.STATUS_OPEN
+        ).order_by('-opened_at').first()
+
+        if not open_shift or order.created_at < open_shift.opened_at:
+            return Response(
+                {"error": "This invoice belongs to a closed register shift and is permanently locked/immutable."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            # 2. Collect affected items from line items
+            line_items = list(order.items.select_related('item').all())
+            affected_items = set()
+            for line in line_items:
+                if line.item:
+                    affected_items.add(line.item)
+
+            # 3. Find and delete all StockMovement entries tied to this invoice
+            stock_movements = list(StockMovement.objects.filter(
+                note__icontains=order.invoice_number,
+                reason=StockMovement.REASON_SALE
+            ))
+            for sm in stock_movements:
+                if sm.item:
+                    affected_items.add(sm.item)
+                sm.delete()
+
+            # 4. Recalculate Item.quantity strictly from StockMovement ledger sum for each affected item
+            for item_obj in affected_items:
+                total_stock = StockMovement.objects.filter(item=item_obj).aggregate(total=Sum('change'))['total'] or 0
+                item_obj.quantity = max(0, total_stock)
+                item_obj.save(update_fields=['quantity', 'updated_at'])
+
+            # 5. Reverse Customer total_spent and purchases count
+            customer = order.customer
+            if customer:
+                current_spent = customer.total_spent or Decimal('0.00')
+                customer.total_spent = max(Decimal('0.00'), current_spent - order.total_amount).quantize(Decimal('0.01'))
+                customer.total_purchases_count = max(0, (customer.total_purchases_count or 1) - 1)
+
+                # 6. Reverse VIP Card debits if order was paid via VIP Card
+                if order.payment_method == SaleOrder.PAYMENT_VIP_CARD and order.total_amount > Decimal('0.00'):
+                    customer.vip_card_balance = (customer.vip_card_balance + order.total_amount).quantize(Decimal('0.01'))
+                    if order.vip_discount_amount and order.vip_discount_amount > Decimal('0.00'):
+                        customer.total_vip_savings = max(
+                            Decimal('0.00'),
+                            (customer.total_vip_savings or Decimal('0.00')) - order.vip_discount_amount
+                        ).quantize(Decimal('0.01'))
+
+                    VIPCardTransaction.objects.create(
+                        customer=customer,
+                        store=order.store,
+                        card_uid=order.vip_card_uid or customer.vip_card_uid,
+                        transaction_type=VIPCardTransaction.TYPE_REFUND,
+                        amount=order.total_amount,
+                        balance_after=customer.vip_card_balance,
+                        notes=f"Sale Deleted Reversal #{order.invoice_number}"
+                    )
+
+                customer.save()
+
+            # 7. Delete the SaleOrder (cascades payments and items)
+            invoice_num = order.invoice_number
+            order.delete()
+
+        return Response(
+            {"message": f"Sale invoice #{invoice_num} has been deleted and all ledger entries and inventory stocks were reversed."},
+            status=status.HTTP_200_OK
+        )
+
     @action(detail=False, methods=['post'], url_path='checkout')
     def checkout(self, request):
         """
@@ -3264,3 +3374,31 @@ class ExpiryAnalyticsView(APIView):
         store_id = request.query_params.get('store_id')
         data = get_expiry_analytics(store_id=store_id)
         return Response(data, status=status.HTTP_200_OK)
+
+
+class WhatsAppWebhookView(APIView):
+    """
+    Meta WhatsApp Cloud API Webhook endpoint.
+    - GET: Responds to Meta verification handshake (hub.mode, hub.verify_token, hub.challenge)
+    - POST: Receives real-time delivery statuses (sent, delivered, read) and message updates
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, *args, **kwargs):
+        hub_mode = request.query_params.get('hub.mode')
+        hub_verify_token = request.query_params.get('hub.verify_token')
+        hub_challenge = request.query_params.get('hub.challenge')
+
+        from inventory.whatsapp_service import handle_whatsapp_webhook_verification
+        is_valid, challenge = handle_whatsapp_webhook_verification(hub_mode, hub_verify_token, hub_challenge)
+        if is_valid:
+            return HttpResponse(challenge, content_type='text/plain', status=200)
+        return HttpResponse('Verification failed', content_type='text/plain', status=403)
+
+    def post(self, request, *args, **kwargs):
+        from inventory.whatsapp_service import process_whatsapp_webhook_event
+        process_whatsapp_webhook_event(request.data)
+        # Meta requires an immediate 200 OK response to prevent retry bombardment
+        return Response({'status': 'received'}, status=status.HTTP_200_OK)
+

@@ -10,6 +10,7 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   CreditCard,
   Banknote,
   QrCode,
@@ -67,6 +68,7 @@ import {
   getRegisterShifts,
   getSaleOrders,
   updateSaleOrder,
+  deleteSaleOrder,
 } from '../api';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 import ProductReturnModal from './ProductReturnModal';
@@ -211,6 +213,8 @@ export default function BillingView({
   const [payoutsTimeFilter, setPayoutsTimeFilter] = useState(null);
   const [shiftsHistoryTimeFilter, setShiftsHistoryTimeFilter] = useState(null);
   const [editingOrderForPayment, setEditingOrderForPayment] = useState(null);
+  const [orderToDelete, setOrderToDelete] = useState(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
   const [editOrderItems, setEditOrderItems] = useState([]);
   const [editAddItemSearch, setEditAddItemSearch] = useState('');
   const [isEditAddItemDropdownOpen, setIsEditAddItemDropdownOpen] = useState(false);
@@ -1251,6 +1255,26 @@ export default function BillingView({
     }
   };
 
+  const handleConfirmDeleteOrder = async () => {
+    if (!orderToDelete || isDeletingOrder) return;
+    setIsDeletingOrder(true);
+    try {
+      await deleteSaleOrder(orderToDelete.id);
+      showNotification('success', `Bill #${orderToDelete.invoice_number} deleted! Stock deductions and ledger entries have been completely reversed.`);
+      setOrderToDelete(null);
+      await Promise.all([
+        loadShiftBillingOrders(),
+        loadActiveRegisterShift(),
+        loadStoreItems(),
+      ]);
+    } catch (err) {
+      console.error('Failed to delete sale order:', err);
+      showNotification('error', err.message || 'Failed to delete sale order.');
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
   const loadRegisterHistory = async () => {
     setLoadingRegisterHistory(true);
     try {
@@ -1398,6 +1422,15 @@ export default function BillingView({
       return;
     }
 
+    if (!activeShift || activeShift.status !== 'open') {
+      showNotification(
+        'error',
+        'Cannot complete sale: Cash register shift is not open. Please click "Start Register Shift" in the header to open a shift before billing.'
+      );
+      handleOpenRegisterModal();
+      return;
+    }
+
     // Split Payment Validation
     if (paymentMethod === 'split') {
       const cAmt = parseFloat(splitCashAmount) || 0;
@@ -1471,6 +1504,16 @@ export default function BillingView({
 
     if (!activeStore) {
       showNotification('error', 'No active store branch selected.');
+      return;
+    }
+
+    if (!activeShift || activeShift.status !== 'open') {
+      showNotification(
+        'error',
+        'Cannot complete sale: Cash register shift is not open. Please open a shift before billing.'
+      );
+      setIsConfirmSaleModalOpen(false);
+      handleOpenRegisterModal();
       return;
     }
 
@@ -1764,8 +1807,8 @@ export default function BillingView({
         display: 'flex',
         flexDirection: 'column',
         minHeight: '100%',
-        gap: '20px',
-        padding: '20px',
+        gap: '10px',
+        padding: '10px 16px',
         maxWidth: '1500px',
         margin: '0 auto',
         width: '100%',
@@ -1780,8 +1823,8 @@ export default function BillingView({
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '14px',
-          padding: '14px 20px',
+          gap: '10px',
+          padding: '8px 16px',
           borderRadius: 'var(--radius-xl)',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
@@ -2084,7 +2127,7 @@ export default function BillingView({
         className="billing-search-card"
         style={{
           position: 'relative',
-          padding: '16px 20px',
+          padding: '8px 16px',
           borderRadius: 'var(--radius-xl)',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
@@ -2413,537 +2456,30 @@ export default function BillingView({
         )}
       </div>
 
-      {/* Vertical Stack Layout: Full-Width Selected Product Card followed by Full-Width Cart Card & Inline Checkout */}
+
+      {/* ================================================================== */}
+      {/* SIDE-BY-SIDE POS WORKSPACE: CART (LEFT 50%) + CHECKOUT (RIGHT 50%) */}
+      {/* ================================================================== */}
       <div
+        className="billing-pos-main-split"
         style={{
           display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
+          flexDirection: 'row',
+          gap: '14px',
           width: '100%',
+          height: 'calc(100vh - 120px)',
+          minHeight: '640px',
+          alignItems: 'stretch',
+          boxSizing: 'border-box',
         }}
       >
-        {/* 1. TOP: FULL-WIDTH SELECTED PRODUCT PREVIEW (Large 180px Image, Bold Typography, Solid Button) */}
-        <div
-          className="billing-selected-product-card"
-          style={{
-            width: '100%',
-            boxSizing: 'border-box',
-            borderRadius: 'var(--radius-xl)',
-            background: 'var(--bg-surface)',
-            border: selectedProduct ? '1px solid var(--border-subtle)' : '1px dashed var(--border-subtle)',
-            padding: '24px 30px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '18px',
-            boxShadow: selectedProduct ? '0 8px 32px rgba(0, 0, 0, 0.28)' : '0 4px 16px rgba(0, 0, 0, 0.15)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          {/* Top Header: Label & Dismiss Button */}
-          <div className="billing-selected-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={18} style={{ color: selectedProduct ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
-              <span
-                className="billing-selected-badge-title"
-                style={{
-                  fontSize: '0.9rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  color: selectedProduct ? 'var(--text-main)' : 'var(--text-muted)',
-                  letterSpacing: '0.6px',
-                }}
-              >
-                Selected Product Preview
-              </span>
-              {!selectedProduct && (
-                <span className="billing-selected-standby-text" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  (Standby — Scan barcode or search above)
-                </span>
-              )}
-            </div>
-            {selectedProduct && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedProduct(null);
-                  setProductQuantity(1);
-                }}
-                className="btn btn-secondary btn-sm billing-selected-dismiss-btn"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  fontSize: '0.82rem',
-                  padding: '5px 14px',
-                }}
-              >
-                <X size={15} />
-                <span>Dismiss</span>
-              </button>
-            )}
-          </div>
-
-          {/* Main Layout Row: Large Image + Expanded Details + Price/Cart Block */}
-          <div
-            className="billing-selected-main-row"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '28px',
-            }}
-          >
-            {/* Left Area: Big 180px Photo + Titles & Badges */}
-            <div className="billing-selected-info-wrap" style={{ display: 'flex', alignItems: 'center', gap: '26px', flex: '1 1 540px', minWidth: 0 }}>
-              {/* Product Thumbnail (Large 180x180px with Lightbox click) */}
-              <div
-                onClick={() => {
-                  if (selectedProduct?.images?.[0]) {
-                    setLightboxImage({
-                      src: selectedProduct.images[0].image_url || selectedProduct.images[0].image,
-                      name: selectedProduct.name,
-                      uid: selectedProduct.uid,
-                    });
-                  }
-                }}
-                className="billing-selected-photo-box"
-                style={{
-                  width: '180px',
-                  height: '180px',
-                  borderRadius: '18px',
-                  background: 'var(--bg-main)',
-                  border: selectedProduct ? '1px solid var(--border-subtle)' : '2px dashed var(--border-subtle)',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  boxShadow: selectedProduct ? '0 10px 30px rgba(0, 0, 0, 0.45)' : 'none',
-                  cursor: selectedProduct?.images?.[0] ? 'zoom-in' : 'default',
-                  position: 'relative',
-                }}
-                title={selectedProduct?.images?.[0] ? 'Click to view full-size image' : undefined}
-              >
-                {selectedProduct?.images?.[0] ? (
-                  <>
-                    <img
-                      src={selectedProduct.images[0].image_url || selectedProduct.images[0].image}
-                      alt={selectedProduct.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <div
-                      className="billing-selected-zoom-badge"
-                      style={{
-                        position: 'absolute',
-                        bottom: '8px',
-                        right: '8px',
-                        background: 'rgba(0, 0, 0, 0.72)',
-                        backdropFilter: 'blur(4px)',
-                        color: '#ffffff',
-                        padding: '4px 8px',
-                        borderRadius: 'var(--radius-pill)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.72rem',
-                        fontWeight: 700,
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                      }}
-                    >
-                      <ZoomIn size={12} />
-                      <span>Zoom</span>
-                    </div>
-                  </>
-                ) : (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '8px',
-                      color: 'var(--text-muted)',
-                      opacity: 0.65,
-                    }}
-                  >
-                    <Package size={56} />
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
-                      {selectedProduct ? 'No Image' : 'No Product'}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Product Name, Barcode & Location Badges */}
-              <div className="billing-selected-meta-col" style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0, flex: 1 }}>
-                <h3
-                  className="billing-selected-product-title"
-                  style={{
-                    fontSize: '1.85rem',
-                    fontWeight: 800,
-                    margin: 0,
-                    color: selectedProduct ? 'var(--text-main)' : 'var(--text-muted)',
-                    lineHeight: 1.25,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={selectedProduct?.name || 'No Product Selected'}
-                >
-                  {selectedProduct?.name || 'No Product Selected'}
-                </h3>
-
-                {/* Badges: UID, Section, Expiry */}
-                <div className="billing-selected-tags-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  {/* UID / Barcode Tag */}
-                  <span
-                    className="billing-selected-uid-tag"
-                    style={{
-                      fontSize: '0.92rem',
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                      padding: '5px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: selectedProduct ? 'rgba(218, 41, 28, 0.14)' : 'rgba(255, 255, 255, 0.04)',
-                      color: selectedProduct ? 'var(--brand-primary)' : 'var(--text-muted)',
-                      border: `1px solid ${selectedProduct ? 'rgba(218, 41, 28, 0.3)' : 'var(--border-subtle)'}`,
-                    }}
-                  >
-                    UID: {selectedProduct?.uid || '—'}
-                  </span>
-
-                  {/* Section Tag */}
-                  <span
-                    className="billing-selected-sec-tag"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '0.88rem',
-                      color: selectedProduct?.location_section ? 'var(--text-secondary)' : 'var(--text-muted)',
-                      padding: '5px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface-hover)',
-                      border: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <MapPin size={14} />
-                    <span>{selectedProduct?.location_section || 'Section: —'}</span>
-                  </span>
-
-                  {/* Expiry Tag */}
-                  <span
-                    className="billing-selected-exp-tag"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '0.88rem',
-                      color: selectedProduct?.expiry_date ? 'var(--text-secondary)' : 'var(--text-muted)',
-                      padding: '5px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface-hover)',
-                      border: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <Calendar size={14} />
-                    <span>Exp: {selectedProduct?.expiry_date || '—'}</span>
-                  </span>
-                </div>
-
-                {/* Subcategory Pills */}
-                <div className="billing-selected-subcats-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '28px', marginTop: '2px' }}>
-                  {selectedProduct?.subcategories && selectedProduct.subcategories.length > 0 ? (
-                    selectedProduct.subcategories.map((sc) => (
-                      <span
-                        key={sc.id}
-                        style={{
-                          fontSize: '0.84rem',
-                          fontWeight: 600,
-                          padding: '4px 12px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'var(--bg-surface-hover)',
-                          border: '1px solid var(--border-subtle)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        {sc.name}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                      {selectedProduct ? 'No category tags' : 'Category tags will appear here'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Area: Pricing, Stock, Confidential Cost Price & Add to Cart */}
-            <div
-              className="billing-selected-right-col"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                gap: '16px',
-                flexShrink: 0,
-              }}
-            >
-              {/* Pricing & Stock Card */}
-              <div
-                className="billing-selected-price-card"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '24px',
-                  padding: '12px 24px',
-                  borderRadius: 'var(--radius-lg)',
-                  background: 'var(--bg-main)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              >
-                {/* Exclusive Head Cashier / Owner Confidential Cost Price & Profit Margin (Shown on the Left of Selling Price) */}
-                {isHeadCashierOrOwner && selectedProduct && (
-                  <div className="billing-selected-cost-col" style={{ borderRight: '1px solid var(--border-subtle)', paddingRight: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#F59E0B', textTransform: 'uppercase', display: 'block', fontWeight: 800 }}>
-                        Cost Price
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#F59E0B', marginTop: '4px' }}>
-                      ₹{parseFloat(selectedProduct.cost_price || 0).toFixed(2)}
-                    </div>
-                    {parseFloat(selectedProduct.cost_price || 0) > 0 && (
-                      <div style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 700, marginTop: '2px' }}>
-                        Margin: +₹{(parseFloat(selectedProduct.selling_price || 0) - parseFloat(selectedProduct.cost_price || 0)).toFixed(2)} ({(((parseFloat(selectedProduct.selling_price || 0) - parseFloat(selectedProduct.cost_price || 0)) / parseFloat(selectedProduct.cost_price || 1)) * 100).toFixed(1)}%)
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="billing-selected-selling-col">
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
-                    Selling Price
-                  </span>
-                  <div className="billing-selected-selling-price" style={{ fontSize: '2.1rem', fontWeight: 900, color: selectedProduct ? '#10B981' : 'var(--text-muted)', marginTop: '2px' }}>
-                    {selectedProduct ? `₹${parseFloat(selectedProduct.selling_price || 0).toFixed(2)}` : '₹ --.--'}
-                  </div>
-                </div>
-
-                <div className="billing-selected-mrp-col" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
-                    MRP
-                  </span>
-                  <div
-                    className="billing-selected-mrp-price"
-                    style={{
-                      fontSize: '1.15rem',
-                      fontWeight: 700,
-                      color: 'var(--text-muted)',
-                      textDecoration: selectedProduct?.effective_mrp ? 'line-through' : 'none',
-                      marginTop: '4px',
-                    }}
-                  >
-                    {selectedProduct?.effective_mrp ? `₹${parseFloat(selectedProduct.effective_mrp).toFixed(2)}` : '₹ --.--'}
-                  </div>
-                </div>
-
-                <div className="billing-selected-stock-col" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
-                    Available Stock
-                  </span>
-                  <div style={{ marginTop: '4px' }}>
-                    {!selectedProduct ? (
-                      <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-muted)' }}>-- units</span>
-                    ) : selectedProduct.quantity <= 0 ? (
-                      <span
-                        style={{
-                          fontSize: '0.82rem',
-                          fontWeight: 800,
-                          padding: '4px 10px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          color: '#EF4444',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                        }}
-                      >
-                        Out of Stock (0)
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          fontSize: '1.05rem',
-                          fontWeight: 800,
-                          color: selectedProduct.quantity <= 5 ? '#F59E0B' : '#10B981',
-                        }}
-                      >
-                        {selectedProduct.quantity} units
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Quantity Controls & Solid Add to Cart Button (No Gradient) */}
-              <div className="billing-selected-qty-row" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                {!selectedProduct ? (
-                  <div className="billing-selected-qty-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.4 }}>
-                      <button type="button" disabled className="btn btn-secondary btn-sm" style={{ width: '42px', height: '44px', padding: 0 }}>
-                        <Minus size={16} />
-                      </button>
-                      <input
-                        type="text"
-                        disabled
-                        value="0"
-                        style={{
-                          width: '58px',
-                          textAlign: 'center',
-                          height: '44px',
-                          borderRadius: 'var(--radius-sm)',
-                          border: '1px solid var(--border-subtle)',
-                          background: 'var(--bg-main)',
-                          color: 'var(--text-muted)',
-                          fontWeight: 700,
-                          fontSize: '1rem',
-                        }}
-                      />
-                      <button type="button" disabled className="btn btn-secondary btn-sm" style={{ width: '42px', height: '44px', padding: 0 }}>
-                        <Plus size={16} />
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      disabled
-                      className="billing-add-to-cart-btn"
-                      style={{
-                        height: '44px',
-                        padding: '0 26px',
-                        fontWeight: 800,
-                        fontSize: '1rem',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'rgba(255, 255, 255, 0.06)',
-                        border: '1px solid var(--border-subtle)',
-                        color: 'var(--text-muted)',
-                        cursor: 'not-allowed',
-                        opacity: 0.5,
-                      }}
-                    >
-                      <ShoppingCart size={18} />
-                      <span>Add to Cart</span>
-                    </button>
-                  </div>
-                ) : selectedProduct.quantity <= 0 ? (
-                  <div
-                    className="billing-selected-out-of-stock-box"
-                    style={{
-                      padding: '12px 24px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(239, 68, 68, 0.12)',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
-                      color: '#EF4444',
-                      fontSize: '0.92rem',
-                      fontWeight: 800,
-                      textAlign: 'center',
-                    }}
-                  >
-                    Product is Out of Stock
-                  </div>
-                ) : (
-                  <div className="billing-selected-qty-actions" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    {/* Quantity Spinner */}
-                    <div className="billing-selected-spinner-box" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <button
-                        type="button"
-                        onClick={() => setProductQuantity((q) => Math.max(1, q - 1))}
-                        className="btn btn-secondary btn-sm"
-                        style={{ width: '42px', height: '44px', padding: 0 }}
-                      >
-                        <Minus size={16} />
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        max={selectedProduct.quantity}
-                        value={productQuantity}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val)) {
-                            setProductQuantity(Math.min(selectedProduct.quantity, Math.max(1, val)));
-                          }
-                        }}
-                        style={{
-                          width: '58px',
-                          textAlign: 'center',
-                          height: '44px',
-                          borderRadius: 'var(--radius-sm)',
-                          border: '1px solid var(--border-subtle)',
-                          background: 'var(--bg-main)',
-                          color: 'var(--text-main)',
-                          fontWeight: 800,
-                          fontSize: '1.05rem',
-                          MozAppearance: 'textfield',
-                          appearance: 'textfield',
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setProductQuantity((q) => Math.min(selectedProduct.quantity, q + 1))
-                        }
-                        className="btn btn-secondary btn-sm"
-                        style={{ width: '42px', height: '44px', padding: 0 }}
-                      >
-                        <Plus size={16} />
-                      </button>
-                    </div>
-
-                    {/* Solid Add to Cart Button (NO GRADIENT) */}
-                    <button
-                      type="button"
-                      onClick={() => handleAddToCart(selectedProduct, productQuantity)}
-                      className="billing-add-to-cart-btn"
-                      style={{
-                        height: '44px',
-                        padding: '0 28px',
-                        fontWeight: 800,
-                        fontSize: '1.02rem',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '9px',
-                        borderRadius: 'var(--radius-md)',
-                        background: '#DC2626',
-                        border: '1px solid #DC2626',
-                        color: '#FFFFFF',
-                        cursor: 'pointer',
-                        boxShadow: '0 4px 16px rgba(220, 38, 38, 0.4)',
-                        whiteSpace: 'nowrap',
-                        transition: 'background 0.15s ease, transform 0.1s ease',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#B91C1C')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '#DC2626')}
-                    >
-                      <ShoppingCart size={19} />
-                      <span>
-                        Add to Cart (₹{(parseFloat(selectedProduct.selling_price) * productQuantity).toFixed(2)})
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. MIDDLE: FULL-WIDTH ACTIVE BILL CART CARD */}
+        {/* 1. LEFT: ACTIVE BILL CART CARD (50% WIDTH, FULL HEIGHT SCROLLABLE) */}
         <div
           className="billing-cart-card"
           style={{
-            width: '100%',
+            flex: '1 1 50%',
+            width: '50%',
+            minWidth: 0,
             boxSizing: 'border-box',
             borderRadius: 'var(--radius-xl)',
             background: 'var(--bg-surface)',
@@ -2952,28 +2488,30 @@ export default function BillingView({
             flexDirection: 'column',
             overflow: 'hidden',
             boxShadow: '0 4px 24px rgba(0, 0, 0, 0.22)',
+            height: '100%',
           }}
         >
-          {/* Cart Header */}
+          {/* Cart Header (Compact) */}
           <div
             className="billing-cart-header"
             style={{
-              padding: '18px 28px',
+              padding: '9px 14px',
               borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               background: 'var(--bg-surface-solid, #161B2C)',
+              flexShrink: 0,
             }}
           >
-            <div className="billing-cart-title-wrap" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <ShoppingCart size={24} style={{ color: 'var(--brand-primary)' }} />
-              <h2 className="billing-cart-title" style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+            <div className="billing-cart-title-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShoppingCart size={18} style={{ color: 'var(--brand-primary)' }} />
+              <h2 className="billing-cart-title" style={{ fontSize: '0.98rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
                 Active Bill Cart ({cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'})
               </h2>
             </div>
 
-            <div className="billing-cart-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="billing-cart-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               {draftCarts.length > 0 && (
                 <button
                   type="button"
@@ -2982,17 +2520,18 @@ export default function BillingView({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    gap: '4px',
                     background: 'rgba(245, 158, 11, 0.15)',
                     borderColor: 'rgba(245, 158, 11, 0.4)',
                     color: '#F59E0B',
                     fontWeight: 700,
-                    fontSize: '0.84rem',
-                    padding: '7px 14px',
+                    fontSize: '0.74rem',
+                    padding: '4px 8px',
+                    height: '26px',
                   }}
                   title="View and resume parked draft bills"
                 >
-                  <Bookmark size={15} />
+                  <Bookmark size={13} />
                   <span>Held Drafts ({draftCarts.length})</span>
                 </button>
               )}
@@ -3006,17 +2545,18 @@ export default function BillingView({
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      gap: '4px',
                       background: 'rgba(59, 130, 246, 0.12)',
                       borderColor: 'rgba(59, 130, 246, 0.35)',
                       color: '#3B82F6',
                       fontWeight: 700,
-                      fontSize: '0.84rem',
-                      padding: '7px 14px',
+                      fontSize: '0.74rem',
+                      padding: '4px 8px',
+                      height: '26px',
                     }}
                     title="Park this cart so customer can pick more items while you bill other customers"
                   >
-                    <Bookmark size={15} />
+                    <Bookmark size={13} />
                     <span>Hold / Save Draft</span>
                   </button>
 
@@ -3027,14 +2567,15 @@ export default function BillingView({
                     style={{
                       color: 'var(--color-danger)',
                       borderColor: 'rgba(239, 68, 68, 0.3)',
-                      fontSize: '0.84rem',
+                      fontSize: '0.74rem',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      padding: '7px 14px',
+                      gap: '4px',
+                      padding: '4px 8px',
+                      height: '26px',
                     }}
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={13} />
                     <span>Clear Bill</span>
                   </button>
                 </>
@@ -3043,26 +2584,26 @@ export default function BillingView({
           </div>
 
           {/* Cart Items Table */}
-          <div className="billing-cart-table-wrap" style={{ flex: 1, minHeight: cart.length > 0 ? '240px' : 'auto', maxHeight: '480px', overflowY: cart.length > 0 ? 'auto' : 'visible' }}>
+          <div className="billing-cart-table-wrap" style={{ flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {cart.length > 0 ? (
-              <table className="billing-cart-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.96rem' }}>
+              <table className="billing-cart-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                 <thead>
                   <tr
                     style={{
                       borderBottom: '1px solid var(--border-subtle)',
                       background: 'var(--bg-main)',
                       color: 'var(--text-muted)',
-                      fontSize: '0.84rem',
+                      fontSize: '0.70rem',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px',
                       textAlign: 'left',
                     }}
                   >
-                    <th style={{ padding: '14px 26px', width: '44%' }}># Item Description</th>
-                    <th style={{ padding: '14px 20px', textAlign: 'right', width: '18%' }}>Unit Price</th>
-                    <th style={{ padding: '14px 20px', textAlign: 'center', width: '16%' }}>Quantity</th>
-                    <th style={{ padding: '14px 26px', textAlign: 'right', width: '18%' }}>Line Total</th>
-                    <th style={{ padding: '14px 18px', textAlign: 'center', width: '54px' }}></th>
+                    <th style={{ padding: '6px 10px', width: '46%' }}># Item Description</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', width: '18%' }}>Unit Price</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'center', width: '18%' }}>Quantity</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right', width: '14%' }}>Line Total</th>
+                    <th style={{ padding: '6px 4px', textAlign: 'center', width: '4%' }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3079,9 +2620,9 @@ export default function BillingView({
                         onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                       >
-                        {/* Item Name & UID with Large 68px Thumbnail + Lightbox */}
-                        <td className="billing-cart-cell-item" style={{ padding: '16px 26px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+                        {/* Item Name & UID with Compact 34px Thumbnail */}
+                        <td className="billing-cart-cell-item" style={{ padding: '6px 10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div
                               onClick={() => {
                                 if (primaryImg) {
@@ -3094,9 +2635,9 @@ export default function BillingView({
                               }}
                               className="billing-cart-thumb-box"
                               style={{
-                                width: '68px',
-                                height: '68px',
-                                borderRadius: '12px',
+                                width: '34px',
+                                height: '34px',
+                                borderRadius: '6px',
                                 background: 'var(--bg-main)',
                                 border: '1px solid var(--border-subtle)',
                                 overflow: 'hidden',
@@ -3104,7 +2645,7 @@ export default function BillingView({
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 flexShrink: 0,
-                                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
                                 cursor: primaryImg ? 'zoom-in' : 'default',
                               }}
                               title={primaryImg ? 'Click to view full-size image' : undefined}
@@ -3116,43 +2657,43 @@ export default function BillingView({
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 />
                               ) : (
-                                <Package size={30} style={{ color: 'var(--text-muted)' }} />
+                                <Package size={16} style={{ color: 'var(--text-muted)' }} />
                               )}
                             </div>
 
                             <div style={{ minWidth: 0, flex: 1 }}>
-                              <div className="billing-cart-item-name" style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '1.22rem', lineHeight: 1.3 }}>
+                              <div className="billing-cart-item-name" style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.82rem', lineHeight: 1.25 }}>
                                 {ci.item.name}
                               </div>
                               <div
                                 className="billing-cart-item-submeta"
                                 style={{
-                                  marginTop: '6px',
+                                  marginTop: '2px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '12px',
+                                  gap: '6px',
                                   flexWrap: 'wrap',
                                 }}
                               >
                                 <span
                                   className="billing-cart-uid-tag"
                                   style={{
-                                    fontSize: '1.05rem',
+                                    fontSize: '0.66rem',
                                     fontFamily: 'monospace',
                                     fontWeight: 800,
-                                    padding: '3px 10px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    padding: '1px 5px',
+                                    borderRadius: '3px',
                                     background: 'rgba(218, 41, 28, 0.15)',
                                     color: 'var(--brand-primary)',
                                     border: '1px solid rgba(218, 41, 28, 0.3)',
-                                    letterSpacing: '0.5px',
+                                    letterSpacing: '0.4px',
                                   }}
                                 >
                                   UID: {ci.item.uid}
                                 </span>
                                 {ci.item.location_section && (
-                                  <span className="billing-cart-sec-tag" style={{ fontSize: '0.88rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                                    Section: {ci.item.location_section}
+                                  <span className="billing-cart-sec-tag" style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                                    Sec: {ci.item.location_section}
                                   </span>
                                 )}
                               </div>
@@ -3161,11 +2702,11 @@ export default function BillingView({
                         </td>
 
                         {/* Unit Selling Price (Editable for Head Cashier & Owner) */}
-                        <td className="billing-cart-cell-price" style={{ padding: '16px 20px', textAlign: 'right' }}>
+                        <td className="billing-cart-cell-price" style={{ padding: '6px 8px', textAlign: 'right' }}>
                           {isHeadCashierOrOwner ? (
-                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ fontWeight: 700, color: 'var(--text-muted)' }}>₹</span>
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                                <span style={{ fontWeight: 700, color: 'var(--text-muted)', fontSize: '0.78rem' }}>₹</span>
                                 <input
                                   type="number"
                                   step="0.01"
@@ -3174,43 +2715,43 @@ export default function BillingView({
                                   onChange={(e) => handleUpdateUnitPrice(ci.item.id, e.target.value)}
                                   className="billing-cart-price-input"
                                   style={{
-                                    width: '90px',
+                                    width: '68px',
                                     textAlign: 'right',
-                                    height: '36px',
+                                    height: '26px',
                                     borderRadius: 'var(--radius-sm)',
                                     border: '1px solid var(--border-subtle)',
                                     background: 'var(--bg-main)',
                                     color: 'var(--text-main)',
                                     fontWeight: 800,
-                                    fontSize: '1.02rem',
-                                    padding: '0 8px',
+                                    fontSize: '0.84rem',
+                                    padding: '0 4px',
                                   }}
                                   title="Edit unit price (Head Cashier & Owner override)"
                                 />
                               </div>
                               {parseFloat(ci.unit_price) !== parseFloat(ci.item.selling_price) && (
-                                <span style={{ fontSize: '0.68rem', color: '#F59E0B', fontWeight: 700 }}>
-                                  Modified (Orig: ₹{parseFloat(ci.item.selling_price).toFixed(2)})
+                                <span style={{ fontSize: '0.62rem', color: '#F59E0B', fontWeight: 700 }}>
+                                  Mod (Orig: ₹{parseFloat(ci.item.selling_price).toFixed(2)})
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="billing-cart-price-text" style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '1.08rem' }}>
+                            <span className="billing-cart-price-text" style={{ fontWeight: 700, color: 'var(--text-secondary)', fontSize: '0.86rem' }}>
                               ₹{ci.unit_price}
                             </span>
                           )}
                         </td>
 
-                        {/* Quantity Controls (Enlarged) */}
-                        <td className="billing-cart-cell-qty" style={{ padding: '16px 20px', textAlign: 'center' }}>
-                          <div className="billing-cart-qty-spinner" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        {/* Quantity Controls (Compact) */}
+                        <td className="billing-cart-cell-qty" style={{ padding: '6px 6px', textAlign: 'center' }}>
+                          <div className="billing-cart-qty-spinner" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                             <button
                               type="button"
                               onClick={() => handleUpdateCartQty(ci.item.id, ci.quantity - 1)}
                               className="btn btn-secondary btn-sm"
-                              style={{ width: '38px', height: '38px', padding: 0 }}
+                              style={{ width: '24px', height: '24px', padding: 0 }}
                             >
-                              <Minus size={15} />
+                              <Minus size={12} />
                             </button>
                             <input
                               type="number"
@@ -3220,35 +2761,36 @@ export default function BillingView({
                               onChange={(e) => handleUpdateCartQty(ci.item.id, e.target.value)}
                               className="billing-cart-qty-input"
                               style={{
-                                width: '54px',
+                                width: '36px',
                                 textAlign: 'center',
-                                height: '38px',
+                                height: '24px',
                                 borderRadius: 'var(--radius-sm)',
                                 border: '1px solid var(--border-subtle)',
                                 background: 'var(--bg-main)',
                                 color: 'var(--text-main)',
                                 fontWeight: 800,
-                                fontSize: '1.02rem',
+                                fontSize: '0.82rem',
+                                padding: '0 2px',
                               }}
                             />
                             <button
                               type="button"
                               onClick={() => handleUpdateCartQty(ci.item.id, ci.quantity + 1)}
                               className="btn btn-secondary btn-sm"
-                              style={{ width: '38px', height: '38px', padding: 0 }}
+                              style={{ width: '24px', height: '24px', padding: 0 }}
                             >
-                              <Plus size={15} />
+                              <Plus size={12} />
                             </button>
                           </div>
                         </td>
 
                         {/* Line Total */}
-                        <td className="billing-cart-cell-total" style={{ padding: '16px 26px', textAlign: 'right', fontWeight: 900, color: '#10B981', fontSize: '1.25rem' }}>
+                        <td className="billing-cart-cell-total" style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: '#10B981', fontSize: '0.92rem' }}>
                           ₹{ci.total}
                         </td>
 
                         {/* Remove Action */}
-                        <td className="billing-cart-cell-action" style={{ padding: '16px 18px', textAlign: 'center' }}>
+                        <td className="billing-cart-cell-action" style={{ padding: '6px 4px', textAlign: 'center' }}>
                           <button
                             type="button"
                             onClick={() => handleRemoveFromCart(ci.item.id)}
@@ -3258,7 +2800,7 @@ export default function BillingView({
                               border: 'none',
                               color: 'var(--text-muted)',
                               cursor: 'pointer',
-                              padding: '8px',
+                              padding: '4px',
                               borderRadius: 'var(--radius-sm)',
                               transition: 'all 0.12s ease',
                               display: 'inline-flex',
@@ -3275,7 +2817,7 @@ export default function BillingView({
                             }}
                             title="Remove item from bill"
                           >
-                            <Trash2 size={20} />
+                            <Trash2 size={15} />
                           </button>
                         </td>
                       </tr>
@@ -3287,12 +2829,14 @@ export default function BillingView({
               <div
                 className="billing-cart-empty-box"
                 style={{
-                  padding: '54px 20px',
+                  padding: '40px 20px',
                   textAlign: 'center',
                   color: 'var(--text-muted)',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
+                  justifyContent: 'center',
+                  flex: 1,
                   gap: '12px',
                 }}
               >
@@ -3305,416 +2849,268 @@ export default function BillingView({
             )}
           </div>
 
-          {/* Active Bill Cart Summary Row / Footer (Total Price, Discount % Row & Net Payable) */}
+          {/* Active Bill Cart Summary Row / Footer (Total Items, Total Units & Total Price) */}
           {cart.length > 0 && (
             <div
               className="billing-cart-summary-footer"
               style={{
-                padding: '16px 26px',
+                padding: '10px 18px',
                 borderTop: '1px solid var(--border-subtle)',
                 background: 'var(--bg-main)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: '16px',
+                gap: '10px',
+                flexShrink: 0,
+                marginTop: 'auto',
               }}
             >
-              <div className="billing-cart-summary-counts" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', fontSize: '0.86rem', fontWeight: 700 }}>
-                <span>{cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'}</span>
+              <div className="billing-cart-summary-counts" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '0.84rem', fontWeight: 700 }}>
+                <span style={{ color: 'var(--text-main)', fontWeight: 800 }}>
+                  {cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'}
+                </span>
                 <span>•</span>
-                <span>{cartTotalUnits} total units</span>
+                <span style={{ color: '#38BDF8', fontWeight: 800 }}>
+                  {cartTotalUnits} {cartTotalUnits === 1 ? 'unit' : 'total units'}
+                </span>
               </div>
 
-              {/* Totals & Discount % on Total Price */}
-              <div className="billing-cart-summary-totals-wrap" style={{ display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap' }}>
-                {/* Total Price */}
-                <div className="billing-cart-summary-subtotal-box" style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
-                    Total Price
-                  </span>
-                  <div className="billing-cart-summary-subtotal-val" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
-                    ₹{cartSubtotal.toFixed(2)}
-                  </div>
-                </div>
-
-                {/* Row for Discount (% or ₹ Rupee on Total Price) */}
-                <div className="billing-cart-summary-discount-box" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '18px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#F59E0B', textTransform: 'uppercase', display: 'block', fontWeight: 800 }}>
-                      Discount on Total
-                    </span>
-                    {/* Mode Toggle: % vs ₹ */}
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        background: 'var(--bg-main)',
-                        borderRadius: 'var(--radius-pill)',
-                        padding: '1px',
-                        border: '1px solid var(--border-subtle)',
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setDiscountType('percent')}
-                        style={{
-                          padding: '1px 7px',
-                          borderRadius: 'var(--radius-pill)',
-                          border: 'none',
-                          background: discountType === 'percent' ? '#F59E0B' : 'transparent',
-                          color: discountType === 'percent' ? '#000000' : 'var(--text-muted)',
-                          fontSize: '0.68rem',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          transition: 'all 0.1s ease',
-                        }}
-                      >
-                        %
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDiscountType('rupee')}
-                        style={{
-                          padding: '1px 7px',
-                          borderRadius: 'var(--radius-pill)',
-                          border: 'none',
-                          background: discountType === 'rupee' ? '#F59E0B' : 'transparent',
-                          color: discountType === 'rupee' ? '#000000' : 'var(--text-muted)',
-                          fontSize: '0.68rem',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          transition: 'all 0.1s ease',
-                        }}
-                      >
-                        ₹
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        background: 'var(--bg-surface)',
-                        border: cartDiscount > 0 ? '1px solid rgba(245, 158, 11, 0.6)' : '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-sm)',
-                        padding: discountType === 'rupee' ? '0 8px 0 8px' : '0 8px 0 4px',
-                        height: '36px',
-                        transition: 'border-color 0.15s ease',
-                      }}
-                    >
-                      {discountType === 'rupee' ? (
-                        <>
-                          <span style={{ fontSize: '0.88rem', fontWeight: 800, color: cartDiscount > 0 ? '#F59E0B' : 'var(--text-muted)', marginRight: '2px' }}>
-                            ₹
-                          </span>
-                          <input
-                            type="number"
-                            step="1"
-                            min="0"
-                            max={cartSubtotal}
-                            value={discountAmount}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '') {
-                                setDiscountAmount('');
-                              } else {
-                                const num = parseFloat(val);
-                                if (!isNaN(num)) {
-                                  // Cannot exceed cart subtotal
-                                  setDiscountAmount(String(Math.max(0, Math.min(cartSubtotal, num))));
-                                }
-                              }
-                            }}
-                            placeholder="0"
-                            className="billing-cart-discount-input"
-                            style={{
-                              width: '74px',
-                              textAlign: 'center',
-                              height: '100%',
-                              border: 'none',
-                              background: 'transparent',
-                              color: cartDiscount > 0 ? '#F59E0B' : 'var(--text-main)',
-                              fontWeight: 800,
-                              fontSize: '1rem',
-                              outline: 'none',
-                            }}
-                            title={`Enter discount amount in ₹ (Max: ₹${cartSubtotal.toFixed(2)})`}
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="number"
-                            step="0.5"
-                            min="0"
-                            max="100"
-                            value={discountPercent}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '') {
-                                setDiscountPercent('');
-                              } else {
-                                const num = parseFloat(val);
-                                if (!isNaN(num)) {
-                                  setDiscountPercent(String(Math.max(0, Math.min(100, num))));
-                                }
-                              }
-                            }}
-                            placeholder="0"
-                            className="billing-cart-discount-input"
-                            style={{
-                              width: '56px',
-                              textAlign: 'center',
-                              height: '100%',
-                              border: 'none',
-                              background: 'transparent',
-                              color: cartDiscount > 0 ? '#F59E0B' : 'var(--text-main)',
-                              fontWeight: 800,
-                              fontSize: '1rem',
-                              outline: 'none',
-                            }}
-                            title="Enter discount percentage for total bill (0 - 100%)"
-                          />
-                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: cartDiscount > 0 ? '#F59E0B' : 'var(--text-muted)' }}>
-                            %
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {cartDiscount > 0 && (
-                      <span
-                        className="billing-cart-discount-tag"
-                        style={{
-                          fontSize: '0.82rem',
-                          fontWeight: 800,
-                          color: '#F59E0B',
-                          background: 'rgba(245, 158, 11, 0.15)',
-                          padding: '4px 10px',
-                          borderRadius: 'var(--radius-sm)',
-                          border: '1px solid rgba(245, 158, 11, 0.3)',
-                        }}
-                      >
-                        -₹{cartDiscount.toFixed(2)} off
-                        {discountType === 'rupee' && cartSubtotal > 0 && (
-                          <span style={{ fontSize: '0.72rem', opacity: 0.85, marginLeft: '4px' }}>
-                            ({((cartDiscount / cartSubtotal) * 100).toFixed(1)}%)
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Net Payable Amount */}
-                <div className="billing-cart-summary-net-box" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '18px', textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.72rem', color: '#10B981', textTransform: 'uppercase', display: 'block', fontWeight: 800 }}>
-                    Net Payable
-                  </span>
-                  <div className="billing-cart-summary-net-val" style={{ fontSize: '1.45rem', fontWeight: 900, color: '#10B981', marginTop: '2px' }}>
-                    ₹{cartGrandTotal.toFixed(2)}
-                  </div>
-                </div>
+              {/* Total Cart Price */}
+              <div className="billing-cart-summary-totals-wrap" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                  Total Cart Value:
+                </span>
+                <span className="billing-cart-summary-subtotal-val" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10B981' }}>
+                  ₹{cartSubtotal.toFixed(2)}
+                </span>
               </div>
             </div>
           )}
         </div>
 
-        {/* 3. BOTTOM: INLINE QUICK CHECKOUT STATION */}
+
+        {/* 2. RIGHT: INLINE QUICK CHECKOUT STATION (50% WIDTH, FULL HEIGHT SCROLLABLE) */}
         <div
           className="billing-checkout-card"
           style={{
-            width: '100%',
+            flex: '1 1 50%',
+            width: '50%',
+            minWidth: 0,
             boxSizing: 'border-box',
             borderRadius: 'var(--radius-xl)',
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-subtle)',
-            padding: '24px 28px',
+            padding: 0,
             display: 'flex',
             flexDirection: 'column',
-            gap: '20px',
+            overflow: 'hidden',
             boxShadow: '0 4px 24px rgba(0, 0, 0, 0.22)',
+            height: '100%',
           }}
         >
-          {/* Header */}
-          <div className="billing-checkout-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px', flexWrap: 'wrap', gap: '12px' }}>
-            <div className="billing-checkout-header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Receipt size={22} style={{ color: 'var(--brand-primary)' }} />
-              <h2 className="billing-checkout-header-title" style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+          {/* Header (Compact) */}
+          <div className="billing-checkout-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', padding: '8px 14px', flexWrap: 'wrap', gap: '8px', flexShrink: 0 }}>
+            <div className="billing-checkout-header-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Receipt size={17} style={{ color: 'var(--brand-primary)' }} />
+              <h2 className="billing-checkout-header-title" style={{ fontSize: '0.96rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
                 Fast Checkout &amp; Customer Billing
               </h2>
             </div>
-            <div className="billing-checkout-header-right" style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <div className="billing-checkout-header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => {
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   searchInputRef.current?.focus();
                 }}
                 className="btn btn-secondary btn-sm billing-checkout-scroll-btn"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.8rem',
+                  gap: '4px',
+                  fontSize: '0.72rem',
                   fontWeight: 700,
-                  padding: '5px 12px',
+                  padding: '3px 8px',
                   borderRadius: 'var(--radius-pill)',
                   background: 'var(--bg-main)',
+                  height: '24px',
                 }}
                 title="Scroll back up to product catalog and barcode search"
               >
-                <ArrowUp size={14} />
+                <ArrowUp size={12} />
                 <span>Scroll Up to Search</span>
               </button>
-              <div className="billing-checkout-cart-status" style={{ fontSize: '0.84rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                {cart.length > 0 ? (
-                  <span style={{ color: '#10B981', fontWeight: 700 }}>● {cartTotalUnits} units ready for billing</span>
+              <div className="billing-checkout-cart-status" style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {!activeShift || activeShift.status !== 'open' ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenRegisterModal}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#F87171',
+                      borderRadius: 'var(--radius-pill)',
+                      padding: '2px 8px',
+                      fontSize: '0.70rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title="Click to open register shift so billing can proceed"
+                  >
+                    <span>⚠️ Shift Closed: Click to Open</span>
+                  </button>
                 ) : (
-                  <span>Add products to cart to complete sale</span>
+                  <span style={{ color: '#34D399', fontWeight: 700, fontSize: '0.70rem' }}>
+                    🟢 Shift #{activeShift.shift_number}
+                  </span>
+                )}
+                {cart.length > 0 ? (
+                  <span style={{ color: '#10B981', fontWeight: 700 }}>● {cartTotalUnits} units ready</span>
+                ) : (
+                  <span>Add products to cart</span>
                 )}
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleInitiateCheckout} className="billing-checkout-form" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', alignItems: 'start' }}>
-            {/* Column 1: Customer Information */}
-            <div className="billing-checkout-col billing-customer-col" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, width: '100%', boxSizing: 'border-box' }}>
+            <form onSubmit={handleInitiateCheckout} className="billing-checkout-form" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', alignItems: 'stretch', width: '100%', boxSizing: 'border-box' }}>
+            {/* Column 1: Customer Information (Compact 2-Column Grid) */}
+            <div className="billing-checkout-col billing-customer-col" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ fontSize: '0.70rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 1. Customer Details
               </div>
 
-              {/* Phone Number (Required) with Live Lookup */}
-              <div className="billing-customer-input-wrap" style={{ position: 'relative' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '5px', display: 'block' }}>
-                  Mobile Phone Number <span style={{ color: 'var(--color-danger)' }}>*</span>
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Phone
-                    size={16}
-                    style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-                  />
-                  <input
-                    ref={phoneInputRef}
-                    type="tel"
-                    required
-                    maxLength={10}
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="10-digit mobile (e.g. 9876543210)"
-                    className="form-input"
-                    style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '40px', height: '44px', fontSize: '0.94rem', fontWeight: 600 }}
-                  />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {/* Phone Number (Required) with Live Lookup */}
+                <div className="billing-customer-input-wrap" style={{ position: 'relative' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '2px', display: 'block' }}>
+                    Mobile Phone <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Phone
+                      size={13}
+                      style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+                    />
+                    <input
+                      ref={phoneInputRef}
+                      type="tel"
+                      required
+                      maxLength={10}
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="10-digit mobile"
+                      className="form-input"
+                      style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '28px', height: '30px', fontSize: '0.84rem', fontWeight: 600 }}
+                    />
+                  </div>
+
+                  {/* Returning Customer Autocomplete Dropdown */}
+                  {showCustomerDropdown && customerSuggestions.length > 0 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 2px)',
+                        left: 0,
+                        right: 0,
+                        zIndex: 110,
+                        background: 'var(--bg-surface-solid)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-subtle)',
+                        boxShadow: '0 12px 28px rgba(0, 0, 0, 0.4)',
+                        maxHeight: '160px',
+                        overflowY: 'auto',
+                        padding: '3px',
+                      }}
+                    >
+                      {customerSuggestions.map((cust) => (
+                        <div
+                          key={cust.id}
+                          onClick={() => handleSelectCustomerSuggestion(cust)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 'var(--radius-sm)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            fontSize: '0.78rem',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                            {cust.name ? `${cust.name} (${cust.phone})` : cust.phone}
+                          </span>
+                          <span style={{ fontSize: '0.70rem', color: '#10B981', fontWeight: 700 }}>
+                            {cust.total_purchases_count} visits
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Returning Customer Autocomplete Dropdown */}
-                {showCustomerDropdown && customerSuggestions.length > 0 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 4px)',
-                      left: 0,
-                      right: 0,
-                      zIndex: 110,
-                      background: 'var(--bg-surface-solid)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--border-subtle)',
-                      boxShadow: '0 12px 28px rgba(0, 0, 0, 0.4)',
-                      maxHeight: '180px',
-                      overflowY: 'auto',
-                      padding: '4px',
-                    }}
-                  >
-                    {customerSuggestions.map((cust) => (
-                      <div
-                        key={cust.id}
-                        onClick={() => handleSelectCustomerSuggestion(cust)}
-                        style={{
-                          padding: '8px 12px',
-                          borderRadius: 'var(--radius-sm)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          fontSize: '0.84rem',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
-                          {cust.name ? `${cust.name} (${cust.phone})` : cust.phone}
-                        </span>
-                        <span style={{ fontSize: '0.74rem', color: '#10B981', fontWeight: 700 }}>
-                          {cust.total_purchases_count} visits
-                        </span>
-                      </div>
-                    ))}
+                {/* Customer Name (Optional) */}
+                <div className="billing-customer-name-wrap">
+                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '2px', display: 'block' }}>
+                    Customer Name <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>(Opt)</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <User
+                      size={13}
+                      style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
+                    />
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="e.g. Rahul Sharma"
+                      className="form-input"
+                      style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '28px', height: '30px', fontSize: '0.84rem' }}
+                    />
                   </div>
-                )}
-
-                {/* VIP Status Badge under Phone Input */}
-                {customerHasVipCard ? (
-                  <div
-                    className="billing-vip-status-badge"
-                    style={{
-                      marginTop: '6px',
-                      padding: '6px 10px',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(245, 158, 11, 0.12)',
-                      border: '1px solid rgba(245, 158, 11, 0.35)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#F59E0B', fontWeight: 800 }}>
-                      <Crown size={14} />
-                      <span>VIP Member: {matchedCustomer.vip_card_uid}</span>
-                    </div>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#10B981' }}>
-                      ₹{parseFloat(matchedCustomer.vip_card_balance || 0).toFixed(2)} Credits
-                    </div>
-                  </div>
-                ) : customerPhone.replace(/\D/g, '').length === 10 ? (
-                  <div style={{ marginTop: '4px', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    Regular Customer (No VIP Card assigned)
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Customer Name (Optional) */}
-              <div className="billing-customer-name-wrap">
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '5px', display: 'block' }}>
-                  Customer Name <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500 }}>(Optional)</span>
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <User
-                    size={16}
-                    style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-                  />
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
-                    className="form-input"
-                    style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '40px', height: '44px', fontSize: '0.94rem' }}
-                  />
                 </div>
               </div>
+
+              {/* VIP Status Badge under Phone Input */}
+              {customerHasVipCard ? (
+                <div
+                  className="billing-vip-status-badge"
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', color: '#F59E0B', fontWeight: 800 }}>
+                    <Crown size={12} />
+                    <span>VIP Member: {matchedCustomer.vip_card_uid}</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 900, color: '#10B981' }}>
+                    ₹{parseFloat(matchedCustomer.vip_card_balance || 0).toFixed(2)} Credits
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {/* Column 2: Payment Mode & Cash Calculator */}
-            <div className="billing-checkout-col billing-payment-col" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <div className="billing-checkout-col billing-payment-col" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ fontSize: '0.70rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 2. Payment Method
               </div>
 
               {/* Payment Mode Buttons: Cash, UPI / QR, Split, VIP Card */}
-              <div className="billing-payment-methods-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '8px' }}>
+              <div className="billing-payment-methods-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
                 {[
                   { id: 'cash', label: 'Cash', icon: Banknote, enabled: true },
                   { id: 'upi', label: 'UPI / QR', icon: QrCode, enabled: true },
@@ -3741,8 +3137,8 @@ export default function BillingView({
                           : undefined
                       }
                       style={{
-                        padding: '12px 10px',
-                        borderRadius: 'var(--radius-lg)',
+                        padding: '6px 4px',
+                        borderRadius: 'var(--radius-md)',
                         border: `1px solid ${
                           isSelected
                             ? pm.id === 'vip_card'
@@ -3777,14 +3173,14 @@ export default function BillingView({
                         justifyContent: 'center',
                         gap: '6px',
                         fontWeight: isSelected ? 800 : 600,
-                        fontSize: '0.88rem',
+                        fontSize: '0.74rem',
                         cursor: isDisabled ? 'not-allowed' : 'pointer',
                         opacity: isDisabled ? 0.45 : 1,
                         transition: 'all 0.15s ease',
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      <Icon size={17} />
+                      <Icon size={13} />
                       <span>{pm.label}</span>
                       {pm.id === 'vip_card' && customerHasVipCard && (
                         <span
@@ -4509,21 +3905,21 @@ export default function BillingView({
               <div
                 className="billing-checkout-summary-card"
                 style={{
-                  padding: '14px 16px',
-                  borderRadius: 'var(--radius-lg)',
+                  padding: '6px 10px',
+                  borderRadius: 'var(--radius-md)',
                   background: 'var(--bg-main)',
                   border: '1px solid var(--border-subtle)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '10px',
+                  gap: '4px',
                 }}
               >
                 {/* Total Price Row */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                    Total Price (Subtotal)
+                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)' }}>
+                    Total (Subtotal)
                   </span>
-                  <span style={{ fontSize: '1.08rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  <span style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text-main)' }}>
                     ₹{cartSubtotal.toFixed(2)}
                   </span>
                 </div>
@@ -4770,104 +4166,636 @@ export default function BillingView({
                 </div>
               </div>
 
-              {/* Internal Sale Remark (Optional - Internal Only, Not on Bill) */}
-              <div>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                    marginBottom: '6px',
-                  }}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                    <FileText size={13} color="#38BDF8" style={{ flexShrink: 0 }} />
-                    <span>Internal Sale Remark</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#38BDF8', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '1px 6px', borderRadius: '4px' }}>Internal Only</span>
-                  </span>
-                  <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'none', fontWeight: 500 }}>
-                    (Not on customer bill)
-                  </span>
-                </label>
+              {/* Internal Sale Remark (Compact Single Row) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                  <FileText size={12} color="#38BDF8" />
+                  <span>Remark:</span>
+                </span>
                 <input
                   type="text"
-                  placeholder="e.g. Approved discount by manager, VIP client, gift box requested..."
+                  placeholder="e.g. Approved discount, VIP gift box..."
                   value={checkoutNotes}
                   onChange={(e) => setCheckoutNotes(e.target.value)}
                   style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 'var(--radius-md)',
+                    flex: 1,
+                    height: '24px',
+                    padding: '0 8px',
+                    borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-subtle)',
                     background: 'var(--bg-main)',
                     color: 'var(--text-primary)',
-                    fontSize: '0.8rem',
+                    fontSize: '0.74rem',
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
                 />
               </div>
 
-              {/* Payable Highlight Banner */}
+              {/* Payable Highlight Banner (Compact) */}
               <div
                 className="billing-net-payable-banner"
                 style={{
-                  padding: '14px 18px',
-                  borderRadius: 'var(--radius-xl)',
-                  background: 'rgba(16, 185, 129, 0.08)',
-                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                 }}
               >
                 <div>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase' }}>
                     Net Amount Payable
                   </span>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {cartTotalItems} items ({cartTotalUnits} units)
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    {cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'} ({cartTotalUnits} units)
                   </div>
                 </div>
-                <div className="billing-net-payable-value" style={{ fontSize: '1.9rem', fontWeight: 900, color: '#10B981' }}>
+                <div className="billing-net-payable-value" style={{ fontSize: '1.35rem', fontWeight: 900, color: '#10B981' }}>
                   ₹{cartGrandTotal.toFixed(2)}
                 </div>
               </div>
 
-              {/* Big Complete Sale Button */}
+              {/* Complete Sale Button (Compact & Always Visible Without Scrolling) */}
               <button
                 type="submit"
-                disabled={isSubmitting || cart.length === 0}
+                disabled={isSubmitting || cart.length === 0 || !activeShift || activeShift.status !== 'open'}
                 className="btn btn-primary billing-complete-sale-btn"
                 style={{
                   width: '100%',
-                  padding: '14px 24px',
+                  height: '36px',
+                  padding: '0 16px',
                   fontWeight: 900,
-                  fontSize: '1.05rem',
+                  fontSize: '0.92rem',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '10px',
-                  background: cart.length > 0 ? 'linear-gradient(135deg, #10B981, #059669)' : undefined,
-                  boxShadow: cart.length > 0 ? '0 6px 24px rgba(16, 185, 129, 0.4)' : undefined,
-                  opacity: (isSubmitting || cart.length === 0) ? 0.4 : 1,
-                  cursor: (isSubmitting || cart.length === 0) ? 'not-allowed' : 'pointer',
+                  gap: '8px',
+                  borderRadius: 'var(--radius-md)',
+                  background:
+                    (!activeShift || activeShift.status !== 'open')
+                      ? 'rgba(239, 68, 68, 0.2)'
+                      : cart.length > 0
+                      ? 'linear-gradient(135deg, #10B981, #059669)'
+                      : undefined,
+                  borderColor: (!activeShift || activeShift.status !== 'open') ? 'rgba(239, 68, 68, 0.4)' : undefined,
+                  color: (!activeShift || activeShift.status !== 'open') ? '#FCA5A5' : undefined,
+                  boxShadow: (activeShift && activeShift.status === 'open' && cart.length > 0) ? '0 4px 16px rgba(16, 185, 129, 0.35)' : undefined,
+                  opacity: (isSubmitting || cart.length === 0 || !activeShift || activeShift.status !== 'open') ? 0.6 : 1,
+                  cursor: (isSubmitting || cart.length === 0 || !activeShift || activeShift.status !== 'open') ? 'not-allowed' : 'pointer',
                 }}
+                title={
+                  !activeShift || activeShift.status !== 'open'
+                    ? 'Register shift is closed. Click "Start Register Shift" in the header to open a shift before billing.'
+                    : cart.length === 0
+                    ? 'Add items to cart before finalizing sale'
+                    : 'Complete sale and print customer receipt'
+                }
               >
-                <CreditCard size={20} />
-                <span>{isSubmitting ? 'Processing Sale...' : `Complete Sale & Print Receipt`}</span>
+                <CreditCard size={16} />
+                <span>
+                  {isSubmitting
+                    ? 'Processing Sale...'
+                    : !activeShift || activeShift.status !== 'open'
+                    ? 'Shift Closed (Cannot Bill)'
+                    : 'Complete Sale & Print Receipt'}
+                </span>
               </button>
 
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                Press <strong>Enter</strong> in phone field or <strong>Alt + X</strong> to finalize
+              <div style={{ fontSize: '0.64rem', color: (!activeShift || activeShift.status !== 'open') ? '#F87171' : 'var(--text-muted)', textAlign: 'center' }}>
+                {!activeShift || activeShift.status !== 'open' ? (
+                  <span>⚠️ Register shift is not open. You cannot bill until a shift is opened.</span>
+                ) : (
+                  <span>Press <strong>Enter</strong> in phone field or <strong>Alt + X</strong> to finalize</span>
+                )}
               </div>
             </div>
           </form>
+          </div>
         </div>
+      </div>
+
+      {/* ================================================================== */}
+      {/* SELECTED PRODUCT BARCODE & SEARCH PREVIEW CARD (JUST OVER SHIFT REGISTER) */}
+      {/* ================================================================== */}
+      <div
+        className="billing-selected-product-card"
+        style={{
+          width: '100%',
+          boxSizing: 'border-box',
+          borderRadius: 'var(--radius-xl)',
+          background: 'var(--bg-surface)',
+          border: selectedProduct ? '1.5px solid var(--brand-primary)' : '1px dashed var(--border-subtle)',
+          padding: '20px 26px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          boxShadow: selectedProduct ? '0 8px 32px rgba(0, 0, 0, 0.28)' : '0 4px 16px rgba(0, 0, 0, 0.15)',
+          transition: 'all 0.2s ease',
+          marginTop: '16px',
+          marginBottom: '16px',
+        }}
+      >
+          {/* Top Header: Label & Dismiss Button */}
+          <div className="billing-selected-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={18} style={{ color: selectedProduct ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
+              <span
+                className="billing-selected-badge-title"
+                style={{
+                  fontSize: '0.9rem',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  color: selectedProduct ? 'var(--text-main)' : 'var(--text-muted)',
+                  letterSpacing: '0.6px',
+                }}
+              >
+                Selected Product Preview
+              </span>
+              {!selectedProduct && (
+                <span className="billing-selected-standby-text" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  (Standby — Scan barcode or search above)
+                </span>
+              )}
+            </div>
+            {selectedProduct && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedProduct(null);
+                  setProductQuantity(1);
+                }}
+                className="btn btn-secondary btn-sm billing-selected-dismiss-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '0.82rem',
+                  padding: '5px 14px',
+                }}
+              >
+                <X size={15} />
+                <span>Dismiss</span>
+              </button>
+            )}
+          </div>
+
+          {/* Main Layout Row: Large Image + Expanded Details + Price/Cart Block */}
+          <div
+            className="billing-selected-main-row"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '28px',
+            }}
+          >
+            {/* Left Area: Big 180px Photo + Titles & Badges */}
+            <div className="billing-selected-info-wrap" style={{ display: 'flex', alignItems: 'center', gap: '26px', flex: '1 1 540px', minWidth: 0 }}>
+              {/* Product Thumbnail (Large 180x180px with Lightbox click) */}
+              <div
+                onClick={() => {
+                  if (selectedProduct?.images?.[0]) {
+                    setLightboxImage({
+                      src: selectedProduct.images[0].image_url || selectedProduct.images[0].image,
+                      name: selectedProduct.name,
+                      uid: selectedProduct.uid,
+                    });
+                  }
+                }}
+                className="billing-selected-photo-box"
+                style={{
+                  width: '180px',
+                  height: '180px',
+                  borderRadius: '18px',
+                  background: 'var(--bg-main)',
+                  border: selectedProduct ? '1px solid var(--border-subtle)' : '2px dashed var(--border-subtle)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: selectedProduct ? '0 10px 30px rgba(0, 0, 0, 0.45)' : 'none',
+                  cursor: selectedProduct?.images?.[0] ? 'zoom-in' : 'default',
+                  position: 'relative',
+                }}
+                title={selectedProduct?.images?.[0] ? 'Click to view full-size image' : undefined}
+              >
+                {selectedProduct?.images?.[0] ? (
+                  <>
+                    <img
+                      src={selectedProduct.images[0].image_url || selectedProduct.images[0].image}
+                      alt={selectedProduct.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <div
+                      className="billing-selected-zoom-badge"
+                      style={{
+                        position: 'absolute',
+                        bottom: '8px',
+                        right: '8px',
+                        background: 'rgba(0, 0, 0, 0.72)',
+                        backdropFilter: 'blur(4px)',
+                        color: '#ffffff',
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius-pill)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                      }}
+                    >
+                      <ZoomIn size={12} />
+                      <span>Zoom</span>
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: 'var(--text-muted)',
+                      opacity: 0.65,
+                    }}
+                  >
+                    <Package size={56} />
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                      {selectedProduct ? 'No Image' : 'No Product'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Product Name, Barcode & Location Badges */}
+              <div className="billing-selected-meta-col" style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0, flex: 1 }}>
+                <h3
+                  className="billing-selected-product-title"
+                  style={{
+                    fontSize: '1.85rem',
+                    fontWeight: 800,
+                    margin: 0,
+                    color: selectedProduct ? 'var(--text-main)' : 'var(--text-muted)',
+                    lineHeight: 1.25,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={selectedProduct?.name || 'No Product Selected'}
+                >
+                  {selectedProduct?.name || 'No Product Selected'}
+                </h3>
+
+                {/* Badges: UID, Section, Expiry */}
+                <div className="billing-selected-tags-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  {/* UID / Barcode Tag */}
+                  <span
+                    className="billing-selected-uid-tag"
+                    style={{
+                      fontSize: '0.92rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      padding: '5px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: selectedProduct ? 'rgba(218, 41, 28, 0.14)' : 'rgba(255, 255, 255, 0.04)',
+                      color: selectedProduct ? 'var(--brand-primary)' : 'var(--text-muted)',
+                      border: `1px solid ${selectedProduct ? 'rgba(218, 41, 28, 0.3)' : 'var(--border-subtle)'}`,
+                    }}
+                  >
+                    UID: {selectedProduct?.uid || '—'}
+                  </span>
+
+                  {/* Section Tag */}
+                  <span
+                    className="billing-selected-sec-tag"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.88rem',
+                      color: selectedProduct?.location_section ? 'var(--text-secondary)' : 'var(--text-muted)',
+                      padding: '5px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--bg-surface-hover)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <MapPin size={14} />
+                    <span>{selectedProduct?.location_section || 'Section: —'}</span>
+                  </span>
+
+                  {/* Expiry Tag */}
+                  <span
+                    className="billing-selected-exp-tag"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.88rem',
+                      color: selectedProduct?.expiry_date ? 'var(--text-secondary)' : 'var(--text-muted)',
+                      padding: '5px 12px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--bg-surface-hover)',
+                      border: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <Calendar size={14} />
+                    <span>Exp: {selectedProduct?.expiry_date || '—'}</span>
+                  </span>
+                </div>
+
+                {/* Subcategory Pills */}
+                <div className="billing-selected-subcats-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '28px', marginTop: '2px' }}>
+                  {selectedProduct?.subcategories && selectedProduct.subcategories.length > 0 ? (
+                    selectedProduct.subcategories.map((sc) => (
+                      <span
+                        key={sc.id}
+                        style={{
+                          fontSize: '0.84rem',
+                          fontWeight: 600,
+                          padding: '4px 12px',
+                          borderRadius: 'var(--radius-pill)',
+                          background: 'var(--bg-surface-hover)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        {sc.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      {selectedProduct ? 'No category tags' : 'Category tags will appear here'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Area: Pricing, Stock, Confidential Cost Price & Add to Cart */}
+            <div
+              className="billing-selected-right-col"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: '16px',
+                flexShrink: 0,
+              }}
+            >
+              {/* Pricing & Stock Card */}
+              <div
+                className="billing-selected-price-card"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '24px',
+                  padding: '12px 24px',
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--bg-main)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                {/* Exclusive Head Cashier / Owner Confidential Cost Price & Profit Margin (Shown on the Left of Selling Price) */}
+                {isHeadCashierOrOwner && selectedProduct && (
+                  <div className="billing-selected-cost-col" style={{ borderRight: '1px solid var(--border-subtle)', paddingRight: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#F59E0B', textTransform: 'uppercase', display: 'block', fontWeight: 800 }}>
+                        Cost Price
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#F59E0B', marginTop: '4px' }}>
+                      ₹{parseFloat(selectedProduct.cost_price || 0).toFixed(2)}
+                    </div>
+                    {parseFloat(selectedProduct.cost_price || 0) > 0 && (
+                      <div style={{ fontSize: '0.72rem', color: '#10B981', fontWeight: 700, marginTop: '2px' }}>
+                        Margin: +₹{(parseFloat(selectedProduct.selling_price || 0) - parseFloat(selectedProduct.cost_price || 0)).toFixed(2)} ({(((parseFloat(selectedProduct.selling_price || 0) - parseFloat(selectedProduct.cost_price || 0)) / parseFloat(selectedProduct.cost_price || 1)) * 100).toFixed(1)}%)
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="billing-selected-selling-col">
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
+                    Selling Price
+                  </span>
+                  <div className="billing-selected-selling-price" style={{ fontSize: '2.1rem', fontWeight: 900, color: selectedProduct ? '#10B981' : 'var(--text-muted)', marginTop: '2px' }}>
+                    {selectedProduct ? `₹${parseFloat(selectedProduct.selling_price || 0).toFixed(2)}` : '₹ --.--'}
+                  </div>
+                </div>
+
+                <div className="billing-selected-mrp-col" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
+                    MRP
+                  </span>
+                  <div
+                    className="billing-selected-mrp-price"
+                    style={{
+                      fontSize: '1.15rem',
+                      fontWeight: 700,
+                      color: 'var(--text-muted)',
+                      textDecoration: selectedProduct?.effective_mrp ? 'line-through' : 'none',
+                      marginTop: '4px',
+                    }}
+                  >
+                    {selectedProduct?.effective_mrp ? `₹${parseFloat(selectedProduct.effective_mrp).toFixed(2)}` : '₹ --.--'}
+                  </div>
+                </div>
+
+                <div className="billing-selected-stock-col" style={{ borderLeft: '1px solid var(--border-subtle)', paddingLeft: '20px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
+                    Available Stock
+                  </span>
+                  <div style={{ marginTop: '4px' }}>
+                    {!selectedProduct ? (
+                      <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-muted)' }}>-- units</span>
+                    ) : selectedProduct.quantity <= 0 ? (
+                      <span
+                        style={{
+                          fontSize: '0.82rem',
+                          fontWeight: 800,
+                          padding: '4px 10px',
+                          borderRadius: 'var(--radius-pill)',
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          color: '#EF4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                        }}
+                      >
+                        Out of Stock (0)
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: '1.05rem',
+                          fontWeight: 800,
+                          color: selectedProduct.quantity <= 5 ? '#F59E0B' : '#10B981',
+                        }}
+                      >
+                        {selectedProduct.quantity} units
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantity Controls & Solid Add to Cart Button (No Gradient) */}
+              <div className="billing-selected-qty-row" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {!selectedProduct ? (
+                  <div className="billing-selected-qty-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.4 }}>
+                      <button type="button" disabled className="btn btn-secondary btn-sm" style={{ width: '42px', height: '44px', padding: 0 }}>
+                        <Minus size={16} />
+                      </button>
+                      <input
+                        type="text"
+                        disabled
+                        value="0"
+                        style={{
+                          width: '58px',
+                          textAlign: 'center',
+                          height: '44px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-main)',
+                          color: 'var(--text-muted)',
+                          fontWeight: 700,
+                          fontSize: '1rem',
+                        }}
+                      />
+                      <button type="button" disabled className="btn btn-secondary btn-sm" style={{ width: '42px', height: '44px', padding: 0 }}>
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      disabled
+                      className="billing-add-to-cart-btn"
+                      style={{
+                        height: '44px',
+                        padding: '0 26px',
+                        fontWeight: 800,
+                        fontSize: '1rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--text-muted)',
+                        cursor: 'not-allowed',
+                        opacity: 0.5,
+                      }}
+                    >
+                      <ShoppingCart size={18} />
+                      <span>Add to Cart</span>
+                    </button>
+                  </div>
+                ) : selectedProduct.quantity <= 0 ? (
+                  <div
+                    className="billing-selected-out-of-stock-box"
+                    style={{
+                      padding: '12px 24px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      color: '#EF4444',
+                      fontSize: '0.92rem',
+                      fontWeight: 800,
+                      textAlign: 'center',
+                    }}
+                  >
+                    Product is Out of Stock
+                  </div>
+                ) : (
+                  <div className="billing-selected-qty-actions" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    {/* Quantity Spinner */}
+                    <div className="billing-selected-spinner-box" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setProductQuantity((q) => Math.max(1, q - 1))}
+                        className="btn btn-secondary btn-sm"
+                        style={{ width: '42px', height: '44px', padding: 0 }}
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        max={selectedProduct.quantity}
+                        value={productQuantity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val)) {
+                            setProductQuantity(Math.min(selectedProduct.quantity, Math.max(1, val)));
+                          }
+                        }}
+                        style={{
+                          width: '58px',
+                          textAlign: 'center',
+                          height: '44px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-main)',
+                          color: 'var(--text-main)',
+                          fontWeight: 800,
+                          fontSize: '1.05rem',
+                          MozAppearance: 'textfield',
+                          appearance: 'textfield',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProductQuantity((q) => Math.min(selectedProduct.quantity, q + 1))
+                        }
+                        className="btn btn-secondary btn-sm"
+                        style={{ width: '42px', height: '44px', padding: 0 }}
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+
+                    {/* Solid Add to Cart Button (NO GRADIENT) */}
+                    <button
+                      type="button"
+                      onClick={() => handleAddToCart(selectedProduct, productQuantity)}
+                      className="billing-add-to-cart-btn"
+                      style={{
+                        height: '44px',
+                        padding: '0 28px',
+                        fontWeight: 800,
+                        fontSize: '1.02rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '9px',
+                        borderRadius: 'var(--radius-md)',
+                        background: '#DC2626',
+                        border: '1px solid #DC2626',
+                        color: '#FFFFFF',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 16px rgba(220, 38, 38, 0.4)',
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.15s ease, transform 0.1s ease',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#B91C1C')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = '#DC2626')}
+                    >
+                      <ShoppingCart size={19} />
+                      <span>
+                        Add to Cart (₹{(parseFloat(selectedProduct.selling_price) * productQuantity).toFixed(2)})
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
       </div>
 
       {/* ================================================================== */}
@@ -5361,27 +5289,51 @@ export default function BillingView({
                       <td style={{ padding: '8px 16px', textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                           {!isReturn && order.is_editable !== false ? (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditPaymentModal(order)}
-                              title="Modify Items or Payment Method"
-                              style={{
-                                padding: '5px 10px',
-                                borderRadius: 'var(--radius-md)',
-                                background: 'rgba(59, 130, 246, 0.12)',
-                                border: '1px solid rgba(59, 130, 246, 0.3)',
-                                color: '#3B82F6',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                fontSize: '0.74rem',
-                                fontWeight: 700,
-                              }}
-                            >
-                              <Edit3 size={12} />
-                              <span>Edit</span>
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditPaymentModal(order)}
+                                title="Modify Items or Payment Method"
+                                style={{
+                                  padding: '5px 10px',
+                                  borderRadius: 'var(--radius-md)',
+                                  background: 'rgba(59, 130, 246, 0.12)',
+                                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  color: '#3B82F6',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                <Edit3 size={12} />
+                                <span>Edit</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setOrderToDelete(order)}
+                                title="Permanently delete this invoice and reverse stock ledger"
+                                style={{
+                                  padding: '5px 10px',
+                                  borderRadius: 'var(--radius-md)',
+                                  background: 'rgba(239, 68, 68, 0.12)',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                  color: '#EF4444',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                }}
+                              >
+                                <Trash2 size={12} />
+                                <span>Delete</span>
+                              </button>
+                            </>
                           ) : (
                             <span
                               title="Shift closed: This bill is finalized and permanently locked/immutable."
@@ -9407,6 +9359,215 @@ export default function BillingView({
           </div>
         );
       })()}
+
+      {/* Delete Sale Order & Reverse Stock Confirmation Modal */}
+      {orderToDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10001,
+            padding: '16px',
+            animation: 'fadeIn 0.15s ease',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingOrder) {
+              setOrderToDelete(null);
+            }
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              borderRadius: '16px',
+              background: 'linear-gradient(180deg, #181926 0%, #11121d 100%)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              boxShadow: '0 25px 60px -15px rgba(239, 68, 68, 0.25), 0 0 0 1px rgba(255,255,255,0.05)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(239, 68, 68, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '10px',
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    color: '#EF4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                  }}
+                >
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#F87171' }}>
+                    Delete Bill & Reverse Stock
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: '#9CA3AF' }}>
+                    Shift Register • Permanent Void & Reversal
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isDeletingOrder && setOrderToDelete(null)}
+                disabled={isDeletingOrder}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#9CA3AF',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.07)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  fontSize: '0.86rem',
+                  lineHeight: '1.45',
+                  color: '#E5E7EB',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                  <AlertTriangle size={18} color="#EF4444" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <strong style={{ color: '#F87171' }}>Warning: This action completely voids this sale!</strong>
+                </div>
+                <p style={{ margin: 0, color: '#D1D5DB', fontSize: '0.82rem' }}>
+                  Deleting this bill will <strong>immediately restore all item quantities</strong> back to your store stock inventory, reverse ledger entries, update customer purchase statistics, and cancel payments as if the transaction never occurred.
+                </p>
+              </div>
+
+              {/* Order Info Card */}
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '0.85rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9CA3AF' }}>Invoice Number</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace', color: '#60A5FA' }}>
+                    {orderToDelete.invoice_number || `#${orderToDelete.id}`}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9CA3AF' }}>Customer</span>
+                  <span style={{ fontWeight: 600, color: '#E5E7EB' }}>
+                    {orderToDelete.customer_name || orderToDelete.customer_phone || 'Walk-in Customer'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9CA3AF' }}>Total Amount</span>
+                  <span style={{ fontWeight: 800, color: '#34D399', fontSize: '0.95rem' }}>
+                    ₹{parseFloat(orderToDelete.total_amount || 0).toFixed(2)}
+                  </span>
+                </div>
+                {orderToDelete.items && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#9CA3AF' }}>Items to Restock</span>
+                    <span style={{ fontWeight: 600, color: '#E5E7EB' }}>
+                      {orderToDelete.items.length} {orderToDelete.items.length === 1 ? 'item' : 'items'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div
+              style={{
+                padding: '16px 24px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(0, 0, 0, 0.2)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                disabled={isDeletingOrder}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOrder}
+                disabled={isDeletingOrder}
+                className="btn"
+                style={{
+                  padding: '8px 20px',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: isDeletingOrder ? 'not-allowed' : 'pointer',
+                  opacity: isDeletingOrder ? 0.7 : 1,
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
+                }}
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <RefreshCw size={15} className="spin" />
+                    <span>Reversing Stock & Voiding...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={15} />
+                    <span>Confirm Delete & Reverse Stock</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product / Bill Return Modal */}
       <ProductReturnModal

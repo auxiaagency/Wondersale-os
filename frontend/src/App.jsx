@@ -11,34 +11,35 @@ import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetch
 import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X } from 'lucide-react';
 
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from './utils/stakeholdersSettings';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // Lazy-loaded heavyweight view components (Code-Splitting for fast startup & low memory footprint)
-const AddItemSection = lazy(() => import('./components/AddItemSection'));
-const StaffManagementView = lazy(() => import('./components/StaffManagementView'));
-const SettingsView = lazy(() => import('./components/SettingsView'));
-const CategorySection = lazy(() => import('./components/CategorySection'));
-const SupplierSection = lazy(() => import('./components/SupplierSection'));
-const SectionSection = lazy(() => import('./components/SectionSection'));
-const AuditLogSection = lazy(() => import('./components/AuditLogSection'));
-const ProductDetailView = lazy(() => import('./components/ProductDetailView'));
-const WorkstationView = lazy(() => import('./components/WorkstationView'));
-const BillingView = lazy(() => import('./components/BillingView'));
-const CustomersView = lazy(() => import('./components/CustomersView'));
-const StakeholdersView = lazy(() => import('./components/StakeholdersView'));
-const AccountsView = lazy(() => import('./components/AccountsView'));
-const DashboardView = lazy(() => import('./components/DashboardView'));
-const EmployeeManagementView = lazy(() => import('./components/EmployeeManagementView'));
-const EmployeePortalView = lazy(() => import('./components/EmployeePortalView'));
+const AddItemSection = lazyWithRetry(() => import('./components/AddItemSection'));
+const StaffManagementView = lazyWithRetry(() => import('./components/StaffManagementView'));
+const SettingsView = lazyWithRetry(() => import('./components/SettingsView'));
+const CategorySection = lazyWithRetry(() => import('./components/CategorySection'));
+const SupplierSection = lazyWithRetry(() => import('./components/SupplierSection'));
+const SectionSection = lazyWithRetry(() => import('./components/SectionSection'));
+const AuditLogSection = lazyWithRetry(() => import('./components/AuditLogSection'));
+const ProductDetailView = lazyWithRetry(() => import('./components/ProductDetailView'));
+const WorkstationView = lazyWithRetry(() => import('./components/WorkstationView'));
+const BillingView = lazyWithRetry(() => import('./components/BillingView'));
+const CustomersView = lazyWithRetry(() => import('./components/CustomersView'));
+const StakeholdersView = lazyWithRetry(() => import('./components/StakeholdersView'));
+const AccountsView = lazyWithRetry(() => import('./components/AccountsView'));
+const DashboardView = lazyWithRetry(() => import('./components/DashboardView'));
+const EmployeeManagementView = lazyWithRetry(() => import('./components/EmployeeManagementView'));
+const EmployeePortalView = lazyWithRetry(() => import('./components/EmployeePortalView'));
 
 // Lazy-loaded modals
-const ItemDetailModal = lazy(() => import('./components/ItemDetailModal'));
-const ItemImageModal = lazy(() => import('./components/ItemImageModal'));
-const NewItemModal = lazy(() => import('./components/NewItemModal'));
-const StockAdjustmentModal = lazy(() => import('./components/StockAdjustmentModal'));
-const BarcodeModal = lazy(() => import('./components/BarcodeModal'));
-const ExportCsvModal = lazy(() => import('./components/ExportCsvModal'));
-const AIDescriptionProgressWidget = lazy(() => import('./components/AIDescriptionProgressWidget'));
-const AIDescriptionReviewModal = lazy(() => import('./components/AIDescriptionReviewModal'));
+const ItemDetailModal = lazyWithRetry(() => import('./components/ItemDetailModal'));
+const ItemImageModal = lazyWithRetry(() => import('./components/ItemImageModal'));
+const NewItemModal = lazyWithRetry(() => import('./components/NewItemModal'));
+const StockAdjustmentModal = lazyWithRetry(() => import('./components/StockAdjustmentModal'));
+const BarcodeModal = lazyWithRetry(() => import('./components/BarcodeModal'));
+const ExportCsvModal = lazyWithRetry(() => import('./components/ExportCsvModal'));
+const AIDescriptionProgressWidget = lazyWithRetry(() => import('./components/AIDescriptionProgressWidget'));
+const AIDescriptionReviewModal = lazyWithRetry(() => import('./components/AIDescriptionReviewModal'));
 
 function ModuleLoader({ label = 'Loading Station…' }) {
   return (

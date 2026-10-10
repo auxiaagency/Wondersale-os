@@ -1795,6 +1795,18 @@ class CheckoutSerializer(serializers.Serializer):
         except Store.DoesNotExist:
             raise serializers.ValidationError({"store_id": "Selected store branch does not exist."})
 
+        # Enforce Active Register Shift: Cannot bill anything if register shift is not open
+        open_shift = DailyRegisterShift.objects.filter(
+            store=store,
+            status=DailyRegisterShift.STATUS_OPEN
+        ).order_by('-opened_at').first()
+
+        if not open_shift:
+            raise serializers.ValidationError({
+                "error": "Cannot complete sale: Cash register shift is not open. Please open a shift before billing.",
+                "shift": "Register shift is not open for this store."
+            })
+
         raw_phone = validated_data['customer_phone'].strip()
         raw_name = validated_data.get('customer_name', '').strip()
         raw_email = validated_data.get('customer_email', '').strip()

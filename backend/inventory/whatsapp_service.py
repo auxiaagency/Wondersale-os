@@ -48,6 +48,7 @@ def load_whatsapp_env_settings():
         'phone_id': os.getenv('META_WHATSAPP_PHONE_NUMBER_ID', ''),
         'access_token': os.getenv('META_WHATSAPP_ACCESS_TOKEN', ''),
         'business_id': os.getenv('META_WHATSAPP_BUSINESS_ACCOUNT_ID', ''),
+        'webhook_verify_token': os.getenv('META_WHATSAPP_WEBHOOK_VERIFY_TOKEN', ''),
         'max_daily': int(os.getenv('MAX_DAILY_WHATSAPP_MESSAGES', 500)),
         'order_cooldown': int(os.getenv('ORDER_RESEND_COOLDOWN_SECONDS', 60)),
         'max_per_phone_hour': int(os.getenv('MAX_MESSAGES_PER_PHONE_PER_HOUR', 5)),
@@ -572,3 +573,51 @@ def send_whatsapp_bill_for_order(order, recipient_phone=None, pdf_bytes=None, fo
     except Exception as e:
         logger.exception("Error sending WhatsApp bill")
         return False, {}, str(e)
+
+
+def handle_whatsapp_webhook_verification(hub_mode, hub_verify_token, hub_challenge):
+    """
+    Verifies Meta WhatsApp webhook handshake.
+    Meta sends GET request with:
+    - hub.mode = 'subscribe'
+    - hub.verify_token = <configured verify token>
+    - hub.challenge = <random integer/string challenge>
+    Returns (is_valid: bool, challenge: str)
+    """
+    settings_dict = load_whatsapp_env_settings()
+    expected_token = settings_dict.get('webhook_verify_token') or os.getenv('META_WHATSAPP_WEBHOOK_VERIFY_TOKEN', '')
+
+    if hub_mode == 'subscribe' and hub_verify_token and expected_token and hub_verify_token == expected_token:
+        logger.info("Meta WhatsApp webhook verified successfully.")
+        return True, str(hub_challenge)
+    
+    logger.warning("Meta WhatsApp webhook verification failed: token mismatch or invalid mode.")
+    return False, ""
+
+
+def process_whatsapp_webhook_event(payload):
+    """
+    Safely processes asynchronous Meta WhatsApp Cloud API webhook callbacks:
+    - Message delivery receipts (sent, delivered, read, failed)
+    - Inbound messages or customer reactions
+    """
+    try:
+        entry_list = payload.get('entry', [])
+        for entry in entry_list:
+            for change in entry.get('changes', []):
+                value = change.get('value', {})
+                statuses = value.get('statuses', [])
+                for status_item in statuses:
+                    msg_id = status_item.get('id')
+                    status_val = status_item.get('status')
+                    recipient_id = status_item.get('recipient_id')
+                    errors = status_item.get('errors')
+                    if errors:
+                        logger.warning(f"WhatsApp webhook delivery status '{status_val}' for {recipient_id} ({msg_id}): {errors}")
+                    else:
+                        logger.info(f"WhatsApp webhook delivery status: {status_val} for {recipient_id} ({msg_id})")
+        return True
+    except Exception as e:
+        logger.exception(f"Error handling WhatsApp webhook payload: {e}")
+        return False
+

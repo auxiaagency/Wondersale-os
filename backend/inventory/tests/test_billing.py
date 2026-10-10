@@ -149,6 +149,38 @@ class BillingAndCustomerTests(TestCase):
         response = self.client.post(url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("Insufficient stock", str(response.data))
+    def test_cannot_bill_when_shift_is_not_open(self):
+        """
+        Backend rule: If the cash register shift is not open, you cannot bill anything.
+        Returns 400 Bad Request with SHIFT_NOT_OPEN validation message.
+        """
+        # Close the active shift
+        self.shift.status = DailyRegisterShift.STATUS_CLOSED
+        self.shift.save()
+
+        url = reverse('sale-order-checkout')
+        payload = {
+            "store_id": self.store.id,
+            "customer_phone": "9876543210",
+            "customer_name": "Rohan Sharma",
+            "payment_method": "cash",
+            "amount_paid": "500.00",
+            "items": [
+                {"item_id": self.item_in_stock.id, "quantity": 2}
+            ]
+        }
+
+        response = self.client.post(url, payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("register shift is not open", str(response.data).lower())
+
+        # Verify stock was not deducted
+        self.item_in_stock.refresh_from_db()
+        self.assertEqual(self.item_in_stock.quantity, 10)
+
+        # Reopen shift so it does not affect any subsequent tests
+        self.shift.status = DailyRegisterShift.STATUS_OPEN
+        self.shift.save()
 
     def test_customer_sorting_and_history(self):
         # Create multiple customers with different metrics
@@ -954,6 +986,102 @@ class BillingAndCustomerTests(TestCase):
             self.assertTrue(success_nn)
             payload_nn = mock_post2.call_args_list[1].kwargs.get('json', {})
             self.assertEqual(payload_nn['template']['components'][1]['parameters'][0]['text'], 'Dear Customer')
+
+    def test_whatsapp_webhook_verification(self):
+        """Tests WhatsApp webhook GET handshake verification."""
+        verify_url = '/api/inventory/whatsapp/webhook/'
+
+        # Valid challenge
+        resp = self.client.get(verify_url, {
+            'hub.mode': 'subscribe',
+            'hub.verify_token': 'wondersale_webhook_verify_secure_token',
+            'hub.challenge': '123456789'
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content.decode(), '123456789')
+
+        # Invalid token
+        resp_invalid = self.client.get(verify_url, {
+            'hub.mode': 'subscribe',
+            'hub.verify_token': 'wrong_token',
+            'hub.challenge': '123456789'
+        })
+        self.assertEqual(resp_invalid.status_code, 403)
+
+    def test_whatsapp_webhook_event_post(self):
+        """Tests WhatsApp webhook POST event delivery callback."""
+        verify_url = '/api/inventory/whatsapp/webhook/'
+        payload = {
+            'entry': [{
+                'changes': [{
+                    'value': {
+                        'statuses': [{
+                            'id': 'wamid.HBgL...',
+                            'status': 'delivered',
+                            'recipient_id': '919876543210'
+                        }]
+                    }
+                }]
+            }]
+        }
+        resp = self.client.post(verify_url, data=payload, content_type='application/json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {'status': 'received'})
+
+    def test_delete_sale_order_reverses_stock_and_ledger(self):
+        """Test deleting a sale order completely reverses stock, deletes ledger movements, and updates customer spend."""
+        # 1. Create a sale order
+        checkout_url = reverse('sale-order-checkout')
+        payload = {
+            "store_id": self.store.id,
+            "customer_phone": "9998887776",
+            "customer_name": "Test Reversal Customer",
+            "payment_method": "cash",
+            "amount_paid": "750.00",
+            "items": [
+                {"item_id": self.item_in_stock.id, "quantity": 3}
+            ]
+        }
+        checkout_resp = self.client.post(checkout_url, payload, format='json')
+        self.assertEqual(checkout_resp.status_code, status.HTTP_201_CREATED)
+        order_id = checkout_resp.data['id']
+        invoice_number = checkout_resp.data['invoice_number']
+
+        # Verify stock was deducted
+        self.item_in_stock.refresh_from_db()
+        self.assertEqual(self.item_in_stock.quantity, 7) # 10 - 3 = 7
+
+        # Verify customer spend and order count
+        customer = Customer.objects.get(phone="9998887776")
+        self.assertEqual(customer.total_purchases_count, 1)
+        self.assertEqual(customer.total_spent, Decimal("750.00"))
+
+        # Verify StockMovement exists
+        movements = StockMovement.objects.filter(item=self.item_in_stock, reason=StockMovement.REASON_SALE)
+        self.assertTrue(movements.filter(note__icontains=invoice_number).exists())
+
+        # 2. Delete the sale order via DELETE endpoint
+        delete_url = reverse('sale-order-detail', kwargs={'pk': order_id})
+        delete_resp = self.client.delete(delete_url)
+        self.assertEqual(delete_resp.status_code, status.HTTP_200_OK)
+        self.assertIn("has been deleted and all ledger entries and inventory stocks were reversed", delete_resp.data.get("message", ""))
+
+        # 3. Verify SaleOrder is completely removed from DB
+        self.assertFalse(SaleOrder.objects.filter(id=order_id).exists())
+
+        # 4. Verify item quantity is restored as if nothing was sold
+        self.item_in_stock.refresh_from_db()
+        self.assertEqual(self.item_in_stock.quantity, 10)
+
+        # 5. Verify the stock movement entry for this invoice was removed
+        self.assertFalse(StockMovement.objects.filter(item=self.item_in_stock, note__icontains=invoice_number).exists())
+
+        # 6. Verify customer purchase count and total spent reversed
+        customer.refresh_from_db()
+        self.assertEqual(customer.total_purchases_count, 0)
+        self.assertEqual(customer.total_spent, Decimal("0.00"))
+
+
 
 
 

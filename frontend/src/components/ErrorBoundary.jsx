@@ -14,9 +14,38 @@ export class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
     console.error('[ErrorBoundary caught exception]:', error, errorInfo);
+
+    // If it's a dynamic import failure (e.g. after a new deployment), reload page once
+    const errorMsg = error?.message || (typeof error === 'string' ? error : '');
+    const isChunkError =
+      error?.name === 'ChunkLoadError' ||
+      /Failed to fetch dynamically imported module/i.test(errorMsg) ||
+      /error loading dynamically imported module/i.test(errorMsg) ||
+      /Importing a module script failed/i.test(errorMsg);
+
+    if (isChunkError) {
+      const reloadKey = 'chunk_reload_auto_' + (window.location.pathname + window.location.hash);
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, 'true');
+        window.location.reload();
+      }
+    }
   }
 
   handleReset = () => {
+    const errorMsg = this.state.error?.message || (typeof this.state.error === 'string' ? this.state.error : '');
+    const isChunkError =
+      this.state.error?.name === 'ChunkLoadError' ||
+      /Failed to fetch dynamically imported module/i.test(errorMsg) ||
+      /error loading dynamically imported module/i.test(errorMsg) ||
+      /Importing a module script failed/i.test(errorMsg);
+
+    if (isChunkError) {
+      // Chunk file is missing on the server, regular setState won't fix it — full page reload is required
+      window.location.reload();
+      return;
+    }
+
     this.setState({ hasError: false, error: null, errorInfo: null });
     if (this.props.onReset) {
       this.props.onReset();
@@ -28,6 +57,13 @@ export class ErrorBoundary extends React.Component {
       if (this.props.fallback) {
         return this.props.fallback;
       }
+
+      const errorMsg = this.state.error?.message || (typeof this.state.error === 'string' ? this.state.error : '');
+      const isChunkError =
+        this.state.error?.name === 'ChunkLoadError' ||
+        /Failed to fetch dynamically imported module/i.test(errorMsg) ||
+        /error loading dynamically imported module/i.test(errorMsg) ||
+        /Importing a module script failed/i.test(errorMsg);
 
       return (
         <div style={{
@@ -69,7 +105,7 @@ export class ErrorBoundary extends React.Component {
               color: 'var(--text-primary, #f8fafc)',
               margin: '0 0 8px',
             }}>
-              {this.props.title || 'Component Error'}
+              {isChunkError ? 'New Version Available' : (this.props.title || 'Component Error')}
             </h2>
 
             <p style={{
@@ -78,7 +114,9 @@ export class ErrorBoundary extends React.Component {
               margin: '0 0 20px',
               lineHeight: 1.5,
             }}>
-              {this.props.message || 'An unexpected rendering error occurred in this module. The rest of the system remains functional.'}
+              {isChunkError
+                ? 'A new system update was deployed or your connection was interrupted. Please reload to load the latest module.'
+                : (this.props.message || 'An unexpected rendering error occurred in this module. The rest of the system remains functional.')}
             </p>
 
             {this.state.error && (
@@ -115,7 +153,7 @@ export class ErrorBoundary extends React.Component {
                 }}
               >
                 <RefreshCw size={15} />
-                Reload Module
+                {isChunkError ? 'Update & Reload' : 'Reload Module'}
               </button>
 
               {this.props.onHome && (

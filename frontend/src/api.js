@@ -1052,6 +1052,7 @@ export async function processCheckout(payload) {
       typeof data === 'string'
         ? data
         : data.detail ||
+          data.error ||
           (Array.isArray(data.items) ? data.items.join(', ') : null) ||
           data.customer_phone?.[0] ||
           (data.non_field_errors ? data.non_field_errors.join(', ') : null) ||
@@ -1168,6 +1169,25 @@ export async function updateSaleOrder(id, patchData) {
           (data.payment_method ? data.payment_method.join(', ') : null) ||
           (data.non_field_errors ? data.non_field_errors.join(', ') : null) ||
           'Failed to update sale order.';
+    throw new Error(errMsg);
+  }
+  return data;
+}
+
+export async function deleteSaleOrder(id) {
+  const res = await fetch(`${API_BASE}/sales/${id}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errMsg =
+      typeof data === 'string'
+        ? data
+        : data.detail ||
+          data.error ||
+          (data.non_field_errors ? data.non_field_errors.join(', ') : null) ||
+          'Failed to delete sale order.';
     throw new Error(errMsg);
   }
   return data;
