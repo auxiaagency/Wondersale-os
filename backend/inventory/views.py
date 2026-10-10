@@ -1724,13 +1724,32 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
         if reason:
             qs = qs.filter(reason=reason)
 
-        staff_id = self.request.query_params.get('staff')
-        if staff_id:
-            qs = qs.filter(
-                Q(performed_by_id=staff_id) |
-                Q(performed_by__staff_id__iexact=staff_id) |
-                Q(performed_by_name__icontains=staff_id)
-            )
+        staff_param = self.request.query_params.get('staff')
+        if staff_param:
+            staff_param = staff_param.strip()
+            if staff_param.isdigit():
+                qs = qs.filter(
+                    Q(performed_by_id=int(staff_param)) |
+                    Q(performed_by__staff_id__iexact=staff_param) |
+                    Q(performed_by__name__icontains=staff_param) |
+                    Q(performed_by_name__icontains=staff_param)
+                )
+            elif staff_param.lower() in ['owner', 'admin', 'owner / admin', 'system']:
+                qs = qs.filter(
+                    Q(performed_by__isnull=True) |
+                    Q(performed_by__role__is_owner=True) |
+                    Q(performed_by_name__icontains='owner') |
+                    Q(performed_by_name__icontains='admin') |
+                    Q(performed_by_name='')
+                )
+            else:
+                qs = qs.filter(
+                    Q(performed_by__staff_id__iexact=staff_param) |
+                    Q(performed_by__name__icontains=staff_param) |
+                    Q(performed_by_name__icontains=staff_param) |
+                    Q(performed_by_role__icontains=staff_param)
+                )
+
 
         search = self.request.query_params.get('search', '').strip()
         if search:

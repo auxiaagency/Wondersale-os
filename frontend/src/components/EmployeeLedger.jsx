@@ -18,6 +18,7 @@ import {
   Gift,
   ShieldAlert,
   FileText,
+  Download,
 } from 'lucide-react';
 import {
   fetchLedgerEntries,
@@ -487,6 +488,62 @@ export default function EmployeeLedger({ store, employees = [], onShowToast }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              if (!entries || entries.length === 0) return;
+              const headers = [
+                'Voucher #',
+                'Date',
+                'Employee Name',
+                'Employee Code',
+                'Type',
+                'Amount (₹)',
+                'Payment Method',
+                'Reference / Notes',
+                'Status',
+              ];
+              const rows = entries.map((e) => {
+                return [
+                  `"${(e.voucher_number || e.id || '').toString().replace(/"/g, '""')}"`,
+                  `"${(e.entry_date || '').toString().replace(/"/g, '""')}"`,
+                  `"${(e.employee_name || selectedEmp?.name || '').replace(/"/g, '""')}"`,
+                  `"${(e.employee_code || selectedEmp?.employee_code || '').replace(/"/g, '""')}"`,
+                  `"${(e.entry_type || '').replace(/"/g, '""')}"`,
+                  Number(e.amount || 0).toFixed(2),
+                  `"${(e.payment_method || '').replace(/"/g, '""')}"`,
+                  `"${(e.note || '').replace(/"/g, '""')}"`,
+                  `"${(e.status || 'Active').replace(/"/g, '""')}"`,
+                ];
+              });
+              const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+              const encodedUri = encodeURI(csvContent);
+              const link = document.createElement('a');
+              link.setAttribute('href', encodedUri);
+              const empTag = selectedEmpId ? `_emp_${selectedEmpId}` : '';
+              link.setAttribute('download', `employee_financial_ledger_${store?.id || 'store'}${empTag}_${new Date().toISOString().slice(0, 10)}.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            disabled={entries.length === 0}
+            className="btn btn-secondary"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              color: '#10B981',
+              borderColor: 'rgba(16, 185, 129, 0.35)',
+              background: 'rgba(16, 185, 129, 0.08)',
+            }}
+            title="Export filtered ledger transactions to CSV"
+          >
+            <Download size={14} />
+            <span>Export CSV ({entries.length})</span>
+          </button>
+
           <button
             type="button"
             onClick={() => handleOpenAddModal('PAYOUT')}

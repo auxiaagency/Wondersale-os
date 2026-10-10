@@ -133,6 +133,50 @@ const exportLedgerCSV = (records) => {
   document.body.removeChild(link);
 };
 
+export const exportBrokenItemsToCsv = (brokenFiltered = []) => {
+  if (!brokenFiltered || brokenFiltered.length === 0) return;
+  const headers = [
+    'Date & Time',
+    'Product Name',
+    'UID',
+    'Units Damaged',
+    'Unit Cost (₹)',
+    'Total Loss (₹)',
+    'Incident / Reason',
+    'Store Branch',
+    'Reported By',
+    'Fine Status',
+    'Fine Amount (₹)',
+    'Staff Penalized',
+  ];
+  const rows = brokenFiltered.map((r) => {
+    const dt = r.created_at ? new Date(r.created_at).toLocaleString('en-IN') : '';
+    const fineStatus = r.is_fined ? 'Fined to Staff' : r.is_waived ? 'Waived (Store Loss)' : 'Pending Action';
+    return [
+      `"${dt.replace(/"/g, '""')}"`,
+      `"${(r.item_name || '').replace(/"/g, '""')}"`,
+      `"${(r.item_uid || '').replace(/"/g, '""')}"`,
+      r.quantity || 1,
+      Number(r.cost_price || 0).toFixed(2),
+      Number(r.total_loss || 0).toFixed(2),
+      `"${(r.reason || '').replace(/"/g, '""')}"`,
+      `"${(r.store_name || '').replace(/"/g, '""')}"`,
+      `"${(r.reported_by_name || '').replace(/"/g, '""')}"`,
+      `"${fineStatus}"`,
+      Number(r.fine_amount || 0).toFixed(2),
+      `"${(r.staff_name || '').replace(/"/g, '""')}"`,
+    ];
+  });
+  const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `damaged_broken_stock_audit_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 // ─── Reusable Sub-Components ─────────────────────────────────────────────────
 function SortButton({ active, onClick, children }) {
   return (
@@ -3047,6 +3091,29 @@ export default function DashboardView({
 
             <div className="dash-controls-spacer" style={{ flex: 1 }} />
             <SearchInput value={brokenSearch} onChange={(v) => { setBrokenSearch(v); setBrokenPage(1); }} placeholder="Search product, reason, staff…" />
+            <button
+              onClick={() => exportBrokenItemsToCsv(brokenFiltered)}
+              disabled={brokenFiltered.length === 0}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.35)',
+                color: '#10B981',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: brokenFiltered.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: brokenFiltered.length === 0 ? 0.6 : 1,
+                whiteSpace: 'nowrap',
+              }}
+              title="Export filtered damaged stock audit records to CSV"
+            >
+              <Download size={13} />
+              <span>Export CSV ({brokenFiltered.length})</span>
+            </button>
           </div>
 
           {/* Table / Empty State */}

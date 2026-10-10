@@ -20,7 +20,7 @@ import {
   User,
   ShoppingCart,
 } from 'lucide-react';
-import { fetchAllStockMovements } from '../api';
+import { fetchAllStockMovements, fetchEmployees } from '../api';
 import { SkeletonAuditRows } from './Skeleton';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 
@@ -156,26 +156,82 @@ export default function AuditLogSection({
     return () => clearTimeout(timer);
   }, [loadMovements]);
 
-  // Unique staff list for filter dropdown
-  const uniqueStaffList = useMemo(() => {
-    const map = new Map();
-    movements.forEach((m) => {
-      const key = m.performed_by_staff_id || m.performed_by_name || 'System';
-      if (!map.has(key)) {
-        map.set(key, {
-          id: m.performed_by_staff_id || m.performed_by_id || m.performed_by_name,
-          name: m.performed_by_name || 'Owner / Admin',
-          role: m.performed_by_role || 'Owner',
-          staffId: m.performed_by_staff_id,
+  // Persistent staff list so options don't vanish on filter
+  const [allStaffList, setAllStaffList] = useState([]);
+
+  // Load employees from backend staff system on mount
+  useEffect(() => {
+    fetchEmployees()
+      .then((data) => {
+        const empList = Array.isArray(data) ? data : data?.results || [];
+        setAllStaffList((prev) => {
+          const map = new Map();
+          empList.forEach((e) => {
+            const key = e.employee_code || e.staff_id || String(e.id) || e.name;
+            map.set(String(key), {
+              id: key,
+              name: e.name,
+              role: e.designation || e.role_name || 'Staff',
+              staffId: e.employee_code || e.staff_id,
+            });
+          });
+          prev.forEach((p) => {
+            if (!map.has(String(p.id))) {
+              map.set(String(p.id), p);
+            }
+          });
+          return Array.from(map.values());
         });
-      }
+      })
+      .catch(() => {
+        // ignore if not authorized
+      });
+  }, []);
+
+  // Accumulate performers from ledger movements
+  useEffect(() => {
+    if (!movements || movements.length === 0) return;
+    setAllStaffList((prev) => {
+      const map = new Map();
+      prev.forEach((s) => map.set(String(s.id), s));
+      movements.forEach((m) => {
+        const val = m.performed_by_staff_id || (m.performed_by_id ? String(m.performed_by_id) : (m.performed_by_name || 'Owner / Admin'));
+        if (!map.has(String(val))) {
+          map.set(String(val), {
+            id: val,
+            name: m.performed_by_name || 'Owner / Admin',
+            role: m.performed_by_role || 'Owner',
+            staffId: m.performed_by_staff_id,
+          });
+        }
+      });
+      return Array.from(map.values());
     });
-    return Array.from(map.values());
   }, [movements]);
 
-  // Client-side date and exact minute time period filtering
+  // Client-side date, exact minute time period, and staff filtering
   const filteredMovements = useMemo(() => {
     let list = movements;
+
+    if (staffFilter) {
+      const sf = staffFilter.toLowerCase().trim();
+      list = list.filter((m) => {
+        if (sf === 'owner' || sf === 'admin' || sf === 'owner / admin') {
+          return (
+            !m.performed_by_id ||
+            (m.performed_by_role || '').toLowerCase().includes('owner') ||
+            (m.performed_by_name || '').toLowerCase().includes('owner') ||
+            (m.performed_by_name || '').toLowerCase().includes('admin')
+          );
+        }
+        return (
+          String(m.performed_by_id) === staffFilter ||
+          String(m.performed_by_staff_id || '').toLowerCase() === sf ||
+          String(m.performed_by_name || '').toLowerCase().includes(sf) ||
+          String(m.performed_by_role || '').toLowerCase().includes(sf)
+        );
+      });
+    }
 
     if (timeFilter?.active) {
       list = filterLogsByTimeRange(list, timeFilter, ['created_at']);
@@ -194,7 +250,65 @@ export default function AuditLogSection({
     }
 
     return list;
-  }, [movements, dateFilter, timeFilter]);
+  }, [movements, staffFilter, dateFilter, timeFilter]);
+
+  // Handle Export to CSV according to active filters & time period
+  const handleExportCsv = () => {
+    if (!filteredMovements || filteredMovements.length === 0) {
+      alert('No audit movements found to export with the currently selected filters.');
+      return;
+    }
+
+    const headers = [
+      'Date & Time',
+      'Product Name',
+      'Product UID',
+      'Movement Reason',
+      'Stock Change (Units)',
+      'Current Balance',
+      'Performed By',
+      'Role',
+      'Store Branch',
+      'Audit Note',
+    ];
+
+    const rows = filteredMovements.map((m) => {
+      const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '—';
+      const reasonMeta = REASON_METAS[m.reason] || {};
+      const reasonLabel = reasonMeta.label || m.reason_display || m.reason || 'Stock Movement';
+      const changeStr = m.change > 0 ? `+${m.change}` : String(m.change);
+      const perfName = m.performed_by_name || 'Owner / Admin';
+      const perfRole = m.performed_by_role || 'Owner';
+      const storeName = m.store_name || (stores.find((s) => String(s.id) === String(m.store_id))?.name) || 'All Stores';
+
+      return [
+        `"${dt.replace(/"/g, '""')}"`,
+        `"${(m.item_name || 'Unknown Product').replace(/"/g, '""')}"`,
+        `"${(m.item_uid || '').replace(/"/g, '""')}"`,
+        `"${reasonLabel.replace(/"/g, '""')}"`,
+        changeStr,
+        m.item_current_quantity !== undefined && m.item_current_quantity !== null ? m.item_current_quantity : '',
+        `"${perfName.replace(/"/g, '""')}"`,
+        `"${perfRole.replace(/"/g, '""')}"`,
+        `"${storeName.replace(/"/g, '""')}"`,
+        `"${(m.note || '').replace(/"/g, '""')}"`,
+      ];
+    });
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateTag = new Date().toISOString().split('T')[0];
+    const staffTag = staffFilter ? `_staff_${staffFilter}` : '';
+    const reasonTag = reasonFilter ? `_${reasonFilter}` : '';
+    a.download = `stock_movement_audit_ledger_${dateTag}${staffTag}${reasonTag}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Aggregate Metrics
   const totalEntries = filteredMovements.length;
@@ -257,6 +371,27 @@ export default function AuditLogSection({
         </div>
 
         <div className="audit-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={filteredMovements.length === 0}
+            className="btn btn-secondary audit-export-csv-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.84rem',
+              fontWeight: 600,
+              background: 'rgba(16, 185, 129, 0.1)',
+              borderColor: 'rgba(16, 185, 129, 0.35)',
+              color: '#10B981',
+            }}
+            title="Export filtered audit logs to CSV spreadsheet"
+          >
+            <FileSpreadsheet size={15} />
+            <span>Export to CSV ({filteredMovements.length})</span>
+          </button>
+
           <button
             type="button"
             onClick={loadMovements}
@@ -469,7 +604,7 @@ export default function AuditLogSection({
         </div>
 
         {/* Staff / Performed By Filter */}
-        {uniqueStaffList.length > 0 && (
+        {allStaffList.length > 0 && (
           <div className="audit-filter-item" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <select
               value={staffFilter}
@@ -478,7 +613,7 @@ export default function AuditLogSection({
               style={{ height: '38px', fontSize: '0.84rem', minWidth: '150px' }}
             >
               <option value="">All Staff / Users</option>
-              {uniqueStaffList.map((st) => (
+              {allStaffList.map((st) => (
                 <option key={String(st.id)} value={String(st.id)}>
                   {st.name} ({st.role})
                 </option>

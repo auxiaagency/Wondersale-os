@@ -17,6 +17,7 @@ import {
   Sparkles,
   FileText,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
 
@@ -396,9 +397,57 @@ export default function ProductActivityLedgers({
                 }}
               />
             </div>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>
-              Showing {filteredMovements.length} audit movement logs
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>
+                Showing {filteredMovements.length} audit movement logs
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (filteredMovements.length === 0) return;
+                  const headers = ['Date & Time', 'Product Name', 'UID', 'Reason', 'Change (Units)', 'Performed By', 'Role', 'Notes'];
+                  const rows = filteredMovements.map((m) => {
+                    const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '';
+                    const perfName = m.performed_by_name || 'Owner / Admin';
+                    const perfRole = m.performed_by_role || 'Owner';
+                    return [
+                      `"${dt.replace(/"/g, '""')}"`,
+                      `"${(item?.name || '').replace(/"/g, '""')}"`,
+                      `"${(item?.uid || '').replace(/"/g, '""')}"`,
+                      `"${(m.reason_display || m.reason || '').replace(/"/g, '""')}"`,
+                      m.change > 0 ? `+${m.change}` : m.change,
+                      `"${perfName.replace(/"/g, '""')}"`,
+                      `"${perfRole.replace(/"/g, '""')}"`,
+                      `"${(m.note || '').replace(/"/g, '""')}"`,
+                    ];
+                  });
+                  const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+                  const encoded = encodeURI(csv);
+                  const a = document.createElement('a');
+                  a.href = encoded;
+                  a.download = `product_stock_audit_${item?.uid || 'item'}_${new Date().toISOString().slice(0, 10)}.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                }}
+                disabled={filteredMovements.length === 0}
+                className="btn btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.72rem',
+                  padding: '4px 8px',
+                  color: '#10B981',
+                  borderColor: 'rgba(16, 185, 129, 0.3)',
+                  background: 'rgba(16, 185, 129, 0.08)',
+                }}
+                title="Export this product's audit trail to CSV"
+              >
+                <Download size={12} />
+                <span>Export CSV</span>
+              </button>
+            </div>
           </div>
 
           {/* Table Container */}

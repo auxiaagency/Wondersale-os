@@ -42,6 +42,7 @@ import {
   Percent,
   Receipt,
   Briefcase,
+  GitBranch,
 } from 'lucide-react';
 import {
   fetchStores,
@@ -1403,6 +1404,109 @@ export default function SettingsView({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+
+          {/* System & GitHub Version Card */}
+          <div
+            className="glass-panel"
+            style={{
+              marginTop: '24px',
+              padding: '24px 28px',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, var(--bg-surface) 100%)',
+              boxShadow: '0 4px 20px -2px rgba(0,0,0,0.15)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', maxWidth: '540px' }}>
+                <div
+                  style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    color: '#3B82F6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <GitBranch size={22} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '1.18rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                      Wondersale OS &amp; GitHub Version
+                    </h3>
+                    <span
+                      className="badge badge-success"
+                      style={{ fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <CheckCircle2 size={12} />
+                      Synced &amp; Active
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <span>{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'v1.0.0'}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                    <span style={{ color: '#3B82F6' }}>
+                      Build #{typeof __APP_BUILD_NUMBER__ !== 'undefined' ? __APP_BUILD_NUMBER__ : '1'}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)' }}>•</span>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.82rem',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-color)',
+                      }}
+                    >
+                      {typeof __APP_COMMIT_HASH__ !== 'undefined' ? __APP_COMMIT_HASH__ : 'dev'}
+                    </span>
+                  </div>
+
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.84rem', margin: '0 0 8px 0', lineHeight: 1.5 }}>
+                    <strong style={{ color: 'var(--text-primary)' }}>Latest Update:</strong>{' '}
+                    {typeof __APP_COMMIT_MSG__ !== 'undefined' ? __APP_COMMIT_MSG__ : 'Latest build'}
+                  </p>
+
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={13} />
+                    <span>Updated: {typeof __APP_COMMIT_DATE__ !== 'undefined' ? __APP_COMMIT_DATE__ : 'Recent'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <a
+                href={
+                  typeof __APP_COMMIT_HASH__ !== 'undefined' && __APP_COMMIT_HASH__ !== 'dev'
+                    ? `https://github.com/auxiaagency/Wondersale-os/commit/${__APP_COMMIT_HASH__}`
+                    : 'https://github.com/auxiaagency/Wondersale-os'
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-pill)',
+                  textDecoration: 'none',
+                }}
+              >
+                <ExternalLink size={14} />
+                <span>View on GitHub</span>
+              </a>
             </div>
           </div>
         </div>
