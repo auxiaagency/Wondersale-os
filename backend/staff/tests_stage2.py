@@ -405,10 +405,15 @@ class Stage2PayrollAndLedgerTests(TestCase):
 
     def test_sync_staff_and_demo_seeding(self):
         """Test sync_employees_from_staff_members and seed_demo_payroll_data."""
+        role_staff = StaffRole.objects.create(
+            name="Cashier",
+            is_owner=False,
+            can_access_billing=True,
+        )
         # Create a new StaffMember without linked employee
         sm = StaffMember.objects.create(
             store=self.store,
-            role=self.role_owner,
+            role=role_staff,
             name="Ananya Roy",
             staff_id="SM-990",
             password_hash="dummy_hash",

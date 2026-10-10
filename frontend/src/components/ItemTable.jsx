@@ -192,6 +192,8 @@ export default function ItemTable({
   const [expandedVariantGroups, setExpandedVariantGroups] = useState({});
   const [activeVariantIdByGroup, setActiveVariantIdByGroup] = useState({});
 
+  const searchInputRef = useRef(null);
+
   // Keyboard shortcut (Escape to close Lightbox modal) & Barcode Scanner Detection
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -200,10 +202,12 @@ export default function ItemTable({
         return;
       }
 
-      // Do not intercept if user is editing inside inline table inputs or modal dialogs
       const activeEl = document.activeElement;
-      const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
-      if (isInputFocused && activeEl.type !== 'search' && !activeEl.classList?.contains('form-input')) {
+      const isSearchInput = activeEl === searchInputRef.current;
+      const isOtherInputFocused = activeEl && !isSearchInput && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable);
+      
+      // Do not intercept if user is typing in other inputs (e.g. inline cell editors, category inputs)
+      if (isOtherInputFocused) {
         return;
       }
 
@@ -211,9 +215,11 @@ export default function ItemTable({
       const diff = now - lastScanKeyTimeRef.current;
       lastScanKeyTimeRef.current = now;
 
+      // Handle barcode scanner terminator (Enter or Tab)
       if (e.key === 'Enter' || e.key === 'Tab') {
         const buffer = barcodeScanBufferRef.current.trim();
-        if (buffer.length >= 3 && diff < 85) {
+        // Hardware scanners burst characters with rapid keystrokes (<300ms)
+        if (buffer.length >= 2 && diff < 300) {
           e.preventDefault();
           e.stopPropagation();
           if (typeof e.stopImmediatePropagation === 'function') {
@@ -223,31 +229,26 @@ export default function ItemTable({
           // Normalize barcode (strip AIM symbology headers like ]C1, ]e0)
           const cleaned = buffer.replace(/^\][A-Za-z0-9]{2}/, '').trim().toLowerCase();
 
-          // Debounce & Rate Limit: ignore duplicate scans within 800ms, rate-limit to 300ms
+          // Debounce & Rate Limit: ignore duplicate scans within 800ms, rate-limit to 200ms
           if (
             lastScanProcessedRef.current.code === cleaned &&
             now - lastScanProcessedRef.current.time < 800
           ) {
             return;
           }
-          if (now - lastScanProcessedRef.current.time < 300) {
+          if (now - lastScanProcessedRef.current.time < 200) {
             return;
           }
           lastScanProcessedRef.current = { code: cleaned, time: now };
 
-          const target = items.find(
-            (it) => it.uid?.toLowerCase() === cleaned || it.legacy_uid?.toLowerCase() === cleaned
-          );
-          if (target && onViewItem) {
-            onViewItem(target);
-          } else if (onSearchChange) {
-            onSearchChange(buffer);
+          if (onSearchChange) {
+            onSearchChange(cleaned);
           }
           return;
         }
         barcodeScanBufferRef.current = '';
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        if (diff > 100) {
+        if (diff > 120) {
           barcodeScanBufferRef.current = e.key;
         } else {
           barcodeScanBufferRef.current += e.key;
@@ -256,7 +257,7 @@ export default function ItemTable({
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [lightboxImage, items, onViewItem, onSearchChange]);
+  }, [lightboxImage, onSearchChange]);
 
   // Normalize selected subcategory IDs
   const activeSubcatIds = useMemo(() => {
@@ -1077,33 +1078,46 @@ export default function ItemTable({
             }}
           />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                const q = searchQuery.trim().toLowerCase();
-                if (!q) return;
-                const exact = items.find(
-                  (it) => it.uid?.toLowerCase() === q || it.legacy_uid?.toLowerCase() === q
-                );
-                if (exact && onViewItem) {
-                  e.preventDefault();
-                  onViewItem(exact);
-                }
-              }
-            }}
             placeholder="Search product name, UID, section... (or scan barcode)"
             className="form-input"
             style={{
               width: '100%',
               boxSizing: 'border-box',
               paddingLeft: '38px',
+              paddingRight: searchQuery ? '36px' : '16px',
               borderRadius: 'var(--radius-pill)',
               fontSize: '0.84rem',
               height: '36px',
             }}
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              title="Clear search"
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '4px',
+                borderRadius: '50%',
+              }}
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
 
         {/* Sort Dropdown */}

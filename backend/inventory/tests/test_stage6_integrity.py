@@ -5,9 +5,10 @@ from django.db import connection, transaction
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from inventory.models import Store, Category, SubCategory, Item, StockMovement, Customer, SaleOrder, SaleOrderItem
+from inventory.models import Store, Category, SubCategory, Item, StockMovement, Customer, SaleOrder, SaleOrderItem, DailyRegisterShift
 from inventory.services import adjust_stock, write_off_expired_stock
 from staff.models import Employee, EmployeeLedgerEntry, StaffMember, StaffRole
+from django.utils import timezone
 
 
 class FinancialDataIntegrityTests(TransactionTestCase):
@@ -24,6 +25,14 @@ class FinancialDataIntegrityTests(TransactionTestCase):
     def setUp(self):
         self.client = APIClient()
         self.store = Store.objects.create(name="Integrity Store", city="Bhopal")
+        self.shift = DailyRegisterShift.objects.create(
+            shift_number="REG-INT-001",
+            store=self.store,
+            opened_at=timezone.now(),
+            status=DailyRegisterShift.STATUS_OPEN,
+            opening_cash=Decimal("1000.00"),
+            cashier_name="Cashier 1"
+        )
         self.category = Category.objects.create(name="Groceries")
         self.subcategory = SubCategory.objects.create(category=self.category, name="Packaged Foods")
 

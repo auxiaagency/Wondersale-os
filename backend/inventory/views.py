@@ -397,28 +397,55 @@ class ItemViewSet(viewsets.ModelViewSet):
                 else:
                     qs = qs.none()
 
-        # Search parameter (matches name, UID, legacy UID, variant name, or section)
-        search_query = self.request.query_params.get('search', '').strip()
-        if search_query:
-            search_cond = (
-                Q(name__icontains=search_query) |
-                Q(uid__icontains=search_query) |
-                Q(legacy_uid__icontains=search_query) |
-                Q(variant_name__icontains=search_query) |
-                Q(section__name__icontains=search_query) |
-                Q(section__code__icontains=search_query) |
-                Q(location_section__icontains=search_query)
-            )
-            # Fast numeric search: handles scanner/manual inputs with or without leading zeroes and 7-digit zero-padding
-            clean_digits = ''.join(c for c in search_query if c.isdigit())
-            if clean_digits:
-                stripped = clean_digits.lstrip('0')
-                if stripped:
-                    search_cond |= Q(uid__icontains=stripped) | Q(legacy_uid__icontains=stripped)
-                if len(clean_digits) < 7:
-                    padded = clean_digits.zfill(7)
-                    search_cond |= Q(uid__iexact=padded) | Q(legacy_uid__iexact=padded)
-            qs = qs.filter(search_cond)
+        # Search parameter (matches name, UID, legacy UID, variant name, section, category, subcategory)
+        raw_search = self.request.query_params.get('search', '').strip()
+        if raw_search:
+            import re
+            # Strip AIM symbology headers (e.g. ]C1, ]e0) and surrounding quotes
+            search_query = re.sub(r'^\][A-Za-z0-9]{2}', '', raw_search).strip().strip("'\"").strip()
+            if search_query:
+                search_cond = (
+                    Q(name__icontains=search_query) |
+                    Q(uid__icontains=search_query) |
+                    Q(legacy_uid__icontains=search_query) |
+                    Q(variant_name__icontains=search_query) |
+                    Q(section__name__icontains=search_query) |
+                    Q(section__code__icontains=search_query) |
+                    Q(location_section__icontains=search_query) |
+                    Q(subcategories__name__icontains=search_query)
+                )
+                # Fast numeric search: handles scanner/manual inputs with or without leading zeroes and 7-digit zero-padding
+                clean_digits = ''.join(c for c in search_query if c.isdigit())
+                if clean_digits:
+                    stripped = clean_digits.lstrip('0')
+                    if stripped:
+                        search_cond |= Q(uid__icontains=stripped) | Q(legacy_uid__icontains=stripped)
+                    if len(clean_digits) < 7:
+                        padded = clean_digits.zfill(7)
+                        search_cond |= Q(uid__iexact=padded) | Q(legacy_uid__iexact=padded)
+
+                # Alphanumeric compact match (handles inputs with or without hyphens/spaces like JL-7110 vs JL7110)
+                clean_alphanum = re.sub(r'[^a-zA-Z0-9]', '', search_query)
+                if clean_alphanum and len(clean_alphanum) >= 3 and clean_alphanum != search_query:
+                    search_cond |= Q(uid__icontains=clean_alphanum) | Q(legacy_uid__icontains=clean_alphanum)
+
+                # Multi-word token search (e.g. "laptop n" or "foam bat 23" matches "Laptop Bag N" or "Foam Bat 23 \"")
+                words = [w for w in re.split(r'[\s\-_\/]+', search_query) if len(w) >= 1]
+                if len(words) > 1:
+                    word_cond = Q()
+                    for w in words:
+                        word_cond &= (
+                            Q(name__icontains=w) |
+                            Q(uid__icontains=w) |
+                            Q(legacy_uid__icontains=w) |
+                            Q(variant_name__icontains=w) |
+                            Q(section__name__icontains=w) |
+                            Q(location_section__icontains=w) |
+                            Q(subcategories__name__icontains=w)
+                        )
+                    search_cond |= word_cond
+
+                qs = qs.filter(search_cond)
 
         # Filter by section
         section_id = self.request.query_params.get('section') or self.request.query_params.get('section_id')

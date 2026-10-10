@@ -4,14 +4,23 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from inventory.models import Store, Category, SubCategory, Item, StockMovement, Customer, SaleOrder, VIPCardTransaction
+from inventory.models import Store, Category, SubCategory, Item, StockMovement, Customer, SaleOrder, VIPCardTransaction, DailyRegisterShift
 from inventory.services import adjust_stock
+from django.utils import timezone
 
 
 class VIPCardTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.store = Store.objects.create(name="Wonder Store Bhopal", city="Bhopal")
+        self.shift = DailyRegisterShift.objects.create(
+            shift_number="REG-VIP-001",
+            store=self.store,
+            opened_at=timezone.now(),
+            status=DailyRegisterShift.STATUS_OPEN,
+            opening_cash=Decimal("1000.00"),
+            cashier_name="Cashier 1"
+        )
         self.category = Category.objects.create(name="Electronics")
         self.subcategory = SubCategory.objects.create(category=self.category, name="Accessories")
 

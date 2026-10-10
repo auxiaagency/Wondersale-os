@@ -4,10 +4,11 @@ from django.test import TestCase, Client
 from rest_framework import status
 
 from staff.models import StaffRole, StaffMember
-from inventory.models import Store, Category, SubCategory, Item, StockMovement, SaleOrder
+from inventory.models import Store, Category, SubCategory, Item, StockMovement, SaleOrder, DailyRegisterShift
 from inventory.services import adjust_stock
 from staff.services.rate_limit import is_rate_limited, record_failed_attempt, clear_failed_attempts
 from django.test.client import RequestFactory
+from django.utils import timezone
 
 
 class RedTeamSimulationTests(TestCase):
@@ -22,6 +23,14 @@ class RedTeamSimulationTests(TestCase):
         self.rf = RequestFactory()
         self.store1 = Store.objects.create(name="Store Alpha", city="Bhopal")
         self.store2 = Store.objects.create(name="Store Beta", city="Indore")
+        self.shift = DailyRegisterShift.objects.create(
+            shift_number="REG-ATK-001",
+            store=self.store1,
+            opened_at=timezone.now(),
+            status=DailyRegisterShift.STATUS_OPEN,
+            opening_cash=Decimal("1000.00"),
+            cashier_name="Cashier 1"
+        )
 
         self.cashier_role = StaffRole.objects.create(name="Cashier", is_owner=False, can_access_billing=True)
         self.owner_role = StaffRole.objects.create(name="Owner", is_owner=True)

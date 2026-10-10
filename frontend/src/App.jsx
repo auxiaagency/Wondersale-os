@@ -371,10 +371,11 @@ export default function App() {
   const [inventoryStats, setInventoryStats] = useState(null);
 
   // Fetch items with true server-side pagination & lazy loading
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (targetPage = null) => {
     if (!currentUser || !isModuleAccessible(currentUser, 'inventory')) return;
     setLoading(true);
     try {
+      const activePage = targetPage !== null ? targetPage : inventoryPage;
       // 1. Common filter params
       const filterParams = {};
       if (searchQuery.trim()) filterParams.search = searchQuery.trim();
@@ -403,7 +404,7 @@ export default function App() {
       // 2. Paginated item query params
       const itemParams = {
         ...filterParams,
-        page: inventoryPage,
+        page: activePage,
         page_size: inventoryPageSize,
       };
       if (inventorySortBy) itemParams.sort = inventorySortBy;
@@ -418,7 +419,7 @@ export default function App() {
         setInventoryPaginationMeta({
           count: data.count || 0,
           totalPages: data.total_pages || 1,
-          currentPage: data.current_page || inventoryPage,
+          currentPage: data.current_page || activePage,
           pageSize: data.page_size || inventoryPageSize,
         });
       } else {
@@ -440,22 +441,28 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventoryPage, inventoryPageSize, inventorySortBy]);
+  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventoryPageSize, inventorySortBy]);
 
   // Reset to page 1 whenever any filter or search changes
   useEffect(() => {
     setInventoryPage(1);
   }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventorySortBy]);
 
+  // Fetch data on search or filter change with debounce
   useEffect(() => {
     if (!currentUser) return;
-    // Fast instant fetch on filter clicks, slight debounce on text search typing
     const delay = searchQuery ? 150 : 0;
     const handler = setTimeout(() => {
-      loadItems();
+      loadItems(1);
     }, delay);
     return () => clearTimeout(handler);
-  }, [currentUser, loadItems, searchQuery]);
+  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventorySortBy]);
+
+  // Fetch data when user navigates page
+  useEffect(() => {
+    if (!currentUser) return;
+    loadItems(inventoryPage);
+  }, [inventoryPage, inventoryPageSize]);
 
   // Handle single item update
   const handleItemUpdated = (updatedItem) => {
