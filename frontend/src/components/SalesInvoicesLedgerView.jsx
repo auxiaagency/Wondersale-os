@@ -33,6 +33,9 @@ import {
   FileDown,
   FileText,
   Wallet,
+  TrendingUp,
+  PieChart as PieIcon,
+  Users,
 } from 'lucide-react';
 import { getSaleOrders, recordOrderDuePayment } from '../api';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
@@ -328,38 +331,101 @@ export default function SalesInvoicesLedgerView({
     return list;
   }, [orders, searchQuery, dateRangeBounds, paymentMethodFilter, cashierFilter, statusFilter, sortBy]);
 
-  // Financial KPIs over filtered set
+  // ─── Helper: compute gross profit for a single order ──────────────────────
+  const computeOrderProfit = useCallback((o) => {
+    if (!o) return 0;
+    const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+    let lineProfit = 0;
+    (o.items || []).forEach((it) => {
+      const revenue = parseFloat(it.total_price) || 0;
+      const cost    = (parseFloat(it.unit_cost_price) || 0) * (parseInt(it.quantity, 10) || 0);
+      lineProfit += revenue - cost;
+    });
+    // Returns negate the profit (we gave goods back)
+    return isRet ? -Math.abs(lineProfit) : lineProfit;
+  }, []);
+
+  // Financial KPIs over filtered set (Returns correctly deducted to reflect Net Sales Turnover)
   const kpiSummary = useMemo(() => {
     let grossTotal = 0;
     let totalDiscount = 0;
     let totalTax = 0;
     let totalUnits = 0;
+    let totalProfit = 0;
+    let salesCount = 0;
+    let returnsCount = 0;
 
     filteredOrders.forEach((o) => {
-      grossTotal += parseFloat(o.total_amount) || 0;
-      totalDiscount += parseFloat(o.discount_amount) || 0;
-      totalTax += parseFloat(o.tax_amount) || 0;
-      (o.items || []).forEach((it) => {
-        totalUnits += parseInt(it.quantity, 10) || 0;
-      });
+      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+      const amt = parseFloat(o.total_amount) || 0;
+      const profit = computeOrderProfit(o);
+      const itemsCount = (o.items || []).reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
+
+      if (isRet) {
+        grossTotal -= amt; // Returns deduct from sales turnover
+        returnsCount += 1;
+        totalUnits -= itemsCount;
+      } else {
+        grossTotal += amt;
+        salesCount += 1;
+        totalUnits += itemsCount;
+        totalDiscount += parseFloat(o.discount_amount) || 0;
+        totalTax += parseFloat(o.tax_amount) || 0;
+      }
+
+      totalProfit += profit;
     });
 
-    const aov = filteredOrders.length > 0 ? grossTotal / filteredOrders.length : 0;
+    const netUnits = Math.max(0, totalUnits);
+    // AOV calculated across sales orders, or filtered orders if only returns
+    const aovOrdersCount = salesCount > 0 ? salesCount : (filteredOrders.length || 1);
+    const aov = grossTotal > 0 && aovOrdersCount > 0 ? grossTotal / aovOrdersCount : 0;
+    const profitMargin = grossTotal > 0 ? (totalProfit / grossTotal) * 100 : 0;
 
     return {
       orderCount: filteredOrders.length,
+      salesCount,
+      returnsCount,
       grossTotal: Math.round(grossTotal * 100) / 100,
       totalDiscount: Math.round(totalDiscount * 100) / 100,
       totalTax: Math.round(totalTax * 100) / 100,
-      totalUnits,
+      totalUnits: netUnits,
       aov: Math.round(aov * 100) / 100,
+      totalProfit: Math.round(totalProfit * 100) / 100,
+      profitMargin: Math.round(profitMargin * 100) / 100,
     };
-  }, [filteredOrders]);
+  }, [filteredOrders, computeOrderProfit]);
 
-  // Export to CSV
+  // ─── Per-cashier breakdown ──────────────────────────────────────────────────
+  const cashierBreakdown = useMemo(() => {
+    const map = {};
+    filteredOrders.forEach((o) => {
+      const name = o.cashier_name || 'Counter Staff';
+      if (!map[name]) {
+        map[name] = { name, turnover: 0, profit: 0, orders: 0, units: 0 };
+      }
+      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+      // Returns subtract from turnover
+      const amt = parseFloat(o.total_amount) || 0;
+      map[name].turnover += isRet ? -amt : amt;
+      map[name].profit   += computeOrderProfit(o);
+      map[name].orders   += 1;
+      (o.items || []).forEach((it) => {
+        map[name].units += parseInt(it.quantity, 10) || 0;
+      });
+    });
+    return Object.values(map).sort((a, b) => b.turnover - a.turnover);
+  }, [filteredOrders, computeOrderProfit]);
+
+  // Pie chart hover state
+  const [pieCashierHovered, setPieCashierHovered] = useState(null);
+  const [pieMetric, setPieMetric] = useState('revenue'); // 'revenue' | 'profit'
+
+  // Export to CSV (Enhanced with Profit, Cost, and Cashier Summary)
   const handleExportCsv = () => {
     if (filteredOrders.length === 0) return;
 
+    // ── Section 1: Order-level ledger ──
     const headers = [
       'Invoice Number',
       'Date',
@@ -369,18 +435,27 @@ export default function SalesInvoicesLedgerView({
       'Cashier',
       'Payment Method',
       'Items Count',
+      'Cost of Goods Sold',
       'Subtotal',
       'Discount',
       'Tax',
       'Total Amount',
+      'Gross Profit',
+      'Profit Margin %',
       'Status',
     ];
 
     const rows = filteredOrders.map((o) => {
+      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
       const dt = new Date(o.created_at);
       const dStr = dt.toLocaleDateString('en-IN');
       const tStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       const itemsCount = (o.items || []).reduce((acc, it) => acc + (parseInt(it.quantity, 10) || 0), 0);
+      const cogs = (o.items || []).reduce((acc, it) => acc + (parseFloat(it.unit_cost_price) || 0) * (parseInt(it.quantity, 10) || 0), 0);
+      const profit = computeOrderProfit(o);
+      const totalAmt = parseFloat(o.total_amount || 0);
+      const displayTotal = isRet ? -totalAmt : totalAmt;
+      const margin = totalAmt > 0 ? (profit / totalAmt) * 100 : 0;
 
       return [
         `"${o.invoice_number || ''}"`,
@@ -390,21 +465,60 @@ export default function SalesInvoicesLedgerView({
         `"${o.customer_phone || ''}"`,
         `"${(o.cashier_name || 'Staff').replace(/"/g, '""')}"`,
         `"${(o.payment_method || 'Cash').toUpperCase()}"`,
-        itemsCount,
+        isRet ? -itemsCount : itemsCount,
+        (isRet ? -cogs : cogs).toFixed(2),
         parseFloat(o.subtotal || 0).toFixed(2),
         parseFloat(o.discount_amount || 0).toFixed(2),
         parseFloat(o.tax_amount || 0).toFixed(2),
-        parseFloat(o.total_amount || 0).toFixed(2),
-        `"${o.status || 'completed'}"`,
+        displayTotal.toFixed(2),
+        profit.toFixed(2),
+        margin.toFixed(1) + '%',
+        `"${isRet ? 'Returned' : (o.status || 'completed')}"`,
       ];
     });
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    // ── Section 2: Summary row ──
+    const summaryRows = [
+      [],
+      ['=== SUMMARY ==='],
+      [`"Total Orders & Vouchers"`, kpiSummary.orderCount],
+      [`"Completed Sales"`, kpiSummary.salesCount],
+      [`"Return Vouchers"`, kpiSummary.returnsCount],
+      [`"Net Sales Turnover"`, kpiSummary.grossTotal.toFixed(2)],
+      [`"Total Gross Profit"`, kpiSummary.totalProfit.toFixed(2)],
+      [`"Overall Profit Margin"`, kpiSummary.profitMargin.toFixed(1) + '%'],
+      [`"Total Discounts Given"`, kpiSummary.totalDiscount.toFixed(2)],
+      [`"Total Units Sold"`, kpiSummary.totalUnits],
+      [`"Average Order Value"`, kpiSummary.aov.toFixed(2)],
+      [],
+      ['=== CASHIER PERFORMANCE ==='],
+      ['Cashier', 'Orders', 'Units Sold', 'Turnover', 'Gross Profit', 'Profit Margin %', 'Avg Order Value'],
+      ...cashierBreakdown.map((c) => {
+        const margin = c.turnover > 0 ? (c.profit / c.turnover) * 100 : 0;
+        const aov    = c.orders > 0 ? c.turnover / c.orders : 0;
+        return [
+          `"${c.name}"`,
+          c.orders,
+          c.units,
+          c.turnover.toFixed(2),
+          c.profit.toFixed(2),
+          margin.toFixed(1) + '%',
+          aov.toFixed(2),
+        ];
+      }),
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((r) => r.join(',')),
+      ...summaryRows.map((r) => r.join(',')),
+    ].join('\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales_invoices_ledger_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `sales_ledger_with_profit_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -513,6 +627,72 @@ export default function SalesInvoicesLedgerView({
     saveReceiptAsPdf(order.invoice_number || 'bill');
   };
 
+  // ─── Donut SVG Pie Chart helper ────────────────────────────────────────────
+  const CASHIER_PALETTE = [
+    '#38BDF8', '#00E5A3', '#F59E0B', '#EC4899', '#818CF8',
+    '#10B981', '#6366F1', '#14B8A6', '#F43F5E', '#A855F7',
+  ];
+
+  function CashierDonutChart({ data, metric }) {
+    const cx = 110, cy = 110, rOuter = 90, rInner = 52;
+    const vals = data.map((d) => Math.max(0, metric === 'profit' ? d.profit : d.turnover));
+    const total = vals.reduce((a, b) => a + b, 0);
+    if (total === 0) return null;
+
+    let startAngle = -Math.PI / 2;
+    const slices = data.map((d, i) => {
+      const share = vals[i] / total;
+      const end = startAngle + share * 2 * Math.PI;
+      const slice = { d: buildArc(cx, cy, rInner, rOuter, startAngle, end), color: CASHIER_PALETTE[i % CASHIER_PALETTE.length], share, item: d };
+      startAngle = end;
+      return slice;
+    });
+
+    function buildArc(cx, cy, ri, ro, s, e) {
+      const delta = e - s;
+      const full = delta >= 2 * Math.PI - 0.001;
+      const se = full ? s + 2 * Math.PI - 0.0001 : e;
+      const la = delta > Math.PI ? 1 : 0;
+      const x1 = cx + ro * Math.cos(s), y1 = cy + ro * Math.sin(s);
+      const x2 = cx + ro * Math.cos(se), y2 = cy + ro * Math.sin(se);
+      const x3 = cx + ri * Math.cos(se), y3 = cy + ri * Math.sin(se);
+      const x4 = cx + ri * Math.cos(s), y4 = cy + ri * Math.sin(s);
+      return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${ro} ${ro} 0 ${la} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${ri} ${ri} 0 ${la} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+    }
+
+    const hovered = pieCashierHovered !== null ? data[pieCashierHovered] : null;
+    const centerVal = hovered
+      ? (metric === 'profit' ? hovered.profit : hovered.turnover)
+      : (metric === 'profit' ? kpiSummary.totalProfit : kpiSummary.grossTotal);
+    const centerLabel = hovered ? hovered.name.split(' ')[0] : (metric === 'profit' ? 'Profit' : 'Revenue');
+
+    return (
+      <svg width={220} height={220} viewBox="0 0 220 220">
+        {slices.map((sl, i) => (
+          <path
+            key={i}
+            d={sl.d}
+            fill={sl.color}
+            opacity={pieCashierHovered === null || pieCashierHovered === i ? 1 : 0.35}
+            style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
+            onMouseEnter={() => setPieCashierHovered(i)}
+            onMouseLeave={() => setPieCashierHovered(null)}
+          />
+        ))}
+        {/* Centre text */}
+        <text x={cx} y={cy - 10} textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.7">{centerLabel}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fill="#F8FAFC" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
+          ₹{centerVal >= 1000 ? (centerVal / 1000).toFixed(1) + 'k' : centerVal.toFixed(0)}
+        </text>
+        {hovered && (
+          <text x={cx} y={cy + 28} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="Inter, sans-serif">
+            {(slices[pieCashierHovered]?.share * 100).toFixed(1)}% share
+          </text>
+        )}
+      </svg>
+    );
+  }
+
   return (
     <div className="ledger-view-root" style={{ display: 'flex', flexDirection: 'column', gap: '22px', width: '100%' }}>
       {/* Ledger Main Content Section (Hidden completely when printing receipt) */}
@@ -521,7 +701,7 @@ export default function SalesInvoicesLedgerView({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '14px',
           }}
         >
@@ -568,7 +748,7 @@ export default function SalesInvoicesLedgerView({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Sales Turnover
+              Net Sales Turnover
             </span>
             <Sparkles size={16} color="#10B981" />
           </div>
@@ -576,7 +756,50 @@ export default function SalesInvoicesLedgerView({
             ₹{kpiSummary.grossTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)' }}>
-            Total revenue realized from sales
+            Net revenue realized (returns deducted)
+          </div>
+        </div>
+
+        {/* NET PROFIT KPI CARD (NEW) */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderRadius: '16px',
+            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
+            border: `1px solid ${kpiSummary.totalProfit >= 0 ? 'rgba(99, 102, 241, 0.35)' : 'rgba(239, 68, 68, 0.3)'}`,
+            background: kpiSummary.totalProfit >= 0
+              ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.02) 100%)'
+              : 'linear-gradient(135deg, rgba(239,68,68,0.09) 0%, rgba(239,68,68,0.02) 100%)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: kpiSummary.totalProfit >= 0 ? '#818CF8' : '#F87171', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Gross Profit
+            </span>
+            <TrendingUp size={16} color={kpiSummary.totalProfit >= 0 ? '#818CF8' : '#F87171'} />
+          </div>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: kpiSummary.totalProfit >= 0 ? '#A5B4FC' : '#FCA5A5', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            ₹{kpiSummary.totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '1px 6px',
+                borderRadius: '4px',
+                fontWeight: 700,
+                fontSize: '0.70rem',
+                background: kpiSummary.totalProfit >= 0 ? 'rgba(99,102,241,0.18)' : 'rgba(239,68,68,0.15)',
+                color: kpiSummary.totalProfit >= 0 ? '#A5B4FC' : '#FCA5A5',
+              }}
+            >
+              {kpiSummary.profitMargin.toFixed(1)}% margin
+            </span>
+            <span>on total turnover</span>
           </div>
         </div>
 
@@ -635,7 +858,7 @@ export default function SalesInvoicesLedgerView({
         </div>
       </div>
 
-      {/* 2. FILTER & SEARCH TOOLBAR */}
+      {/* 2. FILTER & SEARCH TOOLBAR (Placed above Cashier Breakdown & Orders Table) */}
       <div
         style={{
           padding: '18px 20px',
@@ -735,7 +958,8 @@ export default function SalesInvoicesLedgerView({
               allowAllTime={true}
               minDate={minDate}
               compact={true}
-              chartType="bar_chart"
+              chartType="pie_chart"
+              showXAxis={false}
               onChange={(newRange) => {
                 setSelectedTimelineRange(newRange);
                 if (onTimelineRangeChange) {
@@ -824,33 +1048,163 @@ export default function SalesInvoicesLedgerView({
               <option value="returned" style={{ backgroundColor: 'var(--bg-surface)' }}>Returned / Refunds Only</option>
             </select>
           </div>
-
-          {/* Sort By Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-            <ArrowUpDown size={13} color="var(--text-muted, #94A3B8)" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--bg-main, #0B0E17)',
-                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
-                color: 'var(--text-primary, #F8FAFC)',
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="date_desc" style={{ backgroundColor: 'var(--bg-surface)' }}>Date: Newest First</option>
-              <option value="date_asc" style={{ backgroundColor: 'var(--bg-surface)' }}>Date: Oldest First</option>
-              <option value="amount_desc" style={{ backgroundColor: 'var(--bg-surface)' }}>Amount: High to Low</option>
-              <option value="amount_asc" style={{ backgroundColor: 'var(--bg-surface)' }}>Amount: Low to High</option>
-            </select>
-          </div>
         </div>
       </div>
+
+      {/* 1b. CASHIER PERFORMANCE SECTION (Pie Chart + Table) */}
+      {cashierBreakdown.length > 0 && (
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '16px',
+            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
+            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: 34, height: 34, borderRadius: '10px', background: 'rgba(129,140,248,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(129,140,248,0.3)' }}>
+                <Users size={17} color="#818CF8" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--text-primary, #F8FAFC)' }}>Cashier Performance Breakdown</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>Turnover &amp; profit attribution per staff member</div>
+              </div>
+            </div>
+            {/* Metric Toggle */}
+            <div style={{ display: 'flex', background: 'var(--bg-main, #0B0E17)', borderRadius: '8px', padding: '3px', gap: '2px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))' }}>
+              {[{ id: 'revenue', label: 'Turnover' }, { id: 'profit', label: 'Profit' }].map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setPieMetric(m.id)}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: pieMetric === m.id ? 'rgba(129,140,248,0.25)' : 'transparent',
+                    color: pieMetric === m.id ? '#A5B4FC' : 'var(--text-muted, #94A3B8)',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Content: Pie + Table */}
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* Donut Pie Chart */}
+            {cashierBreakdown.length > 1 && (
+              <div style={{ flexShrink: 0 }}>
+                <CashierDonutChart data={cashierBreakdown} metric={pieMetric} />
+              </div>
+            )}
+
+            {/* Cashier Table */}
+            <div style={{ flex: 1, minWidth: '320px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))', color: 'var(--text-muted, #94A3B8)', fontSize: '0.70rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left' }}>Cashier</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center' }}>Orders</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Turnover</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Gross Profit</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Margin</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Avg Order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashierBreakdown.map((c, i) => {
+                    const margin  = c.turnover > 0 ? (c.profit / c.turnover) * 100 : 0;
+                    const avgOrd  = c.orders > 0 ? c.turnover / c.orders : 0;
+                    const color   = CASHIER_PALETTE[i % CASHIER_PALETTE.length];
+                    const isHov   = pieCashierHovered === i;
+                    return (
+                      <tr
+                        key={c.name}
+                        onMouseEnter={() => setPieCashierHovered(i)}
+                        onMouseLeave={() => setPieCashierHovered(null)}
+                        style={{
+                          borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.04))',
+                          transition: 'background 0.15s ease',
+                          background: isHov ? 'rgba(255,255,255,0.04)' : 'transparent',
+                          cursor: 'default',
+                        }}
+                      >
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary, #F8FAFC)' }}>{c.name}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary, #94A3B8)', fontWeight: 600 }}>{c.orders}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#34D399', fontFamily: 'monospace' }}>
+                          ₹{c.turnover.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: c.profit >= 0 ? '#A5B4FC' : '#FCA5A5', fontFamily: 'monospace' }}>
+                          ₹{c.profit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '2px 7px',
+                            borderRadius: '5px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            background: margin >= 0 ? 'rgba(99,102,241,0.15)' : 'rgba(239,68,68,0.13)',
+                            color: margin >= 0 ? '#A5B4FC' : '#FCA5A5',
+                          }}>
+                            {margin.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #94A3B8)', fontFamily: 'monospace', fontWeight: 600 }}>
+                          ₹{avgOrd.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* Totals footer */}
+                <tfoot>
+                  <tr style={{ borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.12))', background: 'rgba(255,255,255,0.02)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)', fontSize: '0.80rem' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)' }}>{kpiSummary.orderCount}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#34D399', fontFamily: 'monospace' }}>
+                      ₹{kpiSummary.grossTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: kpiSummary.totalProfit >= 0 ? '#A5B4FC' : '#FCA5A5', fontFamily: 'monospace' }}>
+                      ₹{kpiSummary.totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 7px',
+                        borderRadius: '5px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        background: kpiSummary.profitMargin >= 0 ? 'rgba(99,102,241,0.18)' : 'rgba(239,68,68,0.15)',
+                        color: kpiSummary.profitMargin >= 0 ? '#A5B4FC' : '#FCA5A5',
+                      }}>
+                        {kpiSummary.profitMargin.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #94A3B8)', fontFamily: 'monospace', fontWeight: 600 }}>
+                      ₹{kpiSummary.aov.toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 3. ORDERS TABLE LEDGER */}
       <div

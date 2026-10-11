@@ -48,6 +48,46 @@ class InventoryAPITests(TestCase):
         response_empty = self.client.get(url, {'search': 'NonexistentProduct'})
         self.assertEqual(len(response_empty.data), 0)
 
+        # Multi-word product search (e.g. 'milka bar 100' matches 'Milka Chocolate Bar 100g')
+        milka = Item.objects.create(
+            uid="9998881",
+            name="Milka Chocolate Bar 100g",
+            cost_price=Decimal("80.00"),
+            selling_price=Decimal("120.00"),
+            store=self.store
+        )
+        # Unrelated item whose UID contains digits '100' (must NOT match 'milka bar 100')
+        socks = Item.objects.create(
+            uid="0001002",
+            name="Cotton Running Socks",
+            cost_price=Decimal("50.00"),
+            selling_price=Decimal("100.00"),
+            store=self.store
+        )
+        # Item with exact UID 0000100
+        item100 = Item.objects.create(
+            uid="0000100",
+            name="Glass Water Bottle",
+            cost_price=Decimal("40.00"),
+            selling_price=Decimal("80.00"),
+            store=self.store
+        )
+
+        # 1. Search 'milka bar 100' should return Milka Bar and NOT socks or bottle
+        res_milka = self.client.get(url, {'search': 'milka bar 100'})
+        self.assertEqual(len(res_milka.data), 1)
+        self.assertEqual(res_milka.data[0]['id'], milka.id)
+
+        # 2. Search exact UID '0000100' should return Glass Water Bottle as top result
+        res_uid = self.client.get(url, {'search': '0000100'})
+        self.assertTrue(len(res_uid.data) >= 1)
+        self.assertEqual(res_uid.data[0]['id'], item100.id)
+
+        # 3. Search short UID '100' should return Glass Water Bottle (padded to 0000100) as top result
+        res_short_uid = self.client.get(url, {'search': '100'})
+        self.assertTrue(len(res_short_uid.data) >= 1)
+        self.assertEqual(res_short_uid.data[0]['id'], item100.id)
+
     def test_filter_by_parent_category_and_subcategory(self):
         cat2 = Category.objects.create(name="Apparel")
         sub2 = SubCategory.objects.create(category=cat2, name="Shoes")

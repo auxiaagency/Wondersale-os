@@ -397,55 +397,71 @@ class ItemViewSet(viewsets.ModelViewSet):
                 else:
                     qs = qs.none()
 
-        # Search parameter (matches name, UID, legacy UID, variant name, section, category, subcategory)
+        # Search parameter (matches name, UID, legacy UID, variant name, description, section, category, subcategory)
         raw_search = self.request.query_params.get('search', '').strip()
+        search_query_for_ranking = None
         if raw_search:
             import re
             # Strip AIM symbology headers (e.g. ]C1, ]e0) and surrounding quotes
             search_query = re.sub(r'^\][A-Za-z0-9]{2}', '', raw_search).strip().strip("'\"").strip()
             if search_query:
-                search_cond = (
-                    Q(name__icontains=search_query) |
-                    Q(uid__icontains=search_query) |
-                    Q(legacy_uid__icontains=search_query) |
-                    Q(variant_name__icontains=search_query) |
-                    Q(section__name__icontains=search_query) |
-                    Q(section__code__icontains=search_query) |
-                    Q(location_section__icontains=search_query) |
-                    Q(subcategories__name__icontains=search_query)
-                )
-                # Fast numeric search: handles scanner/manual inputs with or without leading zeroes and 7-digit zero-padding
-                clean_digits = ''.join(c for c in search_query if c.isdigit())
-                if clean_digits:
-                    stripped = clean_digits.lstrip('0')
-                    if stripped:
-                        search_cond |= Q(uid__icontains=stripped) | Q(legacy_uid__icontains=stripped)
-                    if len(clean_digits) < 7:
-                        padded = clean_digits.zfill(7)
-                        search_cond |= Q(uid__iexact=padded) | Q(legacy_uid__iexact=padded)
-
-                # Alphanumeric compact match (handles inputs with or without hyphens/spaces like JL-7110 vs JL7110)
-                clean_alphanum = re.sub(r'[^a-zA-Z0-9]', '', search_query)
-                if clean_alphanum and len(clean_alphanum) >= 3 and clean_alphanum != search_query:
-                    search_cond |= Q(uid__icontains=clean_alphanum) | Q(legacy_uid__icontains=clean_alphanum)
-
-                # Multi-word token search (e.g. "laptop n" or "foam bat 23" matches "Laptop Bag N" or "Foam Bat 23 \"")
+                search_query_for_ranking = search_query
+                has_letters = bool(re.search(r'[a-zA-Z]', search_query))
                 words = [w for w in re.split(r'[\s\-_\/]+', search_query) if len(w) >= 1]
-                if len(words) > 1:
-                    word_cond = Q()
-                    for w in words:
-                        word_cond &= (
-                            Q(name__icontains=w) |
-                            Q(uid__icontains=w) |
-                            Q(legacy_uid__icontains=w) |
-                            Q(variant_name__icontains=w) |
-                            Q(section__name__icontains=w) |
-                            Q(location_section__icontains=w) |
-                            Q(subcategories__name__icontains=w)
-                        )
-                    search_cond |= word_cond
 
-                qs = qs.filter(search_cond)
+                if not has_letters:
+                    # Pure numeric or barcode input (e.g. "0000100", "100", "8901234567890")
+                    # Match exact UID, zero-padded UID, stripped UID, or starts-with
+                    clean_digits = ''.join(c for c in search_query if c.isdigit())
+                    num_cond = (
+                        Q(uid__iexact=search_query) |
+                        Q(legacy_uid__iexact=search_query) |
+                        Q(name__icontains=search_query)
+                    )
+                    if clean_digits:
+                        stripped = clean_digits.lstrip('0')
+                        if stripped:
+                            num_cond |= Q(uid__iexact=stripped) | Q(legacy_uid__iexact=stripped)
+                        if len(clean_digits) < 7:
+                            padded = clean_digits.zfill(7)
+                            num_cond |= Q(uid__iexact=padded) | Q(legacy_uid__iexact=padded)
+                        num_cond |= Q(uid__istartswith=clean_digits) | Q(legacy_uid__istartswith=clean_digits)
+                    qs = qs.filter(num_cond)
+                else:
+                    # Text / name / multi-word search (e.g. "milka bar 100", "coke zero", "drift car")
+                    clean_alphanum = re.sub(r'[^a-zA-Z0-9]', '', search_query)
+
+                    # 1. Full phrase match across key fields
+                    phrase_cond = (
+                        Q(name__icontains=search_query) |
+                        Q(variant_name__icontains=search_query) |
+                        Q(uid__icontains=search_query) |
+                        Q(legacy_uid__icontains=search_query) |
+                        Q(description__icontains=search_query) |
+                        Q(section__name__icontains=search_query) |
+                        Q(location_section__icontains=search_query) |
+                        Q(subcategories__name__icontains=search_query)
+                    )
+                    if clean_alphanum and len(clean_alphanum) >= 3 and clean_alphanum != search_query:
+                        phrase_cond |= Q(uid__icontains=clean_alphanum) | Q(legacy_uid__icontains=clean_alphanum)
+
+                    # 2. Multi-word match: EVERY token must match somewhere in the item
+                    if len(words) > 1:
+                        word_cond = Q()
+                        for w in words:
+                            word_cond &= (
+                                Q(name__icontains=w) |
+                                Q(variant_name__icontains=w) |
+                                Q(uid__icontains=w) |
+                                Q(legacy_uid__icontains=w) |
+                                Q(description__icontains=w) |
+                                Q(section__name__icontains=w) |
+                                Q(location_section__icontains=w) |
+                                Q(subcategories__name__icontains=w)
+                            )
+                        qs = qs.filter(phrase_cond | word_cond)
+                    else:
+                        qs = qs.filter(phrase_cond)
 
         # Filter by section
         section_id = self.request.query_params.get('section') or self.request.query_params.get('section_id')
@@ -547,17 +563,51 @@ class ItemViewSet(viewsets.ModelViewSet):
 
         # Sorting parameter (matches frontend sortBy options)
         ordering = self.request.query_params.get('ordering') or self.request.query_params.get('sort')
-        if ordering:
-            sort_map = {
-                'name_asc': ['name'],
-                'name_desc': ['-name'],
-                'selling_price': ['selling_price', 'id'],
-                'selling_price_asc': ['selling_price', 'id'],
-                'selling_price_desc': ['-selling_price', 'id'],
-                'stock': ['-quantity', 'id'],
-                'stock_desc': ['-quantity', 'id'],
-                'stock_asc': ['quantity', 'id'],
-            }
+        sort_map = {
+            'name_asc': ['name'],
+            'name_desc': ['-name'],
+            'selling_price': ['selling_price', 'id'],
+            'selling_price_asc': ['selling_price', 'id'],
+            'selling_price_desc': ['-selling_price', 'id'],
+            'stock': ['-quantity', 'id'],
+            'stock_desc': ['-quantity', 'id'],
+            'stock_asc': ['quantity', 'id'],
+        }
+
+        if search_query_for_ranking:
+            from django.db.models import Case, When, Value, IntegerField
+            clean_digits_rank = ''.join(c for c in search_query_for_ranking if c.isdigit())
+            padded_rank = clean_digits_rank.zfill(7) if (clean_digits_rank and len(clean_digits_rank) < 7) else None
+            stripped_rank = clean_digits_rank.lstrip('0') if clean_digits_rank else None
+            has_letters_rank = bool(re.search(r'[a-zA-Z]', search_query_for_ranking))
+
+            relevance_whens = [
+                When(Q(uid__iexact=search_query_for_ranking) | Q(legacy_uid__iexact=search_query_for_ranking), then=Value(100)),
+            ]
+            if not has_letters_rank:
+                if padded_rank:
+                    relevance_whens.append(When(Q(uid__iexact=padded_rank) | Q(legacy_uid__iexact=padded_rank), then=Value(100)))
+                if stripped_rank:
+                    relevance_whens.append(When(Q(uid__iexact=stripped_rank) | Q(legacy_uid__iexact=stripped_rank), then=Value(100)))
+
+            relevance_whens.extend([
+                When(name__iexact=search_query_for_ranking, then=Value(90)),
+                When(name__istartswith=search_query_for_ranking, then=Value(80)),
+                When(name__icontains=search_query_for_ranking, then=Value(70)),
+                When(variant_name__icontains=search_query_for_ranking, then=Value(60)),
+                When(uid__istartswith=search_query_for_ranking, then=Value(50)),
+                When(description__icontains=search_query_for_ranking, then=Value(40)),
+            ])
+            qs = qs.annotate(
+                search_rank=Case(*relevance_whens, default=Value(10), output_field=IntegerField())
+            )
+            if ordering and ordering in sort_map:
+                qs = qs.order_by('-search_rank', *sort_map[ordering])
+            elif ordering and ordering.lstrip('-') in ('name', 'selling_price', 'cost_price', 'quantity', 'created_at', 'uid'):
+                qs = qs.order_by('-search_rank', ordering)
+            else:
+                qs = qs.order_by('-search_rank', '-id')
+        elif ordering:
             if ordering in sort_map:
                 qs = qs.order_by(*sort_map[ordering])
             elif ordering.lstrip('-') in ('name', 'selling_price', 'cost_price', 'quantity', 'created_at', 'uid'):

@@ -380,9 +380,11 @@ export default function BillingView({
     const timer = setTimeout(async () => {
       const rawQ = searchQuery.trim();
       const q = rawQ.toLowerCase();
+      const hasLetters = /[a-zA-Z]/.test(rawQ);
       const cleanDigits = rawQ.replace(/\D/g, '');
       const strippedDigits = cleanDigits ? cleanDigits.replace(/^0+/, '') : '';
       const paddedDigits = cleanDigits && cleanDigits.length < 7 ? cleanDigits.padStart(7, '0') : '';
+      const tokens = q.split(/[\s\-_\/]+/).filter((t) => t.length > 0);
 
       const pool = itemsRef.current && itemsRef.current.length > 0 ? itemsRef.current : items;
 
@@ -393,28 +395,54 @@ export default function BillingView({
         const itemName = (item.name || '').toLowerCase();
         const itemVar = (item.variant_name || '').toLowerCase();
         const itemSec = (item.location_section || item.section_name || '').toLowerCase();
+        const itemDesc = (item.description || '').toLowerCase();
+        const itemSubcats = Array.isArray(item.subcategories)
+          ? item.subcategories.map((sc) => (sc.name || '').toLowerCase()).join(' ')
+          : '';
 
         let score = 0;
 
-        // Exact match on UID or legacy UID has highest priority
+        // 1. Exact match on UID or legacy UID has highest priority
         if (itemUid === q || itemLegacy === q) {
           score = 100;
-        } else if (cleanDigits && (itemUid === cleanDigits || itemLegacy === cleanDigits || (paddedDigits && itemUid === paddedDigits) || (strippedDigits && itemUid === strippedDigits))) {
-          score = 90;
-        } else if (itemUid.includes(q) || itemLegacy.includes(q)) {
-          score = 80;
-        } else if (cleanDigits && strippedDigits && (itemUid.includes(strippedDigits) || itemLegacy.includes(strippedDigits))) {
-          score = 75;
+        } else if (!hasLetters && cleanDigits && (itemUid === cleanDigits || itemLegacy === cleanDigits || (paddedDigits && itemUid === paddedDigits) || (strippedDigits && itemUid === strippedDigits))) {
+          // Pure numeric query matching exact UID or zero-padded UID
+          score = 95;
+        } else if (itemName === q) {
+          // Exact match on item name
+          score = 92;
+        } else if (!hasLetters && cleanDigits && (itemUid.startsWith(cleanDigits) || itemLegacy.startsWith(cleanDigits))) {
+          // Numeric query starting with barcode prefix
+          score = 88;
         } else if (itemName.startsWith(q)) {
-          score = 60;
+          // Name starts with full query string
+          score = 85;
         } else if (itemName.includes(q)) {
-          score = 50;
+          // Name contains full query string
+          score = 80;
         } else if (itemVar.includes(q)) {
-          score = 40;
-        } else if (itemSec.includes(q)) {
-          score = 30;
-        } else if (item.subcategories && item.subcategories.some((sc) => (sc.name || '').toLowerCase().includes(q))) {
-          score = 20;
+          score = 70;
+        } else if (!hasLetters && cleanDigits && cleanDigits.length >= 3 && (itemUid.includes(cleanDigits) || itemLegacy.includes(cleanDigits))) {
+          // Substring in UID only for pure numeric searches (prevents queries like "milka bar 100" matching every 100 UID)
+          score = 65;
+        } else if (itemSec.includes(q) || itemDesc.includes(q) || itemSubcats.includes(q)) {
+          score = 50;
+        }
+
+        // 2. Multi-token matching (handles queries like "milka bar 100" or "coke zero 250ml")
+        if (tokens.length > 1) {
+          const allFieldsCombined = `${itemUid} ${itemLegacy} ${itemName} ${itemVar} ${itemSec} ${itemDesc} ${itemSubcats}`;
+          const allTokensMatch = tokens.every((tok) => allFieldsCombined.includes(tok));
+          if (allTokensMatch) {
+            const nameTokensCount = tokens.filter((tok) => itemName.includes(tok)).length;
+            let tokenScore = 60 + nameTokensCount * 5;
+            if (nameTokensCount === tokens.length) {
+              tokenScore = 78;
+            }
+            if (tokenScore > score) {
+              score = tokenScore;
+            }
+          }
         }
 
         if (score > 0) {
@@ -425,30 +453,44 @@ export default function BillingView({
       matches.sort((a, b) => b.score - a.score);
       const topItems = matches.slice(0, 15).map((m) => m.item);
 
-      if (topItems.length > 0) {
+      // If we have strong local matches (score >= 70), display immediately
+      // If matches are weak or empty and query is at least 2 chars, also query the backend
+      if (topItems.length > 0 && matches[0].score >= 70) {
         setSearchResults(topItems);
         setIsDropdownOpen(true);
       } else if (q.length >= 2) {
-        // Asynchronous remote fallback query if no local match (e.g. newly added item)
         try {
           const remoteData = await fetchItems({ search: rawQ, store: effectiveStoreId || undefined });
           const remoteList = Array.isArray(remoteData) ? remoteData : remoteData?.results || [];
           if (remoteList.length > 0) {
-            setSearchResults(remoteList.slice(0, 15));
+            const remoteIds = new Set(remoteList.map((r) => r.id));
+            const merged = [...remoteList, ...topItems.filter((it) => !remoteIds.has(it.id))].slice(0, 15);
+            setSearchResults(merged);
             setIsDropdownOpen(true);
             setItems((prev) => {
               const existingIds = new Set(prev.map((p) => p.id));
               const fresh = remoteList.filter((r) => !existingIds.has(r.id));
               return fresh.length > 0 ? [...prev, ...fresh] : prev;
             });
+          } else if (topItems.length > 0) {
+            setSearchResults(topItems);
+            setIsDropdownOpen(true);
           } else {
             setSearchResults([]);
             setIsDropdownOpen(false);
           }
         } catch {
-          setSearchResults([]);
-          setIsDropdownOpen(false);
+          if (topItems.length > 0) {
+            setSearchResults(topItems);
+            setIsDropdownOpen(true);
+          } else {
+            setSearchResults([]);
+            setIsDropdownOpen(false);
+          }
         }
+      } else if (topItems.length > 0) {
+        setSearchResults(topItems);
+        setIsDropdownOpen(true);
       } else {
         setSearchResults([]);
         setIsDropdownOpen(false);
@@ -456,7 +498,7 @@ export default function BillingView({
     }, 70);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, items, effectiveStoreId]);
+  }, [searchQuery, effectiveStoreId]);
 
   // Click Outside Dropdown Handler
   useEffect(() => {
@@ -524,9 +566,14 @@ export default function BillingView({
       // Handle barcode termination keys: Enter or Tab (configured by different barcode scanner manufacturers)
       if (e.key === 'Enter' || e.key === 'Tab') {
         const buffer = barcodeBufferRef.current.trim();
-        // Hardware scanners typically burst characters within rapid keystrokes (<250ms per key, terminator <350ms)
-        // A valid barcode/UID is >= 2 characters
-        if (buffer.length >= 2 && diff < 350) {
+        // Hardware scanners typically burst characters within rapid keystrokes (<60ms per key, terminator <65ms)
+        // Human typing is much slower (>100ms per key).
+        // If an input is focused (especially the search bar), only intercept if it's a genuine hardware scanner burst (<65ms)
+        const isHardwareBurst = isInputFocused
+          ? (diff < 65 && buffer.length >= 2)
+          : (diff < 350 && buffer.length >= 2);
+
+        if (isHardwareBurst) {
           e.preventDefault();
           e.stopPropagation();
           if (typeof e.stopImmediatePropagation === 'function') {
@@ -2159,18 +2206,7 @@ export default function BillingView({
                   const q = rawVal.trim().toLowerCase();
                   if (!q) return;
 
-                  // 1. Attempt exact barcode/UID scan lookup first (handles in-memory cache and async backend fallback)
-                  const handled = await handleBarcodeScanned(q);
-                  if (handled) {
-                    setSearchQuery('');
-                    setIsDropdownOpen(false);
-                    if (searchInputRef.current) {
-                      searchInputRef.current.value = '';
-                    }
-                    return;
-                  }
-
-                  // 2. If not a barcode/UID match, check if searchResults has a matching product
+                  // 1. If dropdown has search results, pick top match immediately
                   if (searchResults.length > 0) {
                     const topItem = searchResults[0];
                     setSelectedProduct(topItem);
@@ -2192,6 +2228,19 @@ export default function BillingView({
                     setIsDropdownOpen(false);
                     if (searchInputRef.current) {
                       searchInputRef.current.value = '';
+                    }
+                    return;
+                  }
+
+                  // 2. If no search results in dropdown, attempt exact barcode/UID scan lookup (single token without spaces)
+                  if (!/\s/.test(q)) {
+                    const handled = await handleBarcodeScanned(q);
+                    if (handled) {
+                      setSearchQuery('');
+                      setIsDropdownOpen(false);
+                      if (searchInputRef.current) {
+                        searchInputRef.current.value = '';
+                      }
                     }
                   }
                 }
