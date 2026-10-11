@@ -8,7 +8,7 @@ import NetworkStatusBanner from './components/NetworkStatusBanner';
 import NotFoundView from './components/NotFoundView';
 import { SkeletonStatsCards } from './components/Skeleton';
 import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetchSections, fetchItems, fetchItem, fetchInventoryStats, getStaffMe, logoutStaff, previewExpiredStock, writeOffExpiredStock } from './api';
-import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X } from 'lucide-react';
+import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X, Wallet, Coins } from 'lucide-react';
 
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from './utils/stakeholdersSettings';
 import { lazyWithRetry } from './utils/lazyWithRetry';
@@ -521,6 +521,19 @@ export default function App() {
   const expiredWithStock = items.filter((i) => i.expiry_date && i.quantity > 0 && new Date(i.expiry_date) <= today);
   const expiredCount = inventoryStats ? inventoryStats.expired_count : expiredWithStock.length;
 
+  // Valuation summary stats (prefers fast server aggregate, falls back to loaded list)
+  const totalStockCostValue = inventoryStats?.total_cost_value !== undefined
+    ? Number(inventoryStats.total_cost_value || 0)
+    : items.reduce((sum, item) => sum + ((item.quantity > 0 ? item.quantity : 0) * (parseFloat(item.cost_price) || 0)), 0);
+
+  const totalPotentialSellingValue = inventoryStats?.total_selling_value !== undefined
+    ? Number(inventoryStats.total_selling_value || 0)
+    : items.reduce((sum, item) => sum + ((item.quantity > 0 ? item.quantity : 0) * (parseFloat(item.selling_price) || 0)), 0);
+
+  const potentialProfit = inventoryStats?.potential_profit !== undefined
+    ? Number(inventoryStats.potential_profit || 0)
+    : (totalPotentialSellingValue - totalStockCostValue);
+
   // Derive effectiveStoreId for current session
   const effectiveStoreId = (!currentUser?.is_owner && currentUser?.store)
     ? String(currentUser.store)
@@ -880,7 +893,7 @@ export default function App() {
             <>
               {/* Antigravity Stat Cards Grid */}
               {loading && items.length === 0 ? (
-                <SkeletonStatsCards count={4} />
+                <SkeletonStatsCards count={6} />
               ) : (
                 <div
                   className="inv-stats-grid"
@@ -938,6 +951,65 @@ export default function App() {
                         Total Stock Units
                       </div>
                       <div className="inv-stat-value" style={{ fontSize: '1.45rem', fontWeight: 800 }}>{totalQuantity}</div>
+                    </div>
+                  </div>
+
+                  {/* Total Stock Value (Cost Price) */}
+                  <div className="glass-panel inv-stat-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div
+                      className="inv-stat-icon-box"
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(139, 92, 246, 0.12)',
+                        color: '#8B5CF6',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Wallet size={22} />
+                    </div>
+                    <div className="inv-stat-content" style={{ minWidth: 0, flex: 1 }}>
+                      <div className="inv-stat-label" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        Stock Value (Cost)
+                      </div>
+                      <div className="inv-stat-value" style={{ fontSize: '1.30rem', fontWeight: 800, color: '#A78BFA' }}>
+                        ₹{Number(totalStockCostValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Potential Sales Value & Profit (Sell Price) */}
+                  <div className="glass-panel inv-stat-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div
+                      className="inv-stat-icon-box"
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(6, 182, 212, 0.12)',
+                        color: '#06B6D4',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Coins size={22} />
+                    </div>
+                    <div className="inv-stat-content" style={{ minWidth: 0, flex: 1 }}>
+                      <div className="inv-stat-label" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        Potential Value (Sell)
+                      </div>
+                      <div className="inv-stat-value" style={{ fontSize: '1.30rem', fontWeight: 800, color: '#22D3EE' }}>
+                        ₹{Number(totalPotentialSellingValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        Est. Profit: <span style={{ fontWeight: 700, color: potentialProfit >= 0 ? '#10B981' : 'var(--color-danger)' }}>+₹{Number(potentialProfit || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                      </div>
                     </div>
                   </div>
 

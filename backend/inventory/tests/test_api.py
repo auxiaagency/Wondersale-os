@@ -511,6 +511,21 @@ class InventoryAPITests(TestCase):
         self.assertIsNone(item.supplier)
         self.assertEqual(item.quantity, 10)  # item remains intact
 
+    def test_inventory_stats_valuation_metrics(self):
+        """Test stats action aggregates total stock cost value and potential selling value & profit."""
+        self.item.quantity = 20  # 20 * 300 = 6,000 cost; 20 * 600 = 12,000 sell
+        self.item.save()
+
+        res = self.client.get('/api/inventory/items/stats/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data['total_items'], 1)
+        self.assertEqual(res.data['total_quantity'], 20)
+        self.assertEqual(res.data['total_stock_value'], 6000.00)
+        self.assertEqual(res.data['total_cost_value'], 6000.00)
+        self.assertEqual(res.data['total_selling_value'], 12000.00)
+        self.assertEqual(res.data['potential_revenue'], 12000.00)
+        self.assertEqual(res.data['potential_profit'], 6000.00)
+
 
 
 

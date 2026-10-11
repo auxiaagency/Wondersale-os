@@ -618,8 +618,9 @@ class ItemViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='stats')
     def stats_action(self, request):
         """Ultra-fast (5ms) aggregate summary statistics for the inventory top banner."""
-        from django.db.models import Sum, Count, Q
+        from django.db.models import Sum, Count, Q, F
         from django.utils import timezone
+        from decimal import Decimal
 
         # Base filtered queryset according to staff role and current filters
         qs = self.filter_queryset(self.get_queryset())
@@ -632,7 +633,19 @@ class ItemViewSet(viewsets.ModelViewSet):
             out_of_stock=Count('id', filter=Q(quantity__lte=0)),
             needs_barcode=Count('id', filter=Q(needs_new_barcode_printed=True)),
             expired_count=Count('id', filter=Q(expiry_date__isnull=False, expiry_date__lte=today, quantity__gt=0)),
+            total_cost_val=Sum(
+                F('quantity') * F('cost_price'),
+                filter=Q(quantity__gt=0, cost_price__isnull=False)
+            ),
+            total_selling_val=Sum(
+                F('quantity') * F('selling_price'),
+                filter=Q(quantity__gt=0, selling_price__isnull=False)
+            ),
         )
+
+        cost_val = float(round(agg['total_cost_val'] or Decimal('0.00'), 2))
+        selling_val = float(round(agg['total_selling_val'] or Decimal('0.00'), 2))
+        potential_profit = float(round(Decimal(str(selling_val)) - Decimal(str(cost_val)), 2))
 
         return Response({
             'total_items': agg['total_items'] or 0,
@@ -641,6 +654,11 @@ class ItemViewSet(viewsets.ModelViewSet):
             'out_of_stock_count': agg['out_of_stock'] or 0,
             'needs_barcode_count': agg['needs_barcode'] or 0,
             'expired_count': agg['expired_count'] or 0,
+            'total_stock_value': cost_val,
+            'total_cost_value': cost_val,
+            'total_selling_value': selling_val,
+            'potential_revenue': selling_val,
+            'potential_profit': potential_profit,
         })
 
     @action(detail=True, methods=['post'], url_path='adjust-stock')
