@@ -482,9 +482,10 @@ def send_whatsapp_bill_for_order(order, recipient_phone=None, pdf_bytes=None, fo
         payment_mode = str(order.payment_method or 'Cash').upper()
         total_amt = f'{float(order.total_amount or 0):,.2f}'
 
-        # Allow customizing return template name via environment variable
+        # Allow customizing template names via environment variables
+        bill_template_name = os.getenv('META_WHATSAPP_BILL_TEMPLATE_NAME', 'bill')
         return_template_name = os.getenv('META_WHATSAPP_RETURN_TEMPLATE_NAME', 'return_receipt')
-        template_name = return_template_name if is_return else 'bill'
+        template_name = return_template_name if is_return else bill_template_name
 
         if is_return:
             # Return receipt / voucher body parameters:
