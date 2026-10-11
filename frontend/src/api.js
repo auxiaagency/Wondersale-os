@@ -834,11 +834,26 @@ export async function extractProductsFromBill(formData) {
   return data;
 }
 
-export async function testGeminiApiKey(apiKey) {
+export async function fetchGeminiStatus() {
+  const res = await fetch(`${API_BASE}/items/gemini-status/`, {
+    headers: getAuthHeaders(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || 'Failed to fetch Gemini status.');
+  }
+  return data;
+}
+
+export async function testGeminiApiKey(apiKey = '', keyIndex = null) {
+  const payload = {};
+  if (apiKey) payload.api_key = apiKey;
+  if (keyIndex !== null) payload.key_index = keyIndex;
+
   const res = await fetch(`${API_BASE}/items/test-gemini-key/`, {
     method: 'POST',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ api_key: apiKey }),
+    body: JSON.stringify(payload),
   });
 
   const data = await res.json().catch(() => ({}));
@@ -2444,18 +2459,6 @@ export async function seedDemoPayrollData(store_id) {
 // ----------------- AI Product Description Generation Engine -----------------
 
 export function getStoredGeminiApiKeys() {
-  try {
-    const raw = localStorage.getItem('wondersale_gemini_api_keys');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed
-          .filter((k) => (typeof k === 'object' ? k.isActive !== false : true))
-          .map((k) => (typeof k === 'string' ? k.trim() : (k.key || '').trim()))
-          .filter(Boolean);
-      }
-    }
-  } catch (e) {}
   return [];
 }
 

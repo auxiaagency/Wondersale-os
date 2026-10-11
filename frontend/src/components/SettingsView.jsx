@@ -55,6 +55,7 @@ import {
   createSubcategory,
   updateSubcategory,
   deleteSubcategory,
+  fetchGeminiStatus,
   testGeminiApiKey,
   toggleStakeholdersSystem,
 } from '../api';
@@ -162,89 +163,45 @@ export default function SettingsView({
   const [receiptTermsFontSize, setReceiptTermsFontSize] = useState(getReceiptTermsFontSize);
   const [previewTermsFormatted, setPreviewTermsFormatted] = useState(true);
 
-  // Gemini AI Multi-Key Management state
-  const [geminiKeys, setGeminiKeys] = useState(() => {
-    try {
-      const raw = localStorage.getItem('wondersale_gemini_api_keys');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {}
-    return [];
-  });
-
-  const [newKeyLabel, setNewKeyLabel] = useState('');
-  const [newKeyValue, setNewKeyValue] = useState('');
-  const [isAddKeyOpen, setIsAddKeyOpen] = useState(false);
-  const [testingKeyId, setTestingKeyId] = useState(null);
+  // Gemini AI Multi-Key Management state (Loaded securely from backend .env)
+  const [geminiStatus, setGeminiStatus] = useState(null);
+  const [isLoadingGeminiStatus, setIsLoadingGeminiStatus] = useState(false);
+  const [testingKeyIndex, setTestingKeyIndex] = useState(null);
   const [testResults, setTestResults] = useState({});
-  const [visibleKeys, setVisibleKeys] = useState({});
-  const [copiedKeyId, setCopiedKeyId] = useState(null);
 
-  const saveKeysToStorage = (updated) => {
-    setGeminiKeys(updated);
+  const loadGeminiStatus = async () => {
+    setIsLoadingGeminiStatus(true);
     try {
-      localStorage.setItem('wondersale_gemini_api_keys', JSON.stringify(updated));
-    } catch (e) {}
+      const data = await fetchGeminiStatus();
+      setGeminiStatus(data);
+    } catch (e) {
+      console.warn('Failed to load Gemini status:', e);
+    } finally {
+      setIsLoadingGeminiStatus(false);
+    }
   };
 
-  const handleAddGeminiKey = (e) => {
-    e.preventDefault();
-    if (!newKeyValue.trim()) return;
+  useEffect(() => {
+    loadGeminiStatus();
+  }, []);
 
-    const newKeyObj = {
-      id: `key_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      label: newKeyLabel.trim() || `API Key #${geminiKeys.length + 1}`,
-      key: newKeyValue.trim(),
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    };
-
-    const nextList = [...geminiKeys, newKeyObj];
-    saveKeysToStorage(nextList);
-    setNewKeyLabel('');
-    setNewKeyValue('');
-    setIsAddKeyOpen(false);
-    showFeedback(`Gemini API key "${newKeyObj.label}" added to rotation pool.`);
-  };
-
-  const handleDeleteGeminiKey = (id) => {
-    const nextList = geminiKeys.filter((k) => k.id !== id);
-    saveKeysToStorage(nextList);
-    showFeedback('API key removed from rotation pool.');
-  };
-
-  const handleToggleKeyActive = (id) => {
-    const nextList = geminiKeys.map((k) =>
-      k.id === id ? { ...k, isActive: !k.isActive } : k
-    );
-    saveKeysToStorage(nextList);
-  };
-
-  const handleTestKey = async (keyObj) => {
-    setTestingKeyId(keyObj.id);
-    setTestResults((prev) => ({ ...prev, [keyObj.id]: { loading: true } }));
+  const handleTestKey = async (keyIndex) => {
+    setTestingKeyIndex(keyIndex);
+    setTestResults((prev) => ({ ...prev, [keyIndex]: { loading: true } }));
     try {
-      const res = await testGeminiApiKey(keyObj.key);
+      const res = await testGeminiApiKey('', keyIndex);
       setTestResults((prev) => ({
         ...prev,
-        [keyObj.id]: { loading: false, success: true, message: res.message || 'Connected successfully!' },
+        [keyIndex]: { loading: false, success: true, message: res.message || 'Connected successfully!' },
       }));
     } catch (err) {
       setTestResults((prev) => ({
         ...prev,
-        [keyObj.id]: { loading: false, success: false, message: err.message || 'Connection failed' },
+        [keyIndex]: { loading: false, success: false, message: err.message || 'Connection failed' },
       }));
     } finally {
-      setTestingKeyId(null);
+      setTestingKeyIndex(null);
     }
-  };
-
-  const handleCopyKey = (id, keyStr) => {
-    navigator.clipboard.writeText(keyStr);
-    setCopiedKeyId(id);
-    setTimeout(() => setCopiedKeyId(null), 2000);
   };
 
   const isOwner = currentUser?.is_owner;
@@ -513,7 +470,7 @@ export default function SettingsView({
           }}
         >
           <Sparkles size={18} style={{ color: '#F472B6' }} />
-          <span>Gemini AI / Bill OCR ({geminiKeys.length})</span>
+          <span>Gemini AI / Bill OCR ({geminiStatus?.keys_count ?? (geminiStatus?.has_keys ? 1 : 0)})</span>
         </button>
       </div>
 
@@ -1512,7 +1469,7 @@ export default function SettingsView({
         </div>
       )}
 
-      {/* TAB 3: Gemini Multimodal AI & Multi-Key Failover Pool */}
+      {/* TAB 3: Gemini Multimodal AI & Multi-Key Failover Pool (Loaded from backend .env) */}
       {activeTab === 'gemini-ai' && (
         <div style={{ maxWidth: '860px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
           {/* Header Card */}
@@ -1537,12 +1494,12 @@ export default function SettingsView({
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <h3 style={{ fontSize: '1.28rem', fontWeight: 800, margin: 0 }}>
-                      Google Gemini AI Key Management &amp; Failover
+                      Google Gemini AI Key Configuration &amp; Failover
                     </h3>
                     <span
                       style={{
-                        background: 'rgba(16, 185, 129, 0.12)',
-                        color: 'var(--color-success)',
+                        background: geminiStatus?.has_keys ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        color: geminiStatus?.has_keys ? 'var(--color-success)' : 'var(--color-danger)',
                         fontSize: '0.68rem',
                         fontWeight: 700,
                         padding: '2px 8px',
@@ -1553,7 +1510,7 @@ export default function SettingsView({
                       }}
                     >
                       <ShieldCheck size={12} />
-                      <span>Multi-Key Rotation Active</span>
+                      <span>{geminiStatus?.has_keys ? 'Loaded from .env' : 'No Keys in .env'}</span>
                     </span>
                   </div>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', margin: '4px 0 0' }}>
@@ -1564,119 +1521,90 @@ export default function SettingsView({
 
               <button
                 type="button"
-                onClick={() => setIsAddKeyOpen(true)}
-                className="btn btn-primary"
+                onClick={loadGeminiStatus}
+                disabled={isLoadingGeminiStatus}
+                className="btn btn-secondary"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
                   fontWeight: 700,
                   fontSize: '0.84rem',
-                  background: 'linear-gradient(135deg, #DC2626, #7C3AED)',
-                  borderColor: 'transparent',
                 }}
               >
-                <Plus size={15} />
-                <span>Add Gemini API Key</span>
+                <RefreshCw size={14} className={isLoadingGeminiStatus ? 'animate-spin' : ''} />
+                <span>Reload from .env</span>
               </button>
             </div>
 
-            {/* Rotation Pool Strategy Card */}
+            {/* Instruction Card */}
             <div
               style={{
-                padding: '14px 18px',
+                padding: '16px 20px',
                 background: 'rgba(59, 130, 246, 0.08)',
                 border: '1px solid rgba(59, 130, 246, 0.25)',
                 borderRadius: 'var(--radius-md)',
-                fontSize: '0.82rem',
+                fontSize: '0.84rem',
                 color: 'var(--text-secondary)',
-                lineHeight: 1.5,
+                lineHeight: 1.55,
               }}
             >
-              <div style={{ fontWeight: 700, color: '#60A5FA', marginBottom: '3px' }}>
-                💡 Automated Zero-Downtime Rate Limit Protection:
+              <div style={{ fontWeight: 700, color: '#60A5FA', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <KeyRound size={15} />
+                <span>Secure Backend Environment (.env) Configuration</span>
               </div>
-              <div>
-                Google AI Studio provides generous free tier quotas (15 requests per minute, 1,000,000 tokens/day). If a key hits its per-minute rate limit or daily quota, Wondersale <strong>automatically shifts to the next key</strong> in your pool below. You can add multiple free keys from Google AI Studio.
+              <div style={{ marginBottom: '8px' }}>
+                For security, Gemini API keys cannot be entered or stored in the browser. Keys are read directly from your server's backend <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '4px' }}>backend/.env</code> file. Multiple keys are separated by commas for automatic rate-limit failover.
+              </div>
+              <div
+                style={{
+                  background: 'rgba(0, 0, 0, 0.35)',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'monospace',
+                  fontSize: '0.8rem',
+                  color: '#93C5FD',
+                  overflowX: 'auto',
+                }}
+              >
+                GEMINI_API_KEYS=AIzaSyKey1...,AIzaSyKey2...,AIzaSyKey3...
               </div>
             </div>
           </div>
 
-          {/* Add Key Inline Form Modal / Box */}
-          {isAddKeyOpen && (
-            <form
-              onSubmit={handleAddGeminiKey}
-              className="glass-panel"
-              style={{
-                padding: '22px 26px',
-                borderRadius: 'var(--radius-xl)',
-                border: '2px solid var(--brand-primary)',
-                animation: 'fadeIn 0.15s ease-out',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Add New Gemini API Key</h4>
-                <button
-                  type="button"
-                  onClick={() => setIsAddKeyOpen(false)}
-                  className="btn btn-secondary btn-icon"
-                  style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '14px', marginBottom: '16px' }}>
-                <div>
-                  <label className="form-label">Key Label / Alias</label>
-                  <input
-                    type="text"
-                    value={newKeyLabel}
-                    onChange={(e) => setNewKeyLabel(e.target.value)}
-                    placeholder="e.g. Backup Key 2"
-                    className="form-input"
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Gemini API Key String *</label>
-                  <input
-                    type="text"
-                    value={newKeyValue}
-                    onChange={(e) => setNewKeyValue(e.target.value)}
-                    placeholder="e.g. AIzaSy..."
-                    className="form-input mono"
-                    required
-                    autoFocus
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button type="button" onClick={() => setIsAddKeyOpen(false)} className="btn btn-secondary btn-sm">
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary btn-sm" style={{ fontWeight: 700 }}>
-                  Save &amp; Add Key
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Configured Keys List */}
+          {/* Configured Keys List from .env */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', paddingLeft: '4px' }}>
-              Configured API Keys ({geminiKeys.length}) — Priority Order (Top to Bottom)
+              Detected Keys in .env ({geminiStatus?.keys_count || 0}) — Automatic Failover Priority
             </div>
 
-            {geminiKeys.map((k, idx) => {
-              const isVisible = visibleKeys[k.id];
-              const testResult = testResults[k.id];
-              const isTesting = testingKeyId === k.id;
-              const isCopied = copiedKeyId === k.id;
+            {(!geminiStatus?.keys || geminiStatus.keys.length === 0) && (
+              <div
+                className="glass-panel"
+                style={{
+                  padding: '28px 24px',
+                  borderRadius: 'var(--radius-lg)',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <AlertCircle size={28} style={{ color: '#F59E0B', marginBottom: '8px' }} />
+                <div style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary)' }}>
+                  No Gemini API Keys Detected in .env
+                </div>
+                <div style={{ fontSize: '0.84rem', marginTop: '4px' }}>
+                  Add <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 6px', borderRadius: '4px' }}>GEMINI_API_KEYS=your_key_1,your_key_2</code> to your <code style={{ background: 'rgba(0,0,0,0.2)', padding: '2px 6px', borderRadius: '4px' }}>backend/.env</code> file and click "Reload from .env" above.
+                </div>
+              </div>
+            )}
+
+            {geminiStatus?.keys?.map((k, idx) => {
+              const testResult = testResults[idx];
+              const isTesting = testingKeyIndex === idx;
 
               return (
                 <div
-                  key={k.id}
+                  key={idx}
                   className="glass-panel"
                   style={{
                     padding: '18px 22px',
@@ -1686,8 +1614,7 @@ export default function SettingsView({
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: '14px',
-                    border: k.isActive ? '1px solid var(--border-subtle)' : '1px solid rgba(255,255,255,0.05)',
-                    opacity: k.isActive ? 1 : 0.6,
+                    border: '1px solid var(--border-subtle)',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '240px' }}>
@@ -1723,38 +1650,34 @@ export default function SettingsView({
                               textTransform: 'uppercase',
                             }}
                           >
-                            Priority 1
+                            Primary Key
+                          </span>
+                        )}
+                        {idx > 0 && (
+                          <span
+                            style={{
+                              fontSize: '0.65rem',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: 'var(--radius-pill)',
+                              background: 'rgba(59, 130, 246, 0.1)',
+                              color: '#60A5FA',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Failover #{idx}
                           </span>
                         )}
                       </div>
 
-                      {/* Masked Key string with toggle */}
+                      {/* Masked Key string */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
-                        <span className="mono" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                          {isVisible
-                            ? k.key
-                            : k.key.length > 10
-                            ? `${k.key.substring(0, 6)}••••••••••••••••${k.key.substring(k.key.length - 4)}`
-                            : '••••••••••••'}
+                        <span className="mono" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                          {k.masked_key}
                         </span>
-
-                        <button
-                          type="button"
-                          onClick={() => setVisibleKeys((prev) => ({ ...prev, [k.id]: !prev[k.id] }))}
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
-                          title={isVisible ? 'Hide key' : 'Show full key'}
-                        >
-                          {isVisible ? <EyeOff size={13} /> : <Eye size={13} />}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleCopyKey(k.id, k.key)}
-                          style={{ background: 'none', border: 'none', color: isCopied ? 'var(--color-success)' : 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
-                          title="Copy key"
-                        >
-                          {isCopied ? <Check size={13} /> : <Copy size={13} />}
-                        </button>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          (from {k.source})
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1777,32 +1700,20 @@ export default function SettingsView({
                         title={testResult.message}
                       >
                         {testResult.success ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
-                        <span>{testResult.success ? 'Online' : 'Failed'}</span>
+                        <span>{testResult.success ? 'Online & Valid' : 'Test Failed'}</span>
                       </span>
                     )}
 
                     <button
                       type="button"
-                      onClick={() => handleTestKey(k)}
+                      onClick={() => handleTestKey(idx)}
                       disabled={isTesting}
                       className="btn btn-secondary btn-sm"
                       style={{ fontSize: '0.76rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
                       {isTesting ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
-                      <span>{isTesting ? 'Testing...' : 'Test Key'}</span>
+                      <span>{isTesting ? 'Testing Key...' : 'Test Connection'}</span>
                     </button>
-
-                    {geminiKeys.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteGeminiKey(k.id)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ color: 'var(--color-danger)', padding: '6px 8px' }}
-                        title="Delete key"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
                   </div>
                 </div>
               );
@@ -1826,7 +1737,7 @@ export default function SettingsView({
             <div>
               <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Need more free Gemini API keys?</div>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Generate free keys instantly with your Google account on Google AI Studio.
+                Generate free keys instantly with your Google account on Google AI Studio and append them to <code style={{ background: 'rgba(0,0,0,0.2)', padding: '1px 5px', borderRadius: '3px' }}>GEMINI_API_KEYS</code> separated by commas.
               </div>
             </div>
 
@@ -1850,6 +1761,8 @@ export default function SettingsView({
           </div>
         </div>
       )}
+
+
 
       {/* 4. VIP RFID CARD & CREDITS SETTINGS TAB */}
       {activeTab === 'vip-card' && (

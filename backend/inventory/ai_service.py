@@ -30,12 +30,28 @@ class GeminiRateLimitError(Exception):
 
 def get_configured_gemini_api_keys() -> List[str]:
     """
-    Safely retrieves configured Gemini API keys from environment variables:
-    Supports:
-    - GEMINI_API_KEYS (comma-separated list for multi-key pool: key1,key2,key3)
-    - GEMINI_API_KEY
-    - GOOGLE_API_KEY
+    Safely retrieves configured Gemini API keys from environment variables and backend/.env:
+    Dynamically inspects backend/.env so runtime additions/updates take effect immediately.
+    Supports comma-separated keys: key1, key2, key3 in GEMINI_API_KEYS, GEMINI_API_KEY, or GOOGLE_API_KEY.
     """
+    # 1. Dynamically re-read backend/.env if present
+    try:
+        from django.conf import settings
+        env_file = settings.BASE_DIR / '.env'
+        if env_file.exists():
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#') or '=' not in line:
+                        continue
+                    k, v = line.split('=', 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k in ('GEMINI_API_KEYS', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'):
+                        os.environ[k] = v
+    except Exception:
+        pass
+
     keys = []
     for env_var in ('GEMINI_API_KEYS', 'GEMINI_API_KEY', 'GOOGLE_API_KEY'):
         raw_val = os.environ.get(env_var, '').strip()
@@ -46,8 +62,6 @@ def get_configured_gemini_api_keys() -> List[str]:
                     keys.append(cleaned)
     return keys
 
-# Pre-configured keys pulled safely from environment
-DEFAULT_GEMINI_API_KEYS = get_configured_gemini_api_keys()
 
 # Models to attempt in priority order (aligned with Google AI current endpoints)
 GEMINI_MODELS = [

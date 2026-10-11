@@ -48,19 +48,15 @@ export default function ScanBillModal({
   const mediaStreamRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Retrieve saved Gemini API keys from localStorage
-  const getSavedApiKeys = () => {
-    try {
-      const raw = localStorage.getItem('wondersale_gemini_api_keys');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((k) => (typeof k === 'string' ? k : k.key)).filter(Boolean);
-        }
-      }
-    } catch (e) {}
-    return [];
-  };
+  const [geminiStatus, setGeminiStatus] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      import('../api').then(({ fetchGeminiStatus }) => {
+        fetchGeminiStatus().then(setGeminiStatus).catch(() => {});
+      });
+    }
+  }, [isOpen]);
 
   // Check camera device count
   useEffect(() => {
@@ -213,8 +209,6 @@ export default function ScanBillModal({
         formData.append('files', f);
       });
 
-      const apiKeys = getSavedApiKeys();
-      formData.append('api_keys', JSON.stringify(apiKeys));
       if (effectiveStoreId) {
         formData.append('store', effectiveStoreId);
       }
@@ -290,7 +284,7 @@ export default function ScanBillModal({
 
   if (!isOpen) return null;
 
-  const savedKeysCount = getSavedApiKeys().length;
+  const savedKeysCount = geminiStatus?.keys_count ?? (geminiStatus?.has_keys ? 1 : 0);
 
   return (
     <div

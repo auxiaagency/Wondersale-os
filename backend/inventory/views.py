@@ -1189,20 +1189,51 @@ class ItemViewSet(viewsets.ModelViewSet):
             'errors': errors
         }, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['get'], url_path='gemini-status')
+    def gemini_status(self, request):
+        """Returns the status and count of Gemini API keys configured in backend/.env without exposing secret keys."""
+        env_keys = get_configured_gemini_api_keys()
+        masked_keys = []
+        for idx, k in enumerate(env_keys):
+            if len(k) > 10:
+                masked = f"{k[:6]}••••••••••••••••{k[-4:]}"
+            else:
+                masked = "••••••••••••"
+            masked_keys.append({
+                'id': f"env_key_{idx + 1}",
+                'label': f"Environment Key #{idx + 1}",
+                'masked': masked,
+                'priority': idx + 1,
+            })
+        return Response({
+            'has_keys': len(env_keys) > 0,
+            'keys_count': len(env_keys),
+            'keys': masked_keys,
+            'source': '.env (GEMINI_API_KEYS)',
+        }, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get', 'post'], url_path='test-gemini-key')
     def test_gemini_key(self, request):
-        """Validates a Gemini API key connection, or tests configured env keys if none provided."""
+        """Validates a Gemini API key connection, testing a specific key index or the first available key in backend/.env."""
         api_key = request.data.get('api_key', '').strip() if request.method == 'POST' else ''
+        key_index = request.data.get('key_index') if request.method == 'POST' else request.query_params.get('key_index')
         env_keys = get_configured_gemini_api_keys()
 
         if not api_key:
-            # If no specific key is provided, test the first available environment key
             if env_keys:
-                api_key = env_keys[0]
+                idx = 0
+                if key_index is not None:
+                    try:
+                        idx = int(key_index)
+                        if idx < 0 or idx >= len(env_keys):
+                            idx = 0
+                    except (ValueError, TypeError):
+                        idx = 0
+                api_key = env_keys[idx]
             else:
                 return Response({
                     'success': False,
-                    'error': 'No API key provided and no GEMINI_API_KEYS configured in backend/.env',
+                    'error': 'No Gemini API keys configured. Please add GEMINI_API_KEYS=key1,key2 in backend/.env',
                     'env_keys_count': 0
                 }, status=status.HTTP_400_BAD_REQUEST)
 
