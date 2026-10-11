@@ -6,7 +6,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from inventory.models import (
-    Store, Item, Category, SubCategory, SaleOrder, SaleOrderItem, CounterPayout, DailyRegisterShift
+    Store, Item, StockMovement, Category, SubCategory, SaleOrder, SaleOrderItem, CounterPayout, DailyRegisterShift
 )
 from staff.models import StaffRole, StaffMember
 from accounting.services import get_monthly_financial_analysis
@@ -285,3 +285,143 @@ class ReturnFinancialIntegrationTests(TestCase):
         ret_order_data = ret_res.data['return_order']
         self.assertEqual(ret_order_data['items'][0]['unit_selling_price'], '950.00')
         self.assertEqual(ret_order_data['items'][0]['total_price'], '950.00')
+
+    def test_exchange_checkout_net_payable_cash_flow(self):
+        """
+        Unified Cart Exchange Flow:
+        - Customer returns 1 unit (effective value ₹1,000.00 from original bill)
+        - Customer purchases 1 new item @ ₹1,500.00
+        - Net Payable = ₹1,500.00 - ₹1,000.00 = ₹500.00
+        - Paid in Cash: ₹500.00
+        - Verifies:
+          1. EXC- invoice prefix created
+          2. is_exchange is True
+          3. Shift expected_cash increases by exactly ₹500.00
+          4. Stock restored for returned item and reduced for purchased item
+        """
+        from django.urls import reverse
+
+        new_item = Item.objects.create(
+            uid='ITEM-NEW-001',
+            name='Mechanical Keyboard',
+            cost_price=Decimal('800.00'),
+            selling_price=Decimal('1500.00'),
+            quantity=10,
+            store=self.store
+        )
+
+        StockMovement.objects.create(item=self.item, change=20, reason=StockMovement.REASON_RESTOCK)
+        StockMovement.objects.create(item=new_item, change=10, reason=StockMovement.REASON_RESTOCK)
+
+        initial_shift_cash = self.shift.expected_cash
+        initial_ret_item_stock = 20
+
+        checkout_url = reverse('sale-order-checkout')
+        payload = {
+            'store_id': self.store.id,
+            'customer_name': 'Exchange Customer',
+            'customer_phone': '9876543210',
+            'payment_method': 'cash',
+            'return_reference': self.order.invoice_number,
+            'return_items': [
+                {
+                    'sale_order_item_id': self.order_item.id,
+                    'quantity': 1,
+                }
+            ],
+            'items': [
+                {
+                    'item_id': new_item.id,
+                    'quantity': 1,
+                    'unit_price': 1500.00,
+                }
+            ],
+            'amount_paid': '500.00',
+        }
+
+        res = self.client.post(checkout_url, payload, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(res.data['invoice_number'].startswith('EXC-'))
+        self.assertTrue(res.data['is_exchange'])
+        self.assertEqual(Decimal(str(res.data['total_amount'])), Decimal('500.00'))
+
+        # Check shift cash balance updated by net cash collected (₹500.00) minus existing cleaning payout (₹1,000.00)
+        cur_res = self.client.get(f'/api/inventory/register-shifts/current-shift/?store={self.store.id}')
+        self.assertEqual(cur_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(Decimal(str(cur_res.data['shift']['live_cash_sales'])), Decimal('500.00'))
+        self.assertEqual(Decimal(str(cur_res.data['shift']['live_expected_cash'])), initial_shift_cash + Decimal('500.00') - Decimal('1000.00'))
+
+        # Check stock changes
+        self.item.refresh_from_db()
+        new_item.refresh_from_db()
+        self.assertEqual(self.item.quantity, initial_ret_item_stock + 1)
+        self.assertEqual(new_item.quantity, 9)
+
+    def test_exchange_checkout_net_refund_cash_flow(self):
+        """
+        Unified Cart Exchange Flow with Net Refund:
+        - Customer returns 1 unit (effective value ₹1,000.00)
+        - Customer purchases 1 cheaper item @ ₹400.00
+        - Net Refund to disburse = ₹600.00
+        - Refund paid in Cash: ₹600.00
+        - Verifies:
+          1. EXC- invoice prefix created
+          2. CounterPayout(category='customer_refund', payment_method='cash') created for ₹600.00
+          3. Live expected cash decrements by ₹600.00
+        """
+        from django.urls import reverse
+
+        cheap_item = Item.objects.create(
+            uid='ITEM-CHEAP-001',
+            name='Mousepad',
+            cost_price=Decimal('150.00'),
+            selling_price=Decimal('400.00'),
+            quantity=15,
+            store=self.store
+        )
+
+        initial_shift_cash = self.shift.expected_cash
+
+        checkout_url = reverse('sale-order-checkout')
+        payload = {
+            'store_id': self.store.id,
+            'customer_name': 'Refund Exchange Customer',
+            'customer_phone': '9876543210',
+            'payment_method': 'cash',
+            'return_reference': self.order.invoice_number,
+            'return_items': [
+                {
+                    'sale_order_item_id': self.order_item.id,
+                    'quantity': 1,
+                }
+            ],
+            'items': [
+                {
+                    'item_id': cheap_item.id,
+                    'quantity': 1,
+                    'unit_price': 400.00,
+                }
+            ],
+            'amount_paid': '0.00',
+        }
+
+        res = self.client.post(checkout_url, payload, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(res.data['invoice_number'].startswith('EXC-'))
+        self.assertTrue(res.data['is_exchange'])
+
+        # Check CounterPayout was automatically recorded for net cash refund tagged to current shift
+        payout = CounterPayout.objects.filter(
+            category=CounterPayout.CATEGORY_REFUND,
+            payment_method='cash',
+            amount=Decimal('600.00')
+        ).first()
+        self.assertIsNotNone(payout)
+        self.assertEqual(payout.register_shift_id, self.shift.id)
+
+        # Check live shift expected cash decremented by ₹600.00
+        cur_res = self.client.get(f'/api/inventory/register-shifts/current-shift/?store={self.store.id}')
+        self.assertEqual(cur_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(Decimal(str(cur_res.data['shift']['live_cash_payouts'])), Decimal('600.00'))
+        self.assertEqual(Decimal(str(cur_res.data['shift']['live_expected_cash'])), initial_shift_cash - Decimal('600.00'))
+

@@ -1136,7 +1136,30 @@ class SaleOrder(models.Model):
         max_length=64,
         blank=True,
         default="",
-        help_text="Original invoice number if this order is a return/credit note."
+        help_text="Original invoice number if this order is a return/credit note or exchange."
+    )
+    is_exchange = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True if order contains both return and new purchase items (exchange invoice)."
+    )
+    return_total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Total credited value of goods returned in this order (₹)"
+    )
+    exchange_purchase_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Total gross value of newly purchased goods in this exchange (₹)"
+    )
+    net_payable_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Net payable amount after deducting return credit (₹)"
     )
     notes = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1239,6 +1262,16 @@ class SaleOrderItem(models.Model):
     returned_quantity = models.PositiveIntegerField(
         default=0,
         help_text="Total units of this line item returned across return transactions."
+    )
+    is_return = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True if this line item represents a returned good in an exchange/return order."
+    )
+    original_order_item_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="ID of the original SaleOrderItem being returned."
     )
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
 

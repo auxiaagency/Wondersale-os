@@ -1049,6 +1049,40 @@ def generate_next_return_number(store=None) -> str:
     return candidate
 
 
+def generate_next_exchange_number(store=None) -> str:
+    """Generates sequential daily exchange invoice number e.g. EXC-20260911-0001 with collision prevention."""
+    from django.db import transaction
+    from .models import GlobalSequence
+
+    today_str = timezone.now().strftime('%Y%m%d')
+    prefix = f"EXC-{today_str}-"
+    seq_name = f"exchange_{today_str}"
+
+    with transaction.atomic():
+        seq_obj, created = GlobalSequence.objects.select_for_update().get_or_create(
+            name=seq_name,
+            defaults={'current_value': 0}
+        )
+        if created or seq_obj.current_value == 0:
+            last_order = SaleOrder.objects.filter(invoice_number__startswith=prefix).order_by('-invoice_number').first()
+            if last_order and last_order.invoice_number.startswith(prefix):
+                try:
+                    seq_obj.current_value = int(last_order.invoice_number.split('-')[-1])
+                except Exception:
+                    seq_obj.current_value = 0
+
+        seq_obj.current_value += 1
+        candidate_seq = seq_obj.current_value
+        candidate = f"{prefix}{candidate_seq:04d}"
+        while SaleOrder.objects.filter(invoice_number=candidate).exists():
+            candidate_seq += 1
+            candidate = f"{prefix}{candidate_seq:04d}"
+        seq_obj.current_value = candidate_seq
+        seq_obj.save(update_fields=['current_value', 'updated_at'])
+
+    return candidate
+
+
 class CustomerSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(read_only=True)
     store_name = serializers.CharField(source='store.name', read_only=True)
@@ -1307,9 +1341,11 @@ class SaleOrderItemSerializer(serializers.ModelSerializer):
             'quantity',
             'returned_quantity',
             'returnable_quantity',
+            'is_return',
+            'original_order_item_id',
             'total_price',
         ]
-        read_only_fields = ['id', 'returned_quantity', 'returnable_quantity', 'effective_unit_price', 'has_discount']
+        read_only_fields = ['id', 'returned_quantity', 'returnable_quantity', 'effective_unit_price', 'has_discount', 'is_return', 'original_order_item_id']
 
     def get_returnable_quantity(self, obj):
         return max(0, obj.quantity - (obj.returned_quantity or 0))
@@ -1377,6 +1413,10 @@ class SaleOrderSerializer(serializers.ModelSerializer):
             'id',
             'invoice_number',
             'return_reference',
+            'is_exchange',
+            'return_total_amount',
+            'exchange_purchase_amount',
+            'net_payable_amount',
             'store',
             'store_name',
             'store_address',
@@ -1767,7 +1807,9 @@ class CheckoutSerializer(serializers.Serializer):
     discount_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
     tax_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=Decimal('0.00'))
     notes = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
-    items = CheckoutItemInputSerializer(many=True, required=True)
+    return_reference = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+    return_items = ProcessReturnItemSerializer(many=True, required=False, default=list)
+    items = CheckoutItemInputSerializer(many=True, required=False, default=list)
 
     def validate_customer_phone(self, value):
         import re
@@ -1776,19 +1818,36 @@ class CheckoutSerializer(serializers.Serializer):
             raise serializers.ValidationError("Customer phone number must be exactly 10 digits (no more, no less).")
         return clean
 
-    def validate_items(self, value):
-        if not value:
-            raise serializers.ValidationError("Cart cannot be empty.")
+    def validate(self, attrs):
+        items = attrs.get('items', [])
+        return_items = attrs.get('return_items', [])
+        if not items and not return_items:
+            raise serializers.ValidationError({"non_field_errors": ["Cart cannot be empty. Please add items to purchase or return."]})
+
         seen_item_ids = set()
-        for ci in value:
+        for ci in items:
             iid = ci.get('item_id')
             if iid in seen_item_ids:
-                raise serializers.ValidationError(f"Duplicate item ID #{iid} in cart. Please combine quantities into a single line item.")
+                raise serializers.ValidationError({"items": [f"Duplicate item ID #{iid} in cart. Please combine quantities into a single line item."]})
             seen_item_ids.add(iid)
-        return value
+
+        if return_items:
+            ret_ref = attrs.get('return_reference', '').strip()
+            if not ret_ref:
+                raise serializers.ValidationError({"return_reference": ["Original invoice number (return_reference) is required when returning items."]})
+
+            seen_line_ids = set()
+            for r_item in return_items:
+                lid = r_item.get('sale_order_item_id')
+                if lid in seen_line_ids:
+                    raise serializers.ValidationError({"return_items": [f"Duplicate line item ID #{lid} in return request. Please combine quantities."]})
+                seen_line_ids.add(lid)
+
+        return attrs
 
     def create(self, validated_data):
         from django.db import transaction
+        from django.db.models import Sum
 
         store_id = validated_data['store_id']
         try:
@@ -1799,6 +1858,7 @@ class CheckoutSerializer(serializers.Serializer):
         request = self.context.get('request')
         staff = get_current_staff(request) if request else None
         cashier_name = staff.name if staff else "Cashier"
+        cashier_role = staff.role.name if staff and staff.role else "Cashier"
 
         # Enforce Active Register Shift: Cannot bill anything if register shift is not open
         shift_qs = DailyRegisterShift.objects.filter(
@@ -1808,7 +1868,6 @@ class CheckoutSerializer(serializers.Serializer):
         if staff:
             open_shift = shift_qs.filter(cashier=staff).order_by('-opened_at').first()
             if not open_shift:
-                # Backward compatibility: check if there is an unassigned open shift or matching name
                 open_shift = shift_qs.filter(
                     Q(cashier__isnull=True) | Q(cashier_name__iexact=staff.name)
                 ).order_by('-opened_at').first()
@@ -1830,139 +1889,161 @@ class CheckoutSerializer(serializers.Serializer):
         discount_amount = Decimal(str(validated_data.get('discount_amount', 0.00)))
         tax_amount = Decimal(str(validated_data.get('tax_amount', 0.00)))
         notes = validated_data.get('notes', '')
-        cart_items = validated_data['items']
+        cart_items = validated_data.get('items', [])
+        return_items = validated_data.get('return_items', [])
+        ret_reference_input = validated_data.get('return_reference', '').strip()
 
         with transaction.atomic():
-            # 1. Validate all items and their stock availability
-            item_ids = [ci['item_id'] for ci in cart_items]
-            items_by_id = {
-                item.id: item
-                for item in Item.objects.select_for_update().filter(id__in=item_ids)
-            }
+            prepared_returns = []
+            total_return_credit = Decimal('0.00')
+            orig_order = None
 
+            # ---------------- 1. Validate & Prepare Return Items (if any) ----------------
+            if return_items:
+                orig_order = SaleOrder.objects.select_for_update().filter(invoice_number__iexact=ret_reference_input).first()
+                if not orig_order:
+                    raise serializers.ValidationError({"return_reference": [f"Original bill #{ret_reference_input} was not found."]})
+
+                if orig_order.invoice_number.startswith('RET-'):
+                    raise serializers.ValidationError({"return_reference": ["Cannot return items from a return voucher."]})
+
+                prev_return_orders = SaleOrder.objects.filter(
+                    return_reference=orig_order.invoice_number
+                ).filter(Q(status=SaleOrder.STATUS_REFUNDED) | Q(is_exchange=True))
+                total_already_refunded = prev_return_orders.aggregate(t=Sum('return_total_amount'))['t'] or Decimal('0.00')
+                if total_already_refunded == Decimal('0.00'):
+                    total_already_refunded = SaleOrder.objects.filter(
+                        return_reference=orig_order.invoice_number,
+                        status=SaleOrder.STATUS_REFUNDED
+                    ).aggregate(t=Sum('total_amount'))['t'] or Decimal('0.00')
+
+                remaining_bill_refundable = max(Decimal('0.00'), (orig_order.total_amount or Decimal('0.00')) - total_already_refunded)
+
+                all_orig_items = {it.id: it for it in orig_order.items.select_for_update().all()}
+                orig_order_total = orig_order.total_amount or Decimal('0.00')
+                orig_items_total = sum((it.total_price for it in all_orig_items.values()), Decimal('0.00'))
+
+                for r_item in return_items:
+                    line_id = r_item['sale_order_item_id']
+                    qty = r_item['quantity']
+                    line_obj = all_orig_items.get(line_id)
+
+                    if not line_obj:
+                        raise serializers.ValidationError({"return_items": [f"Line item ID #{line_id} does not belong to bill #{orig_order.invoice_number}."]})
+
+                    avail_qty = max(0, line_obj.quantity - (line_obj.returned_quantity or 0))
+                    if qty > avail_qty:
+                        raise serializers.ValidationError({
+                            "return_items": [f"Cannot return {qty} units of '{line_obj.item_name}'. Only {avail_qty} unit(s) available to return."]
+                        })
+
+                    line_total = line_obj.total_price or Decimal('0.00')
+                    if orig_items_total > Decimal('0.00') and orig_order_total < orig_items_total:
+                        line_effective_total = (line_total * (orig_order_total / orig_items_total)).quantize(Decimal('0.01'))
+                    else:
+                        line_effective_total = line_total
+
+                    effective_unit_price = (line_effective_total / Decimal(line_obj.quantity)).quantize(Decimal('0.01'))
+                    prev_line_refunded = (effective_unit_price * Decimal(line_obj.returned_quantity or 0)).quantize(Decimal('0.01'))
+
+                    if qty == avail_qty:
+                        refund_for_line = max(Decimal('0.00'), line_effective_total - prev_line_refunded)
+                    else:
+                        refund_for_line = (effective_unit_price * Decimal(qty)).quantize(Decimal('0.01'))
+
+                    total_return_credit += refund_for_line
+                    prepared_returns.append((line_obj, qty, refund_for_line, effective_unit_price))
+
+                # Exact zero-out paisa alignment if 100% of bill returned
+                consolidated_ret_qtys = {r['sale_order_item_id']: r['quantity'] for r in return_items}
+                total_remaining_after_this = sum(
+                    max(0, it.quantity - (it.returned_quantity or 0) - consolidated_ret_qtys.get(it.id, 0))
+                    for it in all_orig_items.values()
+                )
+                if total_remaining_after_this == 0 and prepared_returns and remaining_bill_refundable > Decimal('0.00'):
+                    diff = remaining_bill_refundable - total_return_credit
+                    if abs(diff) <= Decimal('0.05') and diff != Decimal('0.00'):
+                        last_item, last_qty, last_refund, last_eff = prepared_returns[-1]
+                        adjusted_refund = last_refund + diff
+                        prepared_returns[-1] = (last_item, last_qty, adjusted_refund, last_eff)
+                        total_return_credit = remaining_bill_refundable
+
+            # ---------------- 2. Validate & Prepare Purchase Items (if any) ----------------
             line_items_data = []
-            subtotal = Decimal('0.00')
+            gross_purchase_subtotal = Decimal('0.00')
 
-            for ci in cart_items:
-                i_id = ci['item_id']
-                qty = ci['quantity']
-                item = items_by_id.get(i_id)
+            if cart_items:
+                item_ids = [ci['item_id'] for ci in cart_items]
+                items_by_id = {
+                    item.id: item
+                    for item in Item.objects.select_for_update().filter(id__in=item_ids)
+                }
 
-                if not item:
-                    raise serializers.ValidationError(f"Item ID {i_id} not found in inventory.")
+                for ci in cart_items:
+                    i_id = ci['item_id']
+                    qty = ci['quantity']
+                    item = items_by_id.get(i_id)
 
-                # Strict Out-of-Stock Enforcement (No negative inventory allowed)
-                if item.quantity <= 0:
-                    raise serializers.ValidationError(
-                        f"Item '{item.name}' (UID: {item.uid}) is Out of Stock (0 available in inventory). Cannot complete sale."
-                    )
-                if item.quantity < qty:
-                    raise serializers.ValidationError(
-                        f"Insufficient stock for '{item.name}' (UID: {item.uid}). Only {item.quantity} available in inventory, but {qty} requested."
-                    )
+                    if not item:
+                        raise serializers.ValidationError(f"Item ID {i_id} not found in inventory.")
 
-                custom_unit_price = ci.get('unit_price')
-                disc_pct = Decimal(str(ci.get('discount_percent') or 0.00))
+                    if item.quantity <= 0:
+                        raise serializers.ValidationError(
+                            f"Item '{item.name}' (UID: {item.uid}) is Out of Stock (0 available in inventory). Cannot complete sale."
+                        )
+                    if item.quantity < qty:
+                        raise serializers.ValidationError(
+                            f"Insufficient stock for '{item.name}' (UID: {item.uid}). Only {item.quantity} available in inventory, but {qty} requested."
+                        )
 
-                if custom_unit_price is not None and Decimal(str(custom_unit_price)) >= Decimal('0.00'):
-                    unit_selling = Decimal(str(custom_unit_price)).quantize(Decimal('0.01'))
-                else:
-                    unit_selling = Decimal(str(item.selling_price))
+                    custom_unit_price = ci.get('unit_price')
+                    disc_pct = Decimal(str(ci.get('discount_percent') or 0.00))
 
-                unit_cost = Decimal(str(item.cost_price))
-                unit_mrp = Decimal(str(item.effective_mrp)) if item.effective_mrp else unit_selling
-                base_line = (unit_selling * qty).quantize(Decimal('0.01'))
+                    if custom_unit_price is not None and Decimal(str(custom_unit_price)) >= Decimal('0.00'):
+                        unit_selling = Decimal(str(custom_unit_price)).quantize(Decimal('0.01'))
+                    else:
+                        unit_selling = Decimal(str(item.selling_price))
 
-                if disc_pct > Decimal('0.00'):
-                    disc_pct_clamped = min(Decimal('100.00'), max(Decimal('0.00'), disc_pct))
-                    disc_val = (base_line * (disc_pct_clamped / Decimal('100.00'))).quantize(Decimal('0.01'))
-                    line_total = max(Decimal('0.00'), base_line - disc_val).quantize(Decimal('0.01'))
-                else:
-                    line_total = base_line
+                    unit_cost = Decimal(str(item.cost_price))
+                    unit_mrp = Decimal(str(item.effective_mrp)) if item.effective_mrp else unit_selling
+                    base_line = (unit_selling * qty).quantize(Decimal('0.01'))
 
-                subtotal += base_line
+                    if disc_pct > Decimal('0.00'):
+                        disc_pct_clamped = min(Decimal('100.00'), max(Decimal('0.00'), disc_pct))
+                        disc_val = (base_line * (disc_pct_clamped / Decimal('100.00'))).quantize(Decimal('0.01'))
+                        line_total = max(Decimal('0.00'), base_line - disc_val).quantize(Decimal('0.01'))
+                    else:
+                        line_total = base_line
 
-                line_items_data.append({
-                    'item': item,
-                    'item_name': item.name,
-                    'item_uid': item.uid,
-                    'unit_cost_price': unit_cost,
-                    'unit_selling_price': unit_selling,
-                    'unit_mrp': unit_mrp,
-                    'quantity': qty,
-                    'total_price': line_total,
-                })
+                    gross_purchase_subtotal += base_line
 
-            total_amount = max(Decimal('0.00'), subtotal + tax_amount - discount_amount).quantize(Decimal('0.01'))
-            raw_paid = validated_data.get('amount_paid')
-            split_cash_amt = Decimal(str(validated_data.get('split_cash_amount', 0.00))).quantize(Decimal('0.01'))
-            split_upi_amt = Decimal(str(validated_data.get('split_upi_amount', 0.00))).quantize(Decimal('0.01'))
-
-            order_status = SaleOrder.STATUS_COMPLETED
-            balance_due = Decimal('0.00')
-            is_fully_paid = True
-
-            if payment_method == SaleOrder.PAYMENT_PARTIAL:
-                # Partial / Due Payment (Khata)
-                initial_paid = Decimal(str(raw_paid or 0.00)).quantize(Decimal('0.01'))
-                if initial_paid < 0:
-                    raise serializers.ValidationError({"amount_paid": "Amount paid cannot be negative."})
-                if initial_paid > total_amount:
-                    raise serializers.ValidationError({"amount_paid": f"Initial paid amount (₹{initial_paid}) cannot exceed total amount (₹{total_amount})."})
-                
-                amount_paid = initial_paid
-                balance_due = (total_amount - amount_paid).quantize(Decimal('0.01'))
-                change_returned = Decimal('0.00')
-                if balance_due > Decimal('0.00'):
-                    order_status = SaleOrder.STATUS_PARTIAL
-                    is_fully_paid = False
-                else:
-                    order_status = SaleOrder.STATUS_COMPLETED
-                    is_fully_paid = True
-
-            elif payment_method == SaleOrder.PAYMENT_SPLIT:
-                if split_cash_amt < 0 or split_upi_amt < 0:
-                    raise serializers.ValidationError({"payment_method": "Split amounts cannot be negative."})
-
-                # If only one was provided, auto-calculate the other
-                if split_cash_amt > 0 and split_upi_amt == Decimal('0.00'):
-                    split_upi_amt = max(Decimal('0.00'), total_amount - split_cash_amt).quantize(Decimal('0.01'))
-                elif split_upi_amt > 0 and split_cash_amt == Decimal('0.00'):
-                    split_cash_amt = max(Decimal('0.00'), total_amount - split_upi_amt).quantize(Decimal('0.01'))
-
-                split_sum = (split_cash_amt + split_upi_amt).quantize(Decimal('0.01'))
-                if abs(split_sum - total_amount) > Decimal('0.05'):
-                    raise serializers.ValidationError({
-                        "payment_method": f"Split amounts (Cash ₹{split_cash_amt} + UPI ₹{split_upi_amt} = ₹{split_sum}) must equal total payable amount ₹{total_amount}."
+                    line_items_data.append({
+                        'item': item,
+                        'item_name': item.name,
+                        'item_uid': item.uid,
+                        'unit_cost_price': unit_cost,
+                        'unit_selling_price': unit_selling,
+                        'unit_mrp': unit_mrp,
+                        'quantity': qty,
+                        'total_price': line_total,
+                        'is_return': False,
+                        'original_order_item_id': None,
                     })
 
-                # In split payment, raw_paid represents cash tendered for the cash portion
-                if raw_paid is not None and Decimal(str(raw_paid)) > 0:
-                    tendered = Decimal(str(raw_paid)).quantize(Decimal('0.01'))
-                    if tendered >= split_cash_amt:
-                        amount_paid = tendered
-                        change_returned = (tendered - split_cash_amt).quantize(Decimal('0.01'))
-                    else:
-                        amount_paid = split_cash_amt
-                        change_returned = Decimal('0.00')
-                else:
-                    amount_paid = split_cash_amt
-                    change_returned = Decimal('0.00')
-                balance_due = Decimal('0.00')
-                is_fully_paid = True
+            # ---------------- 3. Classify Transaction Type ----------------
+            is_pure_return = bool(return_items and not cart_items)
+            is_exchange = bool(return_items and cart_items)
+            is_standard_sale = bool(cart_items and not return_items)
 
-            elif payment_method != SaleOrder.PAYMENT_CASH or raw_paid is None or Decimal(str(raw_paid)) <= 0:
-                amount_paid = total_amount
-                change_returned = Decimal('0.00')
-                balance_due = Decimal('0.00')
-                is_fully_paid = True
-            else:
-                amount_paid = Decimal(str(raw_paid)).quantize(Decimal('0.01'))
-                change_returned = max(Decimal('0.00'), amount_paid - total_amount).quantize(Decimal('0.01'))
-                balance_due = Decimal('0.00')
-                is_fully_paid = True
+            # Purchase net after order discount
+            net_purchase_total = max(Decimal('0.00'), gross_purchase_subtotal + tax_amount - discount_amount).quantize(Decimal('0.01'))
+            raw_net_settlement = (net_purchase_total - total_return_credit).quantize(Decimal('0.01'))
 
-            # 2. Get or create Customer
+            is_store_refunding_customer = (raw_net_settlement < Decimal('0.00'))
+            net_payable = max(Decimal('0.00'), raw_net_settlement)
+            net_refund_amount = abs(raw_net_settlement) if is_store_refunding_customer else Decimal('0.00')
+
+            # ---------------- 4. Customer Handling ----------------
             customer, created = Customer.objects.select_for_update().get_or_create(phone=raw_phone)
             if created or not customer.store_id:
                 customer.store = store
@@ -1971,48 +2052,122 @@ class CheckoutSerializer(serializers.Serializer):
             if raw_email and not customer.email:
                 customer.email = raw_email
 
-            vip_discount_amt = Decimal('0.00')
+            # ---------------- 5. Financial Settlement Calculations ----------------
+            raw_paid = validated_data.get('amount_paid')
+            split_cash_amt = Decimal(str(validated_data.get('split_cash_amount', 0.00))).quantize(Decimal('0.01'))
+            split_upi_amt = Decimal(str(validated_data.get('split_upi_amount', 0.00))).quantize(Decimal('0.01'))
+
+            order_status = SaleOrder.STATUS_COMPLETED
+            balance_due = Decimal('0.00')
+            is_fully_paid = True
+            change_returned = Decimal('0.00')
             card_uid_to_record = ""
+            vip_discount_amt = Decimal('0.00')
 
-            # 2a. VIP Card Payment Processing & Balance Verification
-            if payment_method == SaleOrder.PAYMENT_VIP_CARD:
-                if not customer.vip_card_uid or customer.vip_card_status != 'active':
-                    raise serializers.ValidationError({
-                        "payment_method": f"Customer ({customer.phone}) does not have an active VIP Card. Cannot checkout with VIP Card."
-                    })
+            if is_store_refunding_customer:
+                # Store is giving money / credit back to the customer
+                total_amount = net_refund_amount
+                amount_paid = Decimal('0.00')
+                if is_pure_return:
+                    order_status = SaleOrder.STATUS_REFUNDED
 
-                if vip_card_uid_input and customer.vip_card_uid.strip().lower() != vip_card_uid_input.strip().lower():
-                    raise serializers.ValidationError({
-                        "vip_card_uid": f"Tapped Card UID '{vip_card_uid_input}' does not match Customer's assigned Card UID '{customer.vip_card_uid}'."
-                    })
+                # VIP Card refund
+                if payment_method == SaleOrder.PAYMENT_VIP_CARD:
+                    if not customer.vip_card_uid or customer.vip_card_status != 'active':
+                        raise serializers.ValidationError({"payment_method": "Customer does not have an active VIP Card to receive store credit refund."})
+                    card_uid_to_record = customer.vip_card_uid
+                    customer.vip_card_balance = (customer.vip_card_balance + net_refund_amount).quantize(Decimal('0.01'))
 
-                if customer.vip_card_balance < total_amount:
-                    raise serializers.ValidationError({
-                        "amount_paid": f"Insufficient VIP Card balance. Available: ₹{customer.vip_card_balance}, Required: ₹{total_amount}. Please recharge the card."
-                    })
+            else:
+                # Customer owes money (or even exchange 0.00)
+                total_amount = net_payable
 
-                card_uid_to_record = customer.vip_card_uid
-                vip_discount_amt = discount_amount
-                customer.vip_card_balance = (customer.vip_card_balance - total_amount).quantize(Decimal('0.01'))
-                customer.total_vip_savings = ((customer.total_vip_savings or Decimal('0.00')) + vip_discount_amt).quantize(Decimal('0.01'))
+                if payment_method == SaleOrder.PAYMENT_PARTIAL and total_amount > Decimal('0.00'):
+                    initial_paid = Decimal(str(raw_paid or 0.00)).quantize(Decimal('0.01'))
+                    if initial_paid < 0:
+                        raise serializers.ValidationError({"amount_paid": "Amount paid cannot be negative."})
+                    if initial_paid > total_amount:
+                        raise serializers.ValidationError({"amount_paid": f"Initial paid amount (₹{initial_paid}) cannot exceed net payable amount (₹{total_amount})."})
+                    amount_paid = initial_paid
+                    balance_due = (total_amount - amount_paid).quantize(Decimal('0.01'))
+                    if balance_due > Decimal('0.00'):
+                        order_status = SaleOrder.STATUS_PARTIAL
+                        is_fully_paid = False
 
-            customer.total_purchases_count = (customer.total_purchases_count or 0) + 1
-            current_spent = customer.total_spent if customer.total_spent is not None else Decimal('0.00')
-            customer.total_spent = (current_spent + total_amount).quantize(Decimal('0.01'))
-            customer.last_purchase_date = timezone.now()
+                elif payment_method == SaleOrder.PAYMENT_SPLIT and total_amount > Decimal('0.00'):
+                    if split_cash_amt < 0 or split_upi_amt < 0:
+                        raise serializers.ValidationError({"payment_method": "Split amounts cannot be negative."})
+                    if split_cash_amt > 0 and split_upi_amt == Decimal('0.00'):
+                        split_upi_amt = max(Decimal('0.00'), total_amount - split_cash_amt).quantize(Decimal('0.01'))
+                    elif split_upi_amt > 0 and split_cash_amt == Decimal('0.00'):
+                        split_cash_amt = max(Decimal('0.00'), total_amount - split_upi_amt).quantize(Decimal('0.01'))
+                    split_sum = (split_cash_amt + split_upi_amt).quantize(Decimal('0.01'))
+                    if abs(split_sum - total_amount) > Decimal('0.05'):
+                        raise serializers.ValidationError({
+                            "payment_method": f"Split amounts (Cash ₹{split_cash_amt} + UPI ₹{split_upi_amt} = ₹{split_sum}) must equal net payable amount ₹{total_amount}."
+                        })
+                    if raw_paid is not None and Decimal(str(raw_paid)) > 0:
+                        tendered = Decimal(str(raw_paid)).quantize(Decimal('0.01'))
+                        if tendered >= split_cash_amt:
+                            amount_paid = tendered
+                            change_returned = (tendered - split_cash_amt).quantize(Decimal('0.01'))
+                        else:
+                            amount_paid = split_cash_amt
+                    else:
+                        amount_paid = split_cash_amt
+
+                elif payment_method == SaleOrder.PAYMENT_VIP_CARD and total_amount > Decimal('0.00'):
+                    if not customer.vip_card_uid or customer.vip_card_status != 'active':
+                        raise serializers.ValidationError({"payment_method": f"Customer ({customer.phone}) does not have an active VIP Card."})
+                    if vip_card_uid_input and customer.vip_card_uid.strip().lower() != vip_card_uid_input.strip().lower():
+                        raise serializers.ValidationError({"vip_card_uid": f"Tapped Card UID '{vip_card_uid_input}' does not match Customer's assigned Card UID."})
+                    if customer.vip_card_balance < total_amount:
+                        raise serializers.ValidationError({"amount_paid": f"Insufficient VIP Card balance. Available: ₹{customer.vip_card_balance}, Required: ₹{total_amount}."})
+                    card_uid_to_record = customer.vip_card_uid
+                    vip_discount_amt = discount_amount
+                    customer.vip_card_balance = (customer.vip_card_balance - total_amount).quantize(Decimal('0.01'))
+                    customer.total_vip_savings = ((customer.total_vip_savings or Decimal('0.00')) + vip_discount_amt).quantize(Decimal('0.01'))
+                    amount_paid = total_amount
+
+                elif payment_method != SaleOrder.PAYMENT_CASH or raw_paid is None or Decimal(str(raw_paid)) <= 0:
+                    amount_paid = total_amount
+                else:
+                    amount_paid = Decimal(str(raw_paid)).quantize(Decimal('0.01'))
+                    change_returned = max(Decimal('0.00'), amount_paid - total_amount).quantize(Decimal('0.01'))
+
+            # Update customer statistics
+            if is_pure_return:
+                customer.total_spent = max(Decimal('0.00'), (customer.total_spent or Decimal('0.00')) - total_return_credit)
+            else:
+                customer.total_purchases_count = (customer.total_purchases_count or 0) + 1
+                current_spent = customer.total_spent if customer.total_spent is not None else Decimal('0.00')
+                net_spend_delta = raw_net_settlement
+                customer.total_spent = max(Decimal('0.00'), current_spent + net_spend_delta).quantize(Decimal('0.01'))
+                customer.last_purchase_date = timezone.now()
             customer.save()
 
-            # 3. Create SaleOrder
-            invoice_num = generate_next_invoice_number(store)
+            # ---------------- 6. Generate Invoice Number & Prefix ----------------
+            if is_exchange:
+                invoice_num = generate_next_exchange_number(store)
+            elif is_pure_return:
+                invoice_num = generate_next_return_number(store)
+            else:
+                invoice_num = generate_next_invoice_number(store)
+
             sale_order = SaleOrder.objects.create(
                 invoice_number=invoice_num,
+                return_reference=ret_reference_input if return_items else "",
+                is_exchange=is_exchange,
+                return_total_amount=total_return_credit,
+                exchange_purchase_amount=gross_purchase_subtotal,
+                net_payable_amount=net_payable,
                 store=store,
                 customer=customer,
                 customer_phone=raw_phone,
                 customer_name=customer.name or raw_name,
                 cashier=staff,
                 cashier_name=cashier_name,
-                subtotal=subtotal,
+                subtotal=gross_purchase_subtotal if not is_pure_return else total_return_credit,
                 tax_amount=tax_amount,
                 discount_amount=discount_amount,
                 vip_card_uid=card_uid_to_record,
@@ -2030,62 +2185,122 @@ class CheckoutSerializer(serializers.Serializer):
                 notes=notes,
             )
 
-            # Record initial OrderPaymentTransaction if any amount was collected on checkout
-            initial_tx_method = initial_pay_method if payment_method == SaleOrder.PAYMENT_PARTIAL else (
-                'cash' if payment_method == SaleOrder.PAYMENT_CASH else
-                'upi' if payment_method == SaleOrder.PAYMENT_UPI else
-                'card' if payment_method == SaleOrder.PAYMENT_CARD else
-                'vip_card' if payment_method == SaleOrder.PAYMENT_VIP_CARD else
-                'split' if payment_method == SaleOrder.PAYMENT_SPLIT else 'other'
-            )
-
-            if payment_method == SaleOrder.PAYMENT_SPLIT:
-                if split_cash_amt > Decimal('0.00'):
-                    OrderPaymentTransaction.objects.create(
-                        order=sale_order,
-                        store=store,
-                        amount=split_cash_amt,
-                        payment_method='cash',
-                        collected_by=staff,
-                        collected_by_name=cashier_name,
-                        notes=f"Initial Split Payment (Cash) on Checkout #{invoice_num}"
-                    )
-                if split_upi_amt > Decimal('0.00'):
-                    OrderPaymentTransaction.objects.create(
-                        order=sale_order,
-                        store=store,
-                        amount=split_upi_amt,
-                        payment_method='upi',
-                        collected_by=staff,
-                        collected_by_name=cashier_name,
-                        notes=f"Initial Split Payment (UPI) on Checkout #{invoice_num}"
-                    )
-            elif amount_paid > Decimal('0.00'):
-                effective_recorded_amt = total_amount if payment_method == SaleOrder.PAYMENT_CASH and change_returned > 0 else amount_paid
-                OrderPaymentTransaction.objects.create(
-                    order=sale_order,
+            # ---------------- 7. Cash Drawer Payout vs Inflow Handling ----------------
+            now_dt = timezone.now()
+            if is_store_refunding_customer and payment_method == SaleOrder.PAYMENT_CASH:
+                # Deduct cash refund from counter register drawer
+                payout_num = generate_next_payout_number(store)
+                CounterPayout.objects.create(
+                    payout_number=payout_num,
                     store=store,
-                    amount=effective_recorded_amt,
-                    payment_method=initial_tx_method,
-                    collected_by=staff,
-                    collected_by_name=cashier_name,
-                    notes=f"Initial Payment on Checkout #{invoice_num}" + (f" (Due: ₹{balance_due})" if balance_due > 0 else "")
+                    register_shift=open_shift,
+                    amount=net_refund_amount,
+                    category=CounterPayout.CATEGORY_REFUND,
+                    payment_method=CounterPayout.PAYMENT_CASH,
+                    paid_to=customer.name or raw_name or "Customer Return",
+                    paid_by=staff,
+                    paid_by_name=cashier_name,
+                    reason=f"Cash Refund for {'Exchange' if is_exchange else 'Return'} #{invoice_num} (Orig: #{ret_reference_input})",
+                    receipt_number=invoice_num,
+                    paid_at=now_dt,
+                )
+            elif not is_store_refunding_customer:
+                # Normal inflow / payment
+                initial_tx_method = initial_pay_method if payment_method == SaleOrder.PAYMENT_PARTIAL else (
+                    'cash' if payment_method == SaleOrder.PAYMENT_CASH else
+                    'upi' if payment_method == SaleOrder.PAYMENT_UPI else
+                    'card' if payment_method == SaleOrder.PAYMENT_CARD else
+                    'vip_card' if payment_method == SaleOrder.PAYMENT_VIP_CARD else
+                    'split' if payment_method == SaleOrder.PAYMENT_SPLIT else 'other'
                 )
 
-            # Record VIP Card Debit Transaction
-            if payment_method == SaleOrder.PAYMENT_VIP_CARD:
+                if payment_method == SaleOrder.PAYMENT_SPLIT:
+                    if split_cash_amt > Decimal('0.00'):
+                        OrderPaymentTransaction.objects.create(
+                            order=sale_order,
+                            store=store,
+                            amount=split_cash_amt,
+                            payment_method='cash',
+                            collected_by=staff,
+                            collected_by_name=cashier_name,
+                            notes=f"Initial Split Payment (Cash) on Checkout #{invoice_num}"
+                        )
+                    if split_upi_amt > Decimal('0.00'):
+                        OrderPaymentTransaction.objects.create(
+                            order=sale_order,
+                            store=store,
+                            amount=split_upi_amt,
+                            payment_method='upi',
+                            collected_by=staff,
+                            collected_by_name=cashier_name,
+                            notes=f"Initial Split Payment (UPI) on Checkout #{invoice_num}"
+                        )
+                elif amount_paid > Decimal('0.00'):
+                    effective_recorded_amt = total_amount if payment_method == SaleOrder.PAYMENT_CASH and change_returned > 0 else amount_paid
+                    OrderPaymentTransaction.objects.create(
+                        order=sale_order,
+                        store=store,
+                        amount=effective_recorded_amt,
+                        payment_method=initial_tx_method,
+                        collected_by=staff,
+                        collected_by_name=cashier_name,
+                        notes=f"Initial Payment on Checkout #{invoice_num}" + (f" (Due: ₹{balance_due})" if balance_due > 0 else "")
+                    )
+
+            # Record VIP Card Transaction
+            if payment_method == SaleOrder.PAYMENT_VIP_CARD and total_amount > Decimal('0.00'):
                 VIPCardTransaction.objects.create(
                     customer=customer,
                     store=store,
                     card_uid=card_uid_to_record,
-                    transaction_type=VIPCardTransaction.TYPE_DEBIT,
+                    transaction_type=VIPCardTransaction.TYPE_REFUND if is_store_refunding_customer else VIPCardTransaction.TYPE_DEBIT,
                     amount=total_amount,
                     balance_after=customer.vip_card_balance,
                     sale_order=sale_order,
-                    notes=f"POS Payment Invoice #{invoice_num}"
+                    notes=f"POS {'Credit Refund' if is_store_refunding_customer else 'Payment'} #{invoice_num}"
                 )
 
-            # 4. Create SaleOrderItems and deduct stock with StockMovement
+            # ---------------- 8. Record Return Line Items & Reverse Stock ----------------
+            for line_obj, qty, refund_line, eff_unit_price in prepared_returns:
+                SaleOrderItem.objects.create(
+                    sale_order=sale_order,
+                    item=line_obj.item,
+                    item_name=line_obj.item_name,
+                    item_uid=line_obj.item_uid,
+                    unit_cost_price=line_obj.unit_cost_price,
+                    unit_selling_price=eff_unit_price,
+                    unit_mrp=line_obj.unit_mrp,
+                    quantity=qty,
+                    returned_quantity=qty,
+                    is_return=True,
+                    original_order_item_id=line_obj.id,
+                    total_price=refund_line,
+                )
+
+                if line_obj.item:
+                    StockMovement.objects.create(
+                        item=line_obj.item,
+                        change=qty,
+                        reason=StockMovement.REASON_RETURN,
+                        performed_by=staff,
+                        performed_by_name=cashier_name,
+                        performed_by_role=cashier_role,
+                        note=f"Return from #{orig_order.invoice_number} ({line_obj.item_name} x{qty}) via #{invoice_num}"
+                    )
+                    total_stock = StockMovement.objects.filter(item=line_obj.item).aggregate(total=Sum('change'))['total'] or 0
+                    Item.objects.filter(id=line_obj.item.id).update(quantity=max(0, total_stock))
+
+                line_obj.returned_quantity = (line_obj.returned_quantity or 0) + qty
+                line_obj.save(update_fields=['returned_quantity'])
+
+            # Update original order status if 100% returned
+            if orig_order:
+                all_orig_lines = orig_order.items.all()
+                if all((l.returned_quantity >= l.quantity for l in all_orig_lines)):
+                    orig_order.status = SaleOrder.STATUS_REFUNDED
+                    orig_order.save(update_fields=['status', 'updated_at'])
+
+            # ---------------- 9. Record Purchase Line Items & Deduct Stock ----------------
             for line in line_items_data:
                 item = line['item']
                 qty = line['quantity']
@@ -2099,10 +2314,11 @@ class CheckoutSerializer(serializers.Serializer):
                     unit_selling_price=line['unit_selling_price'],
                     unit_mrp=line['unit_mrp'],
                     quantity=qty,
+                    is_return=False,
+                    original_order_item_id=None,
                     total_price=line['total_price'],
                 )
 
-                # Deduct inventory stock
                 adjust_stock(
                     item=item,
                     change=-qty,
@@ -2112,6 +2328,7 @@ class CheckoutSerializer(serializers.Serializer):
                 )
 
             return sale_order
+
 
 
 class AIDescriptionBatchJobSerializer(serializers.ModelSerializer):

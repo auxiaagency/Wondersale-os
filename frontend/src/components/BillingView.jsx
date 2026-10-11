@@ -69,6 +69,7 @@ import {
   getSaleOrders,
   updateSaleOrder,
   deleteSaleOrder,
+  lookupSaleOrderForReturn,
 } from '../api';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 import ProductReturnModal from './ProductReturnModal';
@@ -166,7 +167,13 @@ export default function BillingView({
   const [isQuickRecharging, setIsQuickRecharging] = useState(false);
   const [isVipTapModalOpen, setIsVipTapModalOpen] = useState(false);
 
-  // Product Return Modal State
+  // Product Return & Cart Exchange State
+  const [isReturnLookupModalOpen, setIsReturnLookupModalOpen] = useState(false);
+  const [returnLookupInput, setReturnLookupInput] = useState('');
+  const [returnLookupLoading, setReturnLookupLoading] = useState(false);
+  const [returnLookupError, setReturnLookupError] = useState('');
+  const [returnReference, setReturnReference] = useState('');
+  const [originalReturnBill, setOriginalReturnBill] = useState(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
   // Counter Cash / Stock Payout State
@@ -758,7 +765,7 @@ export default function BillingView({
     }
 
     setCart((prevCart) => {
-      const existingIdx = prevCart.findIndex((ci) => ci.item.id === itemToAdd.id);
+      const existingIdx = prevCart.findIndex((ci) => !ci.is_return && ci.item.id === itemToAdd.id);
       if (existingIdx >= 0) {
         const currentCartQty = prevCart[existingIdx].quantity;
         const currentPrice = prevCart[existingIdx].unit_price || itemToAdd.selling_price;
@@ -794,6 +801,8 @@ export default function BillingView({
         return [
           ...prevCart,
           {
+            is_return: false,
+            cart_key: `buy_${itemToAdd.id}`,
             item: itemToAdd,
             quantity: qtyToAdd,
             unit_price: parseFloat(itemToAdd.selling_price).toFixed(2),
@@ -810,41 +819,55 @@ export default function BillingView({
     setIsDropdownOpen(false);
   };
 
-  // Update Cart Quantity
-  const handleUpdateCartQty = (itemId, newQty) => {
+  // Update Cart Quantity (Handles both regular sale items and return items)
+  const handleUpdateCartQty = (targetKeyOrId, newQty, isReturn = false) => {
     const qty = parseInt(newQty, 10);
-    if (isNaN(qty) || qty <= 0) {
-      handleRemoveFromCart(itemId);
-      return;
-    }
+    setCart((prev) => {
+      const targetIdx = prev.findIndex((ci) =>
+        ci.cart_key ? ci.cart_key === targetKeyOrId : (ci.item.id === targetKeyOrId && Boolean(ci.is_return) === Boolean(isReturn))
+      );
+      if (targetIdx < 0) return prev;
+      const ci = prev[targetIdx];
 
-    setCart((prev) =>
-      prev.map((ci) => {
-        if (ci.item.id === itemId) {
-          if (qty > ci.item.quantity) {
-            showNotification(
-              'warning',
-              `Cannot exceed stock: Only ${ci.item.quantity} units of "${ci.item.name}" available.`
-            );
-            return ci;
-          }
-          const uPrice = parseFloat(ci.unit_price || ci.item.selling_price || 0);
-          return {
-            ...ci,
-            quantity: qty,
-            total: (uPrice * qty).toFixed(2),
-          };
+      if (ci.is_return) {
+        const validQty = isNaN(qty) ? 0 : Math.max(0, Math.min(ci.max_returnable_quantity || 1, qty));
+        const uPrice = parseFloat(ci.unit_price || 0);
+        const updated = [...prev];
+        updated[targetIdx] = {
+          ...ci,
+          quantity: validQty,
+          total: (uPrice * validQty).toFixed(2),
+        };
+        return updated;
+      } else {
+        if (isNaN(qty) || qty <= 0) {
+          return prev.filter((_, idx) => idx !== targetIdx);
         }
-        return ci;
-      })
-    );
+        if (qty > ci.item.quantity) {
+          showNotification(
+            'warning',
+            `Cannot exceed stock: Only ${ci.item.quantity} units of "${ci.item.name}" available.`
+          );
+          return prev;
+        }
+        const uPrice = parseFloat(ci.unit_price || ci.item.selling_price || 0);
+        const updated = [...prev];
+        updated[targetIdx] = {
+          ...ci,
+          quantity: qty,
+          total: (uPrice * qty).toFixed(2),
+        };
+        return updated;
+      }
+    });
   };
 
-  // Update Cart Unit Price (Head Cashier & Owner Privilege)
-  const handleUpdateUnitPrice = (itemId, newPrice) => {
+  // Update Cart Unit Price (Head Cashier & Owner Privilege - Purchased Items only)
+  const handleUpdateUnitPrice = (targetKeyOrId, newPrice) => {
     setCart((prev) =>
       prev.map((ci) => {
-        if (ci.item.id === itemId) {
+        const matches = ci.cart_key ? ci.cart_key === targetKeyOrId : (ci.item.id === targetKeyOrId && !ci.is_return);
+        if (matches && !ci.is_return) {
           const parsed = parseFloat(newPrice);
           const validPrice = isNaN(parsed) || parsed < 0 ? 0 : parsed;
           return {
@@ -859,8 +882,17 @@ export default function BillingView({
   };
 
   // Remove Item from Cart
-  const handleRemoveFromCart = (itemId) => {
-    setCart((prev) => prev.filter((ci) => ci.item.id !== itemId));
+  const handleRemoveFromCart = (targetKeyOrId, isReturn = false) => {
+    setCart((prev) => {
+      const next = prev.filter((ci) =>
+        ci.cart_key ? ci.cart_key !== targetKeyOrId : !(ci.item.id === targetKeyOrId && Boolean(ci.is_return) === Boolean(isReturn))
+      );
+      if (next.filter((ci) => ci.is_return).length === 0) {
+        setReturnReference('');
+        setOriginalReturnBill(null);
+      }
+      return next;
+    });
   };
 
   // Clear Cart
@@ -869,27 +901,136 @@ export default function BillingView({
     if (window.confirm('Are you sure you want to clear the current bill cart?')) {
       setCart([]);
       setSelectedProduct(null);
+      setReturnReference('');
+      setOriginalReturnBill(null);
     }
   };
 
-  // Cart Calculations (Discount percentage or flat rupee amount applied to Total Price of bill)
-  const cartSubtotal = Number((cart.reduce((sum, ci) => {
-    const price = parseFloat(ci.unit_price || ci.item.selling_price || 0);
-    return sum + (price * ci.quantity);
-  }, 0)).toFixed(2));
+  // Fetch Bill for Return / Exchange and load items directly into active Cart
+  const handleFetchBillForReturn = async (e) => {
+    e?.preventDefault();
+    const invNum = returnLookupInput.trim();
+    if (!invNum) {
+      setReturnLookupError('Please enter or scan an invoice/bill number.');
+      return;
+    }
+
+    setReturnLookupLoading(true);
+    setReturnLookupError('');
+    try {
+      const data = await lookupSaleOrderForReturn(invNum);
+      if (!data) {
+        throw new Error('Invoice not found.');
+      }
+
+      const returnableLines = (data.items || []).filter((it) => (it.returnable_quantity || 0) > 0);
+      if (returnableLines.length === 0) {
+        setReturnLookupError(`Bill #${data.invoice_number} has no returnable items left (all units already returned).`);
+        return;
+      }
+
+      // 1. Autofill customer details from bill if available
+      if (data.customer_phone) {
+        setCustomerPhone(data.customer_phone);
+      }
+      if (data.customer_name) {
+        setCustomerName(data.customer_name);
+      }
+      if (data.customer_email) {
+        setCustomerEmail(data.customer_email);
+      }
+
+      // 2. Set return reference
+      setReturnReference(data.invoice_number);
+      setOriginalReturnBill(data);
+
+      // 3. Map returnable items to cart format with quantity = 0 (per user requirement)
+      const returnCartItems = returnableLines.map((line) => {
+        const effUnitPrice = parseFloat(line.effective_unit_price ?? line.unit_selling_price ?? 0);
+        return {
+          is_return: true,
+          cart_key: `return_${line.id}`,
+          original_order_item_id: line.id,
+          original_invoice_number: data.invoice_number,
+          item: {
+            id: line.item,
+            name: line.item_name || 'Returned Product',
+            uid: line.item_uid || line.item_sku || String(line.item),
+            selling_price: line.unit_selling_price,
+            images: line.item_images || [],
+            location_section: line.location_section || '',
+          },
+          quantity: 0, // Starts at 0 per requirement
+          max_returnable_quantity: line.returnable_quantity,
+          unit_price: effUnitPrice.toFixed(2),
+          total: '0.00',
+        };
+      });
+
+      // 4. Merge into active cart (preserving non-return items already in cart)
+      setCart((prev) => {
+        const nonReturnItems = prev.filter((ci) => !ci.is_return);
+        return [...nonReturnItems, ...returnCartItems];
+      });
+
+      showNotification(
+        'success',
+        `Loaded ${returnCartItems.length} returnable item(s) from Bill #${data.invoice_number}. Use (+) to select return quantities.`
+      );
+      setIsReturnLookupModalOpen(false);
+      setReturnLookupInput('');
+    } catch (err) {
+      setReturnLookupError(err.message || 'Failed to lookup invoice.');
+    } finally {
+      setReturnLookupLoading(false);
+    }
+  };
+
+  // Cart Calculations (Handles purchases, discounts, returns credit and net payable / refund)
+  const purchasedCartItems = cart.filter((ci) => !ci.is_return);
+  const activeReturnCartItems = cart.filter((ci) => ci.is_return && ci.quantity > 0);
+  const allReturnCartItems = cart.filter((ci) => ci.is_return);
+  const hasReturnItemsInCart = allReturnCartItems.length > 0;
+
+  const purchasedSubtotal = Number(
+    purchasedCartItems.reduce((sum, ci) => {
+      const price = parseFloat(ci.unit_price || ci.item.selling_price || 0);
+      return sum + price * ci.quantity;
+    }, 0).toFixed(2)
+  );
+
+  const returnCreditTotal = Number(
+    activeReturnCartItems.reduce((sum, ci) => {
+      const price = parseFloat(ci.unit_price || 0);
+      return sum + price * ci.quantity;
+    }, 0).toFixed(2)
+  );
 
   let cartDiscount = 0;
-  if (discountType === 'rupee') {
-    const rawRupeeDisc = Math.max(0, parseFloat(discountAmount) || 0);
-    cartDiscount = Number(Math.min(cartSubtotal, rawRupeeDisc).toFixed(2));
-  } else {
-    const parsedDiscPct = Math.max(0, Math.min(100, parseFloat(discountPercent) || 0));
-    cartDiscount = Number(Math.min(cartSubtotal, (cartSubtotal * parsedDiscPct) / 100).toFixed(2));
+  if (purchasedSubtotal > 0) {
+    if (discountType === 'rupee') {
+      const rawRupeeDisc = Math.max(0, parseFloat(discountAmount) || 0);
+      cartDiscount = Number(Math.min(purchasedSubtotal, rawRupeeDisc).toFixed(2));
+    } else {
+      const parsedDiscPct = Math.max(0, Math.min(100, parseFloat(discountPercent) || 0));
+      cartDiscount = Number(Math.min(purchasedSubtotal, (purchasedSubtotal * parsedDiscPct) / 100).toFixed(2));
+    }
   }
 
-  const cartGrandTotal = Math.max(0, Number((cartSubtotal - cartDiscount).toFixed(2)));
+  const purchasedNet = Math.max(0, Number((purchasedSubtotal - cartDiscount).toFixed(2)));
+  // Net settlement: Purchased goods after discount minus returned goods credit
+  const netSettlementAmount = Number((purchasedNet - returnCreditTotal).toFixed(2));
+  const isNetRefund = netSettlementAmount < 0;
+  const netRefundAmount = isNetRefund ? Math.abs(netSettlementAmount) : 0;
+  const isEvenExchange = activeReturnCartItems.length > 0 && purchasedCartItems.length > 0 && Math.abs(netSettlementAmount) < 0.01;
+  const cartGrandTotal = Math.max(0, netSettlementAmount);
+  const cartSubtotal = purchasedSubtotal; // Backwards compatible alias for subtotal
+
+  const cartPurchasedUnits = purchasedCartItems.reduce((sum, ci) => sum + ci.quantity, 0);
+  const cartReturnedUnits = activeReturnCartItems.reduce((sum, ci) => sum + ci.quantity, 0);
   const cartTotalItems = cart.length;
-  const cartTotalUnits = cart.reduce((sum, ci) => sum + ci.quantity, 0);
+  const cartTotalUnits = cartPurchasedUnits + cartReturnedUnits;
+
 
   // Live Customer Lookup by Phone or Name
   useEffect(() => {
@@ -1463,6 +1604,14 @@ export default function BillingView({
       return;
     }
 
+    if (purchasedCartItems.length === 0 && activeReturnCartItems.length === 0) {
+      showNotification(
+        'warning',
+        'No items selected! Use (+) on returned items to set return quantities, or add products to purchase.'
+      );
+      return;
+    }
+
     const cleanPhone = customerPhone.replace(/\D/g, '').trim();
     if (cleanPhone.length !== 10) {
       showNotification('error', 'Customer mobile number must be exactly 10 digits (no more, no less).');
@@ -1485,7 +1634,7 @@ export default function BillingView({
     }
 
     // Split Payment Validation
-    if (paymentMethod === 'split') {
+    if (paymentMethod === 'split' && netSettlementAmount > 0) {
       const cAmt = parseFloat(splitCashAmount) || 0;
       const uAmt = parseFloat(splitUpiAmount) || 0;
       if (cAmt <= 0 && uAmt <= 0) {
@@ -1500,7 +1649,7 @@ export default function BillingView({
     }
 
     // VIP Card Validation
-    if (paymentMethod === 'vip_card') {
+    if (paymentMethod === 'vip_card' && netSettlementAmount > 0) {
       if (!customerHasVipCard) {
         playVipRejectedSound();
         showNotification('error', 'Selected payment method is VIP Card, but customer has no active VIP card.');
@@ -1531,7 +1680,7 @@ export default function BillingView({
     }
 
     // Partial Payment Validation
-    if (paymentMethod === 'partial') {
+    if (paymentMethod === 'partial' && netSettlementAmount > 0) {
       const pAmt = parseFloat(partialAmountPaid) || 0;
       if (pAmt < 0) {
         showNotification('error', 'Initial paid amount cannot be negative.');
@@ -1570,6 +1719,22 @@ export default function BillingView({
       return;
     }
 
+    const purchasedPayloadItems = purchasedCartItems.map((ci) => ({
+      item_id: ci.item.id,
+      quantity: ci.quantity,
+      unit_price: Number((parseFloat(ci.unit_price) || parseFloat(ci.item.selling_price) || 0).toFixed(2)),
+    }));
+
+    const returnPayloadItems = activeReturnCartItems.map((ci) => ({
+      sale_order_item_id: ci.original_order_item_id,
+      quantity: ci.quantity,
+    }));
+
+    if (purchasedPayloadItems.length === 0 && returnPayloadItems.length === 0) {
+      showNotification('warning', 'Please select at least 1 item to return or purchase.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -1579,25 +1744,25 @@ export default function BillingView({
         customer_name: customerName.trim(), // Optional
         customer_email: customerEmail.trim(),
         payment_method: paymentMethod,
+        return_reference: returnReference || undefined,
+        return_items: returnPayloadItems.length > 0 ? returnPayloadItems : undefined,
         split_cash_amount: paymentMethod === 'split' ? Number((parseFloat(splitCashAmount) || 0).toFixed(2)) : undefined,
         split_upi_amount: paymentMethod === 'split' ? Number((parseFloat(splitUpiAmount) || 0).toFixed(2)) : undefined,
         vip_card_uid: paymentMethod === 'vip_card' ? vipCardScannedUid.trim() : undefined,
         initial_payment_method: paymentMethod === 'partial' ? partialPaymentMethod : undefined,
         amount_paid: Number((
-          paymentMethod === 'split'
-            ? (splitCashReceived ? parseFloat(splitCashReceived) : (parseFloat(splitCashAmount) || 0))
-            : paymentMethod === 'partial'
-            ? (parseFloat(partialAmountPaid) || 0)
-            : (parseFloat(amountPaid) || cartGrandTotal)
+          netSettlementAmount > 0
+            ? (paymentMethod === 'split'
+                ? (splitCashReceived ? parseFloat(splitCashReceived) : (parseFloat(splitCashAmount) || 0))
+                : paymentMethod === 'partial'
+                ? (parseFloat(partialAmountPaid) || 0)
+                : (parseFloat(amountPaid) || netSettlementAmount))
+            : 0
         ).toFixed(2)),
         discount_amount: Number(cartDiscount.toFixed(2)),
         tax_amount: 0,
         notes: checkoutNotes,
-        items: cart.map((ci) => ({
-          item_id: ci.item.id,
-          quantity: ci.quantity,
-          unit_price: Number((parseFloat(ci.unit_price) || parseFloat(ci.item.selling_price) || 0).toFixed(2)),
-        })),
+        items: purchasedPayloadItems,
       };
 
       const completed = await processCheckout(payload);
@@ -1610,6 +1775,8 @@ export default function BillingView({
       setCompletedOrder(completed);
       setIsReceiptOpen(true);
       setCart([]);
+      setReturnReference('');
+      setOriginalReturnBill(null);
       setSelectedProduct(null);
       setProductQuantity(1);
       setCustomerPhone('');
@@ -1632,7 +1799,13 @@ export default function BillingView({
       loadStoreItems();
       loadActiveRegisterShift();
       loadShiftBillingOrders();
-      showNotification('success', `Sale completed successfully! Invoice #${completed.invoice_number}`);
+
+      const typeLabel = completed.is_exchange
+        ? 'Exchange bill'
+        : (completed.invoice_number && completed.invoice_number.startsWith('RET-'))
+        ? 'Return voucher'
+        : 'Sale';
+      showNotification('success', `${typeLabel} processed successfully! Invoice #${completed.invoice_number}`);
     } catch (err) {
       console.error('Checkout error:', err);
       showNotification('error', err.message || 'Failed to complete checkout.');
@@ -1664,6 +1837,8 @@ export default function BillingView({
       discountPercent,
       discountType,
       checkoutNotes,
+      returnReference: returnReference || '',
+      originalReturnBill: originalReturnBill || null,
       items: [...cart],
       totalAmount: cartGrandTotal,
       totalItems: cartTotalItems,
@@ -1679,6 +1854,8 @@ export default function BillingView({
 
     // Clear active cart and input fields for next customer
     setCart([]);
+    setReturnReference('');
+    setOriginalReturnBill(null);
     setSelectedProduct(null);
     setProductQuantity(1);
     setCustomerPhone('');
@@ -1712,6 +1889,8 @@ export default function BillingView({
         discountPercent,
         discountType,
         checkoutNotes,
+        returnReference: returnReference || '',
+        originalReturnBill: originalReturnBill || null,
         items: [...cart],
         totalAmount: cartGrandTotal,
         totalItems: cartTotalItems,
@@ -1728,6 +1907,8 @@ export default function BillingView({
 
     // Restore selected draft into active cart and inputs
     setCart(draft.items || []);
+    setReturnReference(draft.returnReference || '');
+    setOriginalReturnBill(draft.originalReturnBill || null);
     setCustomerPhone(draft.customerPhone || '');
     setCustomerName(draft.customerName || '');
     setCustomerEmail(draft.customerEmail || '');
@@ -2000,17 +2181,19 @@ export default function BillingView({
             <span>Counter Payout</span>
           </button>
 
-          {/* Product Return Button */}
+          {/* Product Return / Exchange Button */}
           <button
             type="button"
-            onClick={() => setIsReturnModalOpen(true)}
+            onClick={() => setIsReturnLookupModalOpen(true)}
             className="btn btn-secondary btn-sm billing-return-btn"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              background: 'linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(194, 65, 12, 0.06))',
-              borderColor: 'rgba(234, 88, 12, 0.45)',
+              background: returnReference
+                ? 'linear-gradient(135deg, rgba(234, 88, 12, 0.28), rgba(194, 65, 12, 0.16))'
+                : 'linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(194, 65, 12, 0.06))',
+              borderColor: returnReference ? '#FB923C' : 'rgba(234, 88, 12, 0.45)',
               color: '#FB923C',
               fontWeight: 800,
               padding: '6px 14px',
@@ -2019,10 +2202,10 @@ export default function BillingView({
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
-            title="Return products from an existing bill / invoice and issue refund"
+            title="Return or exchange products from an existing bill in this cart"
           >
             <RotateCcw size={15} style={{ color: '#FB923C' }} />
-            <span>Bill Return</span>
+            <span>{returnReference ? `Return: #${returnReference}` : 'Return / Exchange'}</span>
           </button>
 
           {activeStore && (
@@ -2664,18 +2847,22 @@ export default function BillingView({
                 <tbody>
                   {cart.map((ci) => {
                     const primaryImg = ci.item.images?.find((img) => img.is_primary) || ci.item.images?.[0];
+                    const itemKey = ci.cart_key || (ci.is_return ? `return_${ci.original_order_item_id}` : `buy_${ci.item.id}`);
+                    const isRet = Boolean(ci.is_return);
+
                     return (
                       <tr
-                        key={ci.item.id}
+                        key={itemKey}
                         className="billing-cart-row"
                         style={{
                           borderBottom: '1px solid var(--border-subtle)',
                           transition: 'background 0.12s ease',
+                          background: isRet && ci.quantity > 0 ? 'rgba(234, 88, 12, 0.05)' : 'transparent',
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = isRet ? 'rgba(234, 88, 12, 0.09)' : 'var(--bg-surface-hover)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = isRet && ci.quantity > 0 ? 'rgba(234, 88, 12, 0.05)' : 'transparent')}
                       >
-                        {/* Item Name & UID with Compact 34px Thumbnail */}
+                        {/* Item Name & UID with Thumbnail / Return Indicator */}
                         <td className="billing-cart-cell-item" style={{ padding: '6px 10px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div
@@ -2693,11 +2880,12 @@ export default function BillingView({
                                 width: '34px',
                                 height: '34px',
                                 borderRadius: '6px',
-                                background: 'var(--bg-main)',
-                                border: '1px solid var(--border-subtle)',
+                                background: isRet ? 'rgba(234, 88, 12, 0.12)' : 'var(--bg-main)',
+                                border: isRet ? '1px solid rgba(234, 88, 12, 0.4)' : '1px solid var(--border-subtle)',
                                 overflow: 'hidden',
                                 display: 'flex',
                                 alignItems: 'center',
+                                justifySelf: 'center',
                                 justifyContent: 'center',
                                 flexShrink: 0,
                                 boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
@@ -2711,6 +2899,8 @@ export default function BillingView({
                                   alt={ci.item.name}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 />
+                              ) : isRet ? (
+                                <RotateCcw size={16} style={{ color: '#FB923C' }} />
                               ) : (
                                 <Package size={16} style={{ color: 'var(--text-muted)' }} />
                               )}
@@ -2730,35 +2920,75 @@ export default function BillingView({
                                   flexWrap: 'wrap',
                                 }}
                               >
-                                <span
-                                  className="billing-cart-uid-tag"
-                                  style={{
-                                    fontSize: '0.66rem',
-                                    fontFamily: 'monospace',
-                                    fontWeight: 800,
-                                    padding: '1px 5px',
-                                    borderRadius: '3px',
-                                    background: 'rgba(218, 41, 28, 0.15)',
-                                    color: 'var(--brand-primary)',
-                                    border: '1px solid rgba(218, 41, 28, 0.3)',
-                                    letterSpacing: '0.4px',
-                                  }}
-                                >
-                                  UID: {ci.item.uid}
-                                </span>
-                                {ci.item.location_section && (
-                                  <span className="billing-cart-sec-tag" style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                                    Sec: {ci.item.location_section}
-                                  </span>
+                                {isRet ? (
+                                  <>
+                                    <span
+                                      style={{
+                                        fontSize: '0.66rem',
+                                        fontFamily: 'monospace',
+                                        fontWeight: 800,
+                                        padding: '1px 5px',
+                                        borderRadius: '3px',
+                                        background: 'rgba(234, 88, 12, 0.18)',
+                                        color: '#FB923C',
+                                        border: '1px solid rgba(234, 88, 12, 0.45)',
+                                        letterSpacing: '0.3px',
+                                      }}
+                                    >
+                                      RETURN: #{ci.original_invoice_number}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: '0.64rem',
+                                        fontWeight: 700,
+                                        color: 'var(--text-muted)',
+                                      }}
+                                    >
+                                      Max Returnable: {ci.max_returnable_quantity}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span
+                                      className="billing-cart-uid-tag"
+                                      style={{
+                                        fontSize: '0.66rem',
+                                        fontFamily: 'monospace',
+                                        fontWeight: 800,
+                                        padding: '1px 5px',
+                                        borderRadius: '3px',
+                                        background: 'rgba(218, 41, 28, 0.15)',
+                                        color: 'var(--brand-primary)',
+                                        border: '1px solid rgba(218, 41, 28, 0.3)',
+                                        letterSpacing: '0.4px',
+                                      }}
+                                    >
+                                      UID: {ci.item.uid}
+                                    </span>
+                                    {ci.item.location_section && (
+                                      <span className="billing-cart-sec-tag" style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                                        Sec: {ci.item.location_section}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             </div>
                           </div>
                         </td>
 
-                        {/* Unit Selling Price (Editable for Head Cashier & Owner) */}
+                        {/* Unit Selling Price / Bill Rate */}
                         <td className="billing-cart-cell-price" style={{ padding: '6px 8px', textAlign: 'right' }}>
-                          {isHeadCashierOrOwner ? (
+                          {isRet ? (
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
+                              <span style={{ fontWeight: 800, color: '#FB923C', fontSize: '0.86rem' }}>
+                                ₹{ci.unit_price}
+                              </span>
+                              <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                                (Bill Rate)
+                              </span>
+                            </div>
+                          ) : isHeadCashierOrOwner ? (
                             <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
                                 <span style={{ fontWeight: 700, color: 'var(--text-muted)', fontSize: '0.78rem' }}>₹</span>
@@ -2767,7 +2997,7 @@ export default function BillingView({
                                   step="0.01"
                                   min="0"
                                   value={ci.unit_price}
-                                  onChange={(e) => handleUpdateUnitPrice(ci.item.id, e.target.value)}
+                                  onChange={(e) => handleUpdateUnitPrice(itemKey, e.target.value)}
                                   className="billing-cart-price-input"
                                   style={{
                                     width: '68px',
@@ -2797,58 +3027,108 @@ export default function BillingView({
                           )}
                         </td>
 
-                        {/* Quantity Controls (Compact) */}
+                        {/* Quantity Controls (Supports 0 start for return items) */}
                         <td className="billing-cart-cell-qty" style={{ padding: '6px 6px', textAlign: 'center' }}>
-                          <div className="billing-cart-qty-spinner" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          {isRet && ci.quantity === 0 ? (
                             <button
                               type="button"
-                              onClick={() => handleUpdateCartQty(ci.item.id, ci.quantity - 1)}
-                              className="btn btn-secondary btn-sm"
-                              style={{ width: '24px', height: '24px', padding: 0 }}
-                            >
-                              <Minus size={12} />
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              max={ci.item.quantity}
-                              value={ci.quantity}
-                              onChange={(e) => handleUpdateCartQty(ci.item.id, e.target.value)}
-                              className="billing-cart-qty-input"
+                              onClick={() => handleUpdateCartQty(itemKey, 1, true)}
                               style={{
-                                width: '36px',
-                                textAlign: 'center',
-                                height: '24px',
-                                borderRadius: 'var(--radius-sm)',
-                                border: '1px solid var(--border-subtle)',
-                                background: 'var(--bg-main)',
-                                color: 'var(--text-main)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'rgba(234, 88, 12, 0.15)',
+                                border: '1px solid rgba(234, 88, 12, 0.45)',
+                                color: '#FB923C',
                                 fontWeight: 800,
-                                fontSize: '0.82rem',
-                                padding: '0 2px',
+                                fontSize: '0.74rem',
+                                padding: '4px 8px',
+                                borderRadius: 'var(--radius-pill)',
+                                cursor: 'pointer',
+                                transition: 'all 0.12s ease',
                               }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateCartQty(ci.item.id, ci.quantity + 1)}
-                              className="btn btn-secondary btn-sm"
-                              style={{ width: '24px', height: '24px', padding: 0 }}
+                              title={`Click (+) to select 1 unit of this item to return (Max: ${ci.max_returnable_quantity})`}
                             >
                               <Plus size={12} />
+                              <span>Return (0/{ci.max_returnable_quantity})</span>
                             </button>
-                          </div>
+                          ) : (
+                            <div className="billing-cart-qty-spinner" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateCartQty(itemKey, ci.quantity - 1, isRet)}
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  padding: 0,
+                                  borderColor: isRet ? 'rgba(234, 88, 12, 0.4)' : undefined,
+                                }}
+                              >
+                                <Minus size={12} />
+                              </button>
+                              <input
+                                type="number"
+                                min={isRet ? '0' : '1'}
+                                max={isRet ? ci.max_returnable_quantity : ci.item.quantity}
+                                value={ci.quantity}
+                                onChange={(e) => handleUpdateCartQty(itemKey, e.target.value, isRet)}
+                                className="billing-cart-qty-input"
+                                style={{
+                                  width: '36px',
+                                  textAlign: 'center',
+                                  height: '24px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  border: isRet ? '1px solid rgba(234, 88, 12, 0.5)' : '1px solid var(--border-subtle)',
+                                  background: 'var(--bg-main)',
+                                  color: isRet ? '#FB923C' : 'var(--text-main)',
+                                  fontWeight: 800,
+                                  fontSize: '0.82rem',
+                                  padding: '0 2px',
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateCartQty(itemKey, ci.quantity + 1, isRet)}
+                                disabled={isRet ? ci.quantity >= ci.max_returnable_quantity : ci.quantity >= ci.item.quantity}
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  padding: 0,
+                                  borderColor: isRet ? 'rgba(234, 88, 12, 0.4)' : undefined,
+                                  opacity: (isRet ? ci.quantity >= ci.max_returnable_quantity : ci.quantity >= ci.item.quantity) ? 0.45 : 1,
+                                }}
+                              >
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                          )}
                         </td>
 
                         {/* Line Total */}
-                        <td className="billing-cart-cell-total" style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: '#10B981', fontSize: '0.92rem' }}>
-                          ₹{ci.total}
+                        <td
+                          className="billing-cart-cell-total"
+                          style={{
+                            padding: '6px 8px',
+                            textAlign: 'right',
+                            fontWeight: 800,
+                            color: isRet ? (ci.quantity > 0 ? '#FB923C' : 'var(--text-muted)') : '#10B981',
+                            fontSize: '0.92rem',
+                          }}
+                        >
+                          {isRet
+                            ? ci.quantity > 0
+                              ? `-₹${(ci.quantity * parseFloat(ci.unit_price)).toFixed(2)}`
+                              : '₹0.00'
+                            : `₹${ci.total}`}
                         </td>
 
                         {/* Remove Action */}
                         <td className="billing-cart-cell-action" style={{ padding: '6px 4px', textAlign: 'center' }}>
                           <button
                             type="button"
-                            onClick={() => handleRemoveFromCart(ci.item.id)}
+                            onClick={() => handleRemoveFromCart(itemKey, isRet)}
                             className="billing-cart-remove-btn"
                             style={{
                               background: 'none',
@@ -2870,7 +3150,7 @@ export default function BillingView({
                               e.currentTarget.style.color = 'var(--text-muted)';
                               e.currentTarget.style.background = 'transparent';
                             }}
-                            title="Remove item from bill"
+                            title={isRet ? 'Remove return item from bill' : 'Remove item from bill'}
                           >
                             <Trash2 size={15} />
                           </button>
@@ -2926,19 +3206,45 @@ export default function BillingView({
                   {cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'}
                 </span>
                 <span>•</span>
-                <span style={{ color: '#38BDF8', fontWeight: 800 }}>
-                  {cartTotalUnits} {cartTotalUnits === 1 ? 'unit' : 'total units'}
-                </span>
+                {hasReturnItemsInCart ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#38BDF8', fontWeight: 800 }}>{cartPurchasedUnits} buy</span>
+                    <span>/</span>
+                    <span style={{ color: '#FB923C', fontWeight: 800 }}>{cartReturnedUnits} ret</span>
+                  </span>
+                ) : (
+                  <span style={{ color: '#38BDF8', fontWeight: 800 }}>
+                    {cartTotalUnits} {cartTotalUnits === 1 ? 'unit' : 'total units'}
+                  </span>
+                )}
               </div>
 
-              {/* Total Cart Price */}
+              {/* Total Cart Price / Settlement */}
               <div className="billing-cart-summary-totals-wrap" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                  Total Cart Value:
-                </span>
-                <span className="billing-cart-summary-subtotal-val" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10B981' }}>
-                  ₹{cartSubtotal.toFixed(2)}
-                </span>
+                {hasReturnItemsInCart ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.76rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Buy: <strong style={{ color: '#10B981' }}>₹{purchasedSubtotal.toFixed(2)}</strong>
+                    </span>
+                    <span>•</span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      Return: <strong style={{ color: '#FB923C' }}>-₹{returnCreditTotal.toFixed(2)}</strong>
+                    </span>
+                    <span>•</span>
+                    <span style={{ fontWeight: 800, color: isNetRefund ? '#FB923C' : '#10B981', fontSize: '0.96rem' }}>
+                      Net: {isNetRefund ? `Refund ₹${netRefundAmount.toFixed(2)}` : `₹${cartGrandTotal.toFixed(2)}`}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                      Total Cart Value:
+                    </span>
+                    <span className="billing-cart-summary-subtotal-val" style={{ fontSize: '1.15rem', fontWeight: 900, color: '#10B981' }}>
+                      ₹{cartSubtotal.toFixed(2)}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -3969,15 +4275,38 @@ export default function BillingView({
                   gap: '4px',
                 }}
               >
-                {/* Total Price Row */}
+                {/* Purchased Goods Subtotal */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)' }}>
-                    Total (Subtotal)
+                    Goods Purchased
                   </span>
                   <span style={{ fontSize: '0.96rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    ₹{cartSubtotal.toFixed(2)}
+                    ₹{purchasedSubtotal.toFixed(2)}
                   </span>
                 </div>
+
+                {/* Returned Goods Credit Row */}
+                {activeReturnCartItems.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingTop: '4px',
+                      borderTop: '1px dashed rgba(234, 88, 12, 0.3)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <RotateCcw size={13} style={{ color: '#FB923C' }} />
+                      <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#FB923C' }}>
+                        Returned Credit:
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#FB923C' }}>
+                      -₹{returnCreditTotal.toFixed(2)}
+                    </span>
+                  </div>
+                )}
 
                 {/* Discount (% or ₹ on Total) Input Row */}
                 <div
@@ -4247,36 +4576,76 @@ export default function BillingView({
                 />
               </div>
 
-              {/* Payable Highlight Banner (Compact) */}
+              {/* Payable / Refund Highlight Banner (Compact) */}
               <div
                 className="billing-net-payable-banner"
                 style={{
                   padding: '6px 12px',
                   borderRadius: 'var(--radius-md)',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  background: isNetRefund
+                    ? 'rgba(234, 88, 12, 0.12)'
+                    : isEvenExchange
+                    ? 'rgba(56, 189, 248, 0.12)'
+                    : 'rgba(16, 185, 129, 0.1)',
+                  border: isNetRefund
+                    ? '1px solid rgba(234, 88, 12, 0.4)'
+                    : isEvenExchange
+                    ? '1px solid rgba(56, 189, 248, 0.4)'
+                    : '1px solid rgba(16, 185, 129, 0.3)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                 }}
               >
                 <div>
-                  <span style={{ fontSize: '0.68rem', fontWeight: 800, color: '#10B981', textTransform: 'uppercase' }}>
-                    Net Amount Payable
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      color: isNetRefund ? '#FB923C' : isEvenExchange ? '#38BDF8' : '#10B981',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {isNetRefund
+                      ? paymentMethod === 'upi' || paymentMethod === 'qr'
+                        ? 'Net Refund to Customer (UPI / Online)'
+                        : paymentMethod === 'vip_card'
+                        ? 'Net Store Credit (VIP Card)'
+                        : paymentMethod === 'card'
+                        ? 'Net Refund to Customer (Card)'
+                        : 'Net Refund to Customer (Cash Drawer)'
+                      : isEvenExchange
+                      ? 'Even Exchange (No Payment Needed)'
+                      : 'Net Amount Payable'}
                   </span>
                   <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                    {cartTotalItems} {cartTotalItems === 1 ? 'item' : 'items'} ({cartTotalUnits} units)
+                    {purchasedCartItems.length > 0 && `${cartPurchasedUnits} buy units`}
+                    {purchasedCartItems.length > 0 && activeReturnCartItems.length > 0 && ' • '}
+                    {activeReturnCartItems.length > 0 && `${cartReturnedUnits} return units`}
                   </div>
                 </div>
-                <div className="billing-net-payable-value" style={{ fontSize: '1.35rem', fontWeight: 900, color: '#10B981' }}>
-                  ₹{cartGrandTotal.toFixed(2)}
+                <div
+                  className="billing-net-payable-value"
+                  style={{
+                    fontSize: '1.35rem',
+                    fontWeight: 900,
+                    color: isNetRefund ? '#FB923C' : isEvenExchange ? '#38BDF8' : '#10B981',
+                  }}
+                >
+                  ₹{isNetRefund ? netRefundAmount.toFixed(2) : cartGrandTotal.toFixed(2)}
                 </div>
               </div>
 
               {/* Complete Sale Button (Compact & Always Visible Without Scrolling) */}
               <button
                 type="submit"
-                disabled={isSubmitting || cart.length === 0 || !activeShift || activeShift.status !== 'open'}
+                disabled={
+                  isSubmitting ||
+                  cart.length === 0 ||
+                  (purchasedCartItems.length === 0 && activeReturnCartItems.length === 0) ||
+                  !activeShift ||
+                  activeShift.status !== 'open'
+                }
                 className="btn btn-primary billing-complete-sale-btn"
                 style={{
                   width: '100%',
@@ -4292,14 +4661,44 @@ export default function BillingView({
                   background:
                     (!activeShift || activeShift.status !== 'open')
                       ? 'rgba(239, 68, 68, 0.2)'
+                      : isNetRefund
+                      ? 'linear-gradient(135deg, #EA580C, #C2410C)'
+                      : isEvenExchange
+                      ? 'linear-gradient(135deg, #0284C7, #0369A1)'
                       : cart.length > 0
                       ? 'linear-gradient(135deg, #10B981, #059669)'
                       : undefined,
-                  borderColor: (!activeShift || activeShift.status !== 'open') ? 'rgba(239, 68, 68, 0.4)' : undefined,
+                  borderColor:
+                    (!activeShift || activeShift.status !== 'open')
+                      ? 'rgba(239, 68, 68, 0.4)'
+                      : isNetRefund
+                      ? 'rgba(234, 88, 12, 0.5)'
+                      : isEvenExchange
+                      ? 'rgba(2, 132, 199, 0.5)'
+                      : undefined,
                   color: (!activeShift || activeShift.status !== 'open') ? '#FCA5A5' : undefined,
-                  boxShadow: (activeShift && activeShift.status === 'open' && cart.length > 0) ? '0 4px 16px rgba(16, 185, 129, 0.35)' : undefined,
-                  opacity: (isSubmitting || cart.length === 0 || !activeShift || activeShift.status !== 'open') ? 0.6 : 1,
-                  cursor: (isSubmitting || cart.length === 0 || !activeShift || activeShift.status !== 'open') ? 'not-allowed' : 'pointer',
+                  boxShadow:
+                    (activeShift && activeShift.status === 'open' && cart.length > 0)
+                      ? isNetRefund
+                        ? '0 4px 16px rgba(234, 88, 12, 0.35)'
+                        : '0 4px 16px rgba(16, 185, 129, 0.35)'
+                      : undefined,
+                  opacity:
+                    (isSubmitting ||
+                      cart.length === 0 ||
+                      (purchasedCartItems.length === 0 && activeReturnCartItems.length === 0) ||
+                      !activeShift ||
+                      activeShift.status !== 'open')
+                      ? 0.6
+                      : 1,
+                  cursor:
+                    (isSubmitting ||
+                      cart.length === 0 ||
+                      (purchasedCartItems.length === 0 && activeReturnCartItems.length === 0) ||
+                      !activeShift ||
+                      activeShift.status !== 'open')
+                      ? 'not-allowed'
+                      : 'pointer',
                 }}
                 title={
                   !activeShift || activeShift.status !== 'open'
@@ -4309,13 +4708,21 @@ export default function BillingView({
                     : 'Complete sale and print customer receipt'
                 }
               >
-                <CreditCard size={16} />
+                {isNetRefund ? <RotateCcw size={16} /> : <CreditCard size={16} />}
                 <span>
                   {isSubmitting
-                    ? 'Processing Sale...'
+                    ? 'Processing...'
                     : !activeShift || activeShift.status !== 'open'
                     ? 'Shift Closed (Cannot Bill)'
-                    : 'Complete Sale & Print Receipt'}
+                    : purchasedCartItems.length > 0 && activeReturnCartItems.length > 0
+                    ? isNetRefund
+                      ? `Complete Exchange & Refund ₹${netRefundAmount.toFixed(2)}`
+                      : isEvenExchange
+                      ? 'Complete Even Exchange (₹0)'
+                      : `Complete Exchange & Collect ₹${netSettlementAmount.toFixed(2)}`
+                    : activeReturnCartItems.length > 0
+                    ? `Complete Return & Refund ₹${returnCreditTotal.toFixed(2)}`
+                    : `Complete Sale & Print Receipt`}
                 </span>
               </button>
 
@@ -5508,10 +5915,14 @@ export default function BillingView({
                 </div>
                 <div>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    Confirm Sale &amp; Complete Checkout
+                    {purchasedCartItems.length > 0 && activeReturnCartItems.length > 0
+                      ? 'Confirm Return & Exchange Bill'
+                      : activeReturnCartItems.length > 0
+                      ? 'Confirm Return & Refund Voucher'
+                      : 'Confirm Sale & Complete Checkout'}
                   </h3>
                   <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-                    Verify customer details and order total before finalizing
+                    Verify customer details, returned items credit, and settlement before finalizing
                   </p>
                 </div>
               </div>
@@ -5557,12 +5968,19 @@ export default function BillingView({
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>
                     Payment &amp; Branch
                   </span>
-                  <div style={{ fontWeight: 800, fontSize: '0.94rem', color: paymentMethod === 'vip_card' ? '#F59E0B' : 'var(--text-main)', marginTop: '2px', textTransform: 'uppercase' }}>
-                    Mode: {paymentMethod === 'vip_card' ? 'VIP RFID Card' : paymentMethod === 'split' ? 'SPLIT (CASH + UPI)' : paymentMethod.toUpperCase()}
+                  <div style={{ fontWeight: 800, fontSize: '0.94rem', color: isNetRefund ? '#FB923C' : paymentMethod === 'vip_card' ? '#F59E0B' : 'var(--text-main)', marginTop: '2px', textTransform: 'uppercase' }}>
+                    {isNetRefund
+                      ? `Refund Mode: ${paymentMethod.toUpperCase()} (Drawer Payout)`
+                      : `Mode: ${paymentMethod === 'vip_card' ? 'VIP RFID Card' : paymentMethod === 'split' ? 'SPLIT (CASH + UPI)' : paymentMethod.toUpperCase()}`}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                     {activeStore?.name || 'Branch'}
                   </div>
+                  {returnReference && (
+                    <div style={{ fontSize: '0.74rem', color: '#FB923C', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace' }}>
+                      Ref Bill: #{returnReference}
+                    </div>
+                  )}
                   {paymentMethod === 'vip_card' && (
                     <div style={{ fontSize: '0.74rem', color: '#F59E0B', fontWeight: 700, marginTop: '2px', fontFamily: 'monospace' }}>
                       Card UID: {vipCardScannedUid || matchedCustomer?.vip_card_uid}
@@ -5597,42 +6015,66 @@ export default function BillingView({
                     </tr>
                   </thead>
                   <tbody>
-                    {cart.map((ci) => (
-                      <tr key={ci.item.id} style={{ borderBottom: '1px dotted var(--border-subtle)' }}>
-                        <td style={{ padding: '8px 12px', color: 'var(--text-main)', fontWeight: 600 }}>
-                          {ci.item.name}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700 }}>
-                          {ci.quantity}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>
-                          ₹{parseFloat(ci.unit_price || ci.item.selling_price).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#10B981' }}>
-                          ₹{ci.total}
-                        </td>
-                      </tr>
-                    ))}
+                    {cart.filter((ci) => !ci.is_return || ci.quantity > 0).map((ci) => {
+                      const isRet = Boolean(ci.is_return);
+                      return (
+                        <tr
+                          key={ci.cart_key || (isRet ? `ret_${ci.original_order_item_id}` : `buy_${ci.item.id}`)}
+                          style={{
+                            borderBottom: '1px dotted var(--border-subtle)',
+                            background: isRet ? 'rgba(234, 88, 12, 0.05)' : 'transparent',
+                          }}
+                        >
+                          <td style={{ padding: '8px 12px', color: 'var(--text-main)', fontWeight: 600 }}>
+                            {isRet && (
+                              <span style={{ fontSize: '0.65rem', padding: '1px 4px', borderRadius: '3px', background: 'rgba(234, 88, 12, 0.2)', color: '#FB923C', fontWeight: 800, marginRight: '6px' }}>
+                                RETURN
+                              </span>
+                            )}
+                            {ci.item.name}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: isRet ? '#FB923C' : undefined }}>
+                            {ci.quantity}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                            ₹{parseFloat(ci.unit_price || ci.item.selling_price).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: isRet ? '#FB923C' : '#10B981' }}>
+                            {isRet ? `-₹${(ci.quantity * parseFloat(ci.unit_price)).toFixed(2)}` : `₹${ci.total}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {/* Totals & Grand Total Highlight */}
+              {/* Totals & Settlement Highlight */}
               <div
                 style={{
                   padding: '14px 20px',
                   borderRadius: 'var(--radius-lg)',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  background: isNetRefund
+                    ? 'rgba(234, 88, 12, 0.1)'
+                    : isEvenExchange
+                    ? 'rgba(56, 189, 248, 0.1)'
+                    : 'rgba(16, 185, 129, 0.1)',
+                  border: isNetRefund
+                    ? '1px solid rgba(234, 88, 12, 0.35)'
+                    : isEvenExchange
+                    ? '1px solid rgba(56, 189, 248, 0.35)'
+                    : '1px solid rgba(16, 185, 129, 0.3)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '8px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.84rem' }}>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Total Price (Subtotal):</span>
-                  <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>₹{cartSubtotal.toFixed(2)}</span>
-                </div>
+                {purchasedSubtotal > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.84rem' }}>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Goods Purchased:</span>
+                    <span style={{ fontWeight: 800, color: 'var(--text-main)' }}>₹{purchasedSubtotal.toFixed(2)}</span>
+                  </div>
+                )}
 
                 {cartDiscount > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.84rem', color: '#F59E0B' }}>
@@ -5640,6 +6082,13 @@ export default function BillingView({
                       Discount {discountType === 'rupee' ? `(Flat ₹${parseFloat(discountAmount || cartDiscount).toFixed(2)})` : `(${parseFloat(discountPercent)}%)`}:
                     </span>
                     <span style={{ fontWeight: 800 }}>-₹{cartDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {activeReturnCartItems.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.84rem', color: '#FB923C' }}>
+                    <span style={{ fontWeight: 700 }}>Returned Goods Credit:</span>
+                    <span style={{ fontWeight: 800 }}>-₹{returnCreditTotal.toFixed(2)}</span>
                   </div>
                 )}
 
@@ -5655,14 +6104,26 @@ export default function BillingView({
                 >
                   <div>
                     <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                      Total Payable Amount ({cartTotalItems} items / {cartTotalUnits} units)
+                      {isNetRefund
+                        ? `Net Refund via ${
+                            paymentMethod === 'upi' || paymentMethod === 'qr'
+                              ? 'UPI / Online'
+                              : paymentMethod === 'vip_card'
+                              ? 'VIP Card Store Credit'
+                              : paymentMethod === 'card'
+                              ? 'Card'
+                              : 'Cash Drawer'
+                          } (${cartReturnedUnits} returned)`
+                        : isEvenExchange
+                        ? `Even Exchange (${cartPurchasedUnits} buy / ${cartReturnedUnits} ret)`
+                        : `Total Payable Amount (${cartPurchasedUnits} buy units)`}
                     </div>
-                    {paymentMethod === 'cash' && amountPaid && parseFloat(amountPaid) > cartGrandTotal && (
+                    {paymentMethod === 'cash' && amountPaid && parseFloat(amountPaid) > cartGrandTotal && !isNetRefund && (
                       <div style={{ fontSize: '0.76rem', color: '#10B981', fontWeight: 700, marginTop: '2px' }}>
                         Cash Received: ₹{parseFloat(amountPaid).toFixed(2)} | Change: ₹{(parseFloat(amountPaid) - cartGrandTotal).toFixed(2)}
                       </div>
                     )}
-                    {paymentMethod === 'split' && (
+                    {paymentMethod === 'split' && !isNetRefund && (
                       <div style={{ fontSize: '0.76rem', color: '#38BDF8', fontWeight: 700, marginTop: '2px' }}>
                         Split: Cash ₹{parseFloat(splitCashAmount || 0).toFixed(2)} + UPI ₹{parseFloat(splitUpiAmount || 0).toFixed(2)}
                         {splitCashReceived && parseFloat(splitCashReceived) > (parseFloat(splitCashAmount) || 0) && (
@@ -5672,7 +6133,7 @@ export default function BillingView({
                         )}
                       </div>
                     )}
-                    {paymentMethod === 'partial' && (
+                    {paymentMethod === 'partial' && !isNetRefund && (
                       <div style={{ fontSize: '0.76rem', color: '#EC4899', fontWeight: 700, marginTop: '2px' }}>
                         {(parseFloat(partialAmountPaid) || 0) > 0 ? (
                           <>Partial: Paying ₹{parseFloat(partialAmountPaid || 0).toFixed(2)} via {(partialPaymentMethod || 'cash').toUpperCase()} | Balance Due: ₹{Math.max(0, cartGrandTotal - (parseFloat(partialAmountPaid) || 0)).toFixed(2)}</>
@@ -5682,8 +6143,8 @@ export default function BillingView({
                       </div>
                     )}
                   </div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#10B981' }}>
-                    ₹{cartGrandTotal.toFixed(2)}
+                  <div style={{ fontSize: '1.8rem', fontWeight: 900, color: isNetRefund ? '#FB923C' : isEvenExchange ? '#38BDF8' : '#10B981' }}>
+                    ₹{isNetRefund ? netRefundAmount.toFixed(2) : cartGrandTotal.toFixed(2)}
                   </div>
                 </div>
 
@@ -5702,7 +6163,7 @@ export default function BillingView({
                   >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       <FileText size={13} color="#38BDF8" style={{ flexShrink: 0 }} />
-                      <span>Internal Sale Remark</span>
+                      <span>Internal Remark / Exchange Reason</span>
                       <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#38BDF8', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.25)', padding: '1px 6px', borderRadius: '4px' }}>Internal Only</span>
                     </span>
                     <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 500 }}>
@@ -5749,15 +6210,27 @@ export default function BillingView({
                     padding: '10px 24px',
                     fontSize: '0.94rem',
                     fontWeight: 800,
-                    background: 'linear-gradient(135deg, #10B981, #059669)',
-                    boxShadow: '0 4px 16px rgba(16, 185, 129, 0.35)',
+                    background: isNetRefund
+                      ? 'linear-gradient(135deg, #EA580C, #C2410C)'
+                      : isEvenExchange
+                      ? 'linear-gradient(135deg, #0284C7, #0369A1)'
+                      : 'linear-gradient(135deg, #10B981, #059669)',
+                    boxShadow: isNetRefund ? '0 4px 16px rgba(234, 88, 12, 0.35)' : '0 4px 16px rgba(16, 185, 129, 0.35)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '8px',
                   }}
                 >
                   <CheckCircle2 size={18} />
-                  <span>{isSubmitting ? 'Finalizing Sale...' : 'Confirm & Complete Sale'}</span>
+                  <span>
+                    {isSubmitting
+                      ? 'Finalizing...'
+                      : isNetRefund
+                      ? 'Confirm Refund & Complete'
+                      : isEvenExchange
+                      ? 'Confirm Even Exchange'
+                      : 'Confirm & Complete Sale'}
+                  </span>
                   <span
                     style={{
                       fontSize: '0.72rem',
@@ -5968,8 +6441,8 @@ export default function BillingView({
                 const dateStr = `${day}-${month}-${year}`;
                 const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-                const totalUnits = completedOrder.items?.reduce((sum, it) => sum + it.quantity, 0) || completedOrder.items?.length || 1;
-                const totalMrp = completedOrder.items?.reduce((sum, it) => {
+                const totalUnits = completedOrder.items?.reduce((sum, it) => sum + (it.is_return ? 0 : it.quantity), 0) || completedOrder.items?.length || 1;
+                const totalMrp = completedOrder.items?.filter((it) => !it.is_return).reduce((sum, it) => {
                   const mrpVal = parseFloat(it.mrp || it.item_mrp || it.unit_mrp || it.unit_selling_price || 0);
                   return sum + mrpVal * it.quantity;
                 }, 0) || parseFloat(completedOrder.subtotal || 0);
@@ -5980,6 +6453,26 @@ export default function BillingView({
                 const storeAddress = completedOrder.store_details?.address || completedOrder.store_address || activeStore?.address || '';
                 const storePhone = completedOrder.store_details?.phone || completedOrder.store_phone || activeStore?.phone || '';
                 const storeGst = completedOrder.store_details?.gst_number || completedOrder.store_gst_number || activeStore?.gst_number || '';
+
+                const isExchangeOrder = Boolean(
+                  completedOrder.is_exchange ||
+                  (completedOrder.invoice_number && String(completedOrder.invoice_number).startsWith('EXC-'))
+                );
+                const isReturnOrder = Boolean(
+                  !isExchangeOrder && (
+                    completedOrder.is_return ||
+                    (completedOrder.invoice_number && String(completedOrder.invoice_number).startsWith('RET-')) ||
+                    completedOrder.status === 'refunded'
+                  )
+                );
+
+                const returnLines = completedOrder.items?.filter((it) => Boolean(it.is_return || it.original_order_item_id)) || [];
+                const purchaseLines = completedOrder.items?.filter((it) => !it.is_return && !it.original_order_item_id) || [];
+
+                const returnCreditTotal = returnLines.reduce((sum, it) => sum + parseFloat(it.total_price || (parseFloat(it.unit_selling_price || 0) * it.quantity) || 0), 0) || parseFloat(completedOrder.return_total_amount || 0);
+                const purchasedGrossTotal = purchaseLines.reduce((sum, it) => sum + parseFloat(it.total_price || (parseFloat(it.unit_selling_price || 0) * it.quantity) || 0), 0) || parseFloat(completedOrder.exchange_purchase_amount || completedOrder.subtotal || 0);
+                const netSettlementAmt = parseFloat(completedOrder.net_payable_amount ?? completedOrder.total_amount ?? 0);
+                const isNetRefundOrder = completedOrder.status === 'refunded' || netSettlementAmt < 0;
 
                 const storeContactParts = [];
                 if (storeAddress) storeContactParts.push(storeAddress);
@@ -6005,6 +6498,17 @@ export default function BillingView({
                       </div>
                     </div>
 
+                    {/* Dedicated Title Banner for Exchange / Return */}
+                    {isExchangeOrder ? (
+                      <div style={{ margin: '4px 0', padding: '3px 0', borderTop: '1px solid #000000', borderBottom: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.74rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                        RETURN &amp; EXCHANGE INVOICE
+                      </div>
+                    ) : isReturnOrder ? (
+                      <div style={{ margin: '4px 0', padding: '3px 0', borderTop: '1px solid #000000', borderBottom: '1px solid #000000', textAlign: 'center', fontWeight: 900, fontSize: '0.74rem', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                        RETURN &amp; REFUND VOUCHER
+                      </div>
+                    ) : null}
+
                     {/* Store Address & Contact */}
                     {storeContactLine ? (
                       <div style={{ textAlign: 'center', fontSize: '0.70rem', color: '#000000', paddingBottom: '6px', borderBottom: '1px dashed #000000', lineHeight: 1.35 }}>
@@ -6018,7 +6522,10 @@ export default function BillingView({
                     <div style={{ padding: '6px 0', borderBottom: '1px dashed #000000', fontSize: '0.70rem', color: '#000000' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div><strong>INVOICE NO. {completedOrder.invoice_number}</strong></div>
+                          <div><strong>{isReturnOrder ? 'VOUCHER NO.' : 'INVOICE NO.'} {completedOrder.invoice_number}</strong></div>
+                          {(isExchangeOrder || isReturnOrder) && completedOrder.return_reference && (
+                            <div><strong>Ref Original Bill: #{completedOrder.return_reference}</strong></div>
+                          )}
                           <div>Name :- {customerDisplayName}</div>
                           <div>Mobile No: {completedOrder.customer_phone || ''}</div>
                           <div>GST NO : {storeGst}</div>
@@ -6027,7 +6534,7 @@ export default function BillingView({
                           <div>Date:{dateStr}</div>
                           <div>Time:{timeStr}</div>
                           <div style={{ textTransform: 'capitalize' }}>
-                            Payment mode- {
+                            {isNetRefundOrder ? 'Refund Mode- ' : 'Payment mode- '} {
                               payMethod === 'vip_card'
                                 ? `VIP Card (${completedOrder.vip_card_uid || 'RFID'})`
                                 : payMethod === 'split'
@@ -6041,110 +6548,250 @@ export default function BillingView({
                       </div>
                     </div>
 
-                    {/* Line Items Table (Exact Physical Store Breakdown: Qty | MRP | Rate | Dis | Total) */}
-                    <div style={{ padding: '4px 0', borderBottom: '1px dashed #000000' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.70rem' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px dashed #000000', color: '#000000', fontWeight: 800 }}>
-                            <th style={{ width: '12%', textAlign: 'left', padding: '2px 0' }}>Qty</th>
-                            <th style={{ width: '22%', textAlign: 'right', padding: '2px 0' }}>MRP</th>
-                            <th style={{ width: '22%', textAlign: 'right', padding: '2px 0' }}>Rate</th>
-                            <th style={{ width: '18%', textAlign: 'right', padding: '2px 0' }}>Dis</th>
-                            <th style={{ width: '26%', textAlign: 'right', padding: '2px 0' }}>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {completedOrder.items?.map((item, i) => {
-                            const mrpVal = parseFloat(item.mrp || item.item_mrp || item.unit_mrp || item.unit_selling_price || 0);
-                            const rateVal = parseFloat(item.unit_selling_price || 0);
-                            const discountVal = Math.max(0, (mrpVal - rateVal) * item.quantity);
-                            const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
-                            return (
-                              <React.Fragment key={i}>
-                                <tr>
-                                  <td colSpan={5} style={{ paddingTop: '5px' }}>
-                                    <div
-                                      style={{
-                                        fontWeight: 800,
-                                        color: '#000000',
-                                        textTransform: 'uppercase',
-                                        lineHeight: 1.25,
-                                        maxHeight: '2.5em',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        display: '-webkit-box',
-                                        WebkitLineClamp: 2,
-                                        WebkitBoxOrient: 'vertical',
-                                        wordBreak: 'break-word',
-                                      }}
-                                      title={item.item_name}
-                                    >
-                                      {item.item_name}
-                                    </div>
-                                  </td>
+                    {/* Line Items: 3 Sections for Exchange vs Return vs Standard Sale */}
+                    {isExchangeOrder ? (
+                      <>
+                        {/* Section 1: Items Returned in Exchange */}
+                        {returnLines.length > 0 && (
+                          <div style={{ padding: '4px 0', borderBottom: '1px dashed #000000' }}>
+                            <div style={{ fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', marginBottom: '3px', textTransform: 'uppercase' }}>
+                              1. Items Returned in Exchange
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.70rem' }}>
+                              <thead>
+                                <tr style={{ borderBottom: '1px dashed #000000', color: '#000000', fontWeight: 800 }}>
+                                  <th style={{ width: '18%', textAlign: 'left', padding: '2px 0' }}>Qty</th>
+                                  <th style={{ width: '42%', textAlign: 'right', padding: '2px 0' }}>Rate Paid</th>
+                                  <th style={{ width: '40%', textAlign: 'right', padding: '2px 0' }}>Credit</th>
                                 </tr>
-                                <tr style={{ borderBottom: i < completedOrder.items.length - 1 ? '1px dotted #E5E7EB' : 'none' }}>
-                                  <td style={{ textAlign: 'left', padding: '2px 0 5px 0' }}>{item.quantity}</td>
-                                  <td style={{ textAlign: 'right', padding: '2px 0 5px 0' }}>{mrpVal.toFixed(2)}</td>
-                                  <td style={{ textAlign: 'right', padding: '2px 0 5px 0' }}>{rateVal.toFixed(2)}</td>
-                                  <td style={{ textAlign: 'right', padding: '2px 0 5px 0' }}>{discountVal.toFixed(2)}</td>
-                                  <td style={{ textAlign: 'right', padding: '2px 0 5px 0', fontWeight: 800 }}>{lineTotal.toFixed(2)}</td>
-                                </tr>
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Side-by-Side: Payment Breakdown (Left) & Totals (Right) */}
-                    <div style={{ padding: '8px 0', borderBottom: '1px dashed #000000', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.70rem', lineHeight: 1.45 }}>
-                      {/* Left: Payment Mode Breakdown */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: '#000000' }}>
-                        <div>Cash : {payMethod === 'cash' ? totalAmtFormatted : payMethod === 'split' ? parseFloat(completedOrder.split_cash_amount || 0).toFixed(2) : (payMethod === 'partial' && (completedOrder.initial_payment_method === 'cash' || !completedOrder.initial_payment_method)) ? parseFloat(completedOrder.amount_paid || 0).toFixed(2) : '0.00'}</div>
-                        <div>Card : {payMethod === 'vip_card' ? `${totalAmtFormatted} (VIP)` : (payMethod === 'card' ? totalAmtFormatted : (payMethod === 'partial' && completedOrder.initial_payment_method === 'card') ? parseFloat(completedOrder.amount_paid || 0).toFixed(2) : '0')}</div>
-                        <div>UPI - {payMethod === 'upi' || payMethod === 'qr' ? totalAmtFormatted : payMethod === 'split' ? parseFloat(completedOrder.split_upi_amount || 0).toFixed(2) : (payMethod === 'partial' && completedOrder.initial_payment_method === 'upi') ? parseFloat(completedOrder.amount_paid || 0).toFixed(2) : '0'}</div>
-                        {(payMethod === 'partial' || parseFloat(completedOrder.balance_due || 0) > 0) && (
-                          <div style={{ marginTop: '3px', paddingTop: '3px', borderTop: '1px dotted #000000', fontWeight: 900, color: '#DC2626' }}>
-                            DUE / KHATA: ₹{parseFloat(completedOrder.balance_due || 0).toFixed(2)}
+                              </thead>
+                              <tbody>
+                                {returnLines.map((item, i) => {
+                                  const rateVal = parseFloat(item.unit_selling_price || 0);
+                                  const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
+                                  return (
+                                    <React.Fragment key={`ret_row_${i}`}>
+                                      <tr>
+                                        <td colSpan={3} style={{ paddingTop: '4px' }}>
+                                          <div
+                                            style={{
+                                              fontWeight: 800,
+                                              color: '#000000',
+                                              textTransform: 'uppercase',
+                                              lineHeight: 1.25,
+                                              wordBreak: 'break-word',
+                                            }}
+                                          >
+                                            {item.item_name}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                      <tr style={{ borderBottom: i < returnLines.length - 1 ? '1px dotted #E5E7EB' : 'none' }}>
+                                        <td style={{ textAlign: 'left', padding: '2px 0 4px 0' }}>{item.quantity}</td>
+                                        <td style={{ textAlign: 'right', padding: '2px 0 4px 0' }}>₹{rateVal.toFixed(2)}</td>
+                                        <td style={{ textAlign: 'right', padding: '2px 0 4px 0', fontWeight: 800, color: '#DC2626' }}>-₹{lineTotal.toFixed(2)}</td>
+                                      </tr>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
                         )}
-                      </div>
 
-                      {/* Right: Totals Breakdown */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', textAlign: 'right', color: '#000000' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
-                          <span>Total Qty :</span>
-                          <strong>{totalUnits}</strong>
+                        {/* Section 2: Items Purchased */}
+                        <div style={{ padding: '4px 0', borderBottom: '1px dashed #000000' }}>
+                          <div style={{ fontWeight: 900, fontSize: '0.68rem', letterSpacing: '0.5px', marginBottom: '3px', textTransform: 'uppercase' }}>
+                            2. Items Purchased
+                          </div>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.70rem' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px dashed #000000', color: '#000000', fontWeight: 800 }}>
+                                <th style={{ width: '12%', textAlign: 'left', padding: '2px 0' }}>Qty</th>
+                                <th style={{ width: '22%', textAlign: 'right', padding: '2px 0' }}>MRP</th>
+                                <th style={{ width: '22%', textAlign: 'right', padding: '2px 0' }}>Rate</th>
+                                <th style={{ width: '18%', textAlign: 'right', padding: '2px 0' }}>Dis</th>
+                                <th style={{ width: '26%', textAlign: 'right', padding: '2px 0' }}>Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {purchaseLines.map((item, i) => {
+                                const mrpVal = parseFloat(item.mrp || item.item_mrp || item.unit_mrp || item.unit_selling_price || 0);
+                                const rateVal = parseFloat(item.unit_selling_price || 0);
+                                const discountVal = Math.max(0, (mrpVal - rateVal) * item.quantity);
+                                const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
+                                return (
+                                  <React.Fragment key={`pur_row_${i}`}>
+                                    <tr>
+                                      <td colSpan={5} style={{ paddingTop: '4px' }}>
+                                        <div
+                                          style={{
+                                            fontWeight: 800,
+                                            color: '#000000',
+                                            textTransform: 'uppercase',
+                                            lineHeight: 1.25,
+                                            maxHeight: '2.5em',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical',
+                                            wordBreak: 'break-word',
+                                          }}
+                                          title={item.item_name}
+                                        >
+                                          {item.item_name}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                    <tr style={{ borderBottom: i < purchaseLines.length - 1 ? '1px dotted #E5E7EB' : 'none' }}>
+                                      <td style={{ textAlign: 'left', padding: '2px 0 4px 0' }}>{item.quantity}</td>
+                                      <td style={{ textAlign: 'right', padding: '2px 0 4px 0' }}>{mrpVal.toFixed(2)}</td>
+                                      <td style={{ textAlign: 'right', padding: '2px 0 4px 0' }}>{rateVal.toFixed(2)}</td>
+                                      <td style={{ textAlign: 'right', padding: '2px 0 4px 0' }}>{discountVal.toFixed(2)}</td>
+                                      <td style={{ textAlign: 'right', padding: '2px 0 4px 0', fontWeight: 800 }}>{lineTotal.toFixed(2)}</td>
+                                    </tr>
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
-                        {totalSavings > 0 && (
+                      </>
+                    ) : (
+                      /* Standard Sale & Return Table (Exact Physical Store Breakdown: Qty | MRP | Rate | Dis | Total) */
+                      <div style={{ padding: '4px 0', borderBottom: '1px dashed #000000' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.70rem' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px dashed #000000', color: '#000000', fontWeight: 800 }}>
+                              <th style={{ width: '12%', textAlign: 'left', padding: '2px 0' }}>Qty</th>
+                              <th style={{ width: '22%', textAlign: 'right', padding: '2px 0' }}>MRP</th>
+                              <th style={{ width: '22%', textAlign: 'right', padding: '2px 0' }}>Rate</th>
+                              <th style={{ width: '18%', textAlign: 'right', padding: '2px 0' }}>Dis</th>
+                              <th style={{ width: '26%', textAlign: 'right', padding: '2px 0' }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {completedOrder.items?.map((item, i) => {
+                              const mrpVal = parseFloat(item.mrp || item.item_mrp || item.unit_mrp || item.unit_selling_price || 0);
+                              const rateVal = parseFloat(item.unit_selling_price || 0);
+                              const discountVal = Math.max(0, (mrpVal - rateVal) * item.quantity);
+                              const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
+                              return (
+                                <React.Fragment key={i}>
+                                  <tr>
+                                    <td colSpan={5} style={{ paddingTop: '5px' }}>
+                                      <div
+                                        style={{
+                                          fontWeight: 800,
+                                          color: '#000000',
+                                          textTransform: 'uppercase',
+                                          lineHeight: 1.25,
+                                          maxHeight: '2.5em',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          display: '-webkit-box',
+                                          WebkitLineClamp: 2,
+                                          WebkitBoxOrient: 'vertical',
+                                          wordBreak: 'break-word',
+                                        }}
+                                        title={item.item_name}
+                                      >
+                                        {item.item_name}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  <tr style={{ borderBottom: i < completedOrder.items.length - 1 ? '1px dotted #E5E7EB' : 'none' }}>
+                                    <td style={{ textAlign: 'left', padding: '2px 0 5px 0' }}>{item.quantity}</td>
+                                    <td style={{ textAlign: 'right', padding: '2px 0 5px 0' }}>{mrpVal.toFixed(2)}</td>
+                                    <td style={{ textAlign: 'right', padding: '2px 0 5px 0' }}>{rateVal.toFixed(2)}</td>
+                                    <td style={{ textAlign: 'right', padding: '2px 0 5px 0' }}>{discountVal.toFixed(2)}</td>
+                                    <td style={{ textAlign: 'right', padding: '2px 0 5px 0', fontWeight: 800 }}>{lineTotal.toFixed(2)}</td>
+                                  </tr>
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Settlement Section: 3-Section Exchange Breakdown vs Return vs Standard Sale */}
+                    {isExchangeOrder ? (
+                      <div style={{ padding: '8px 0', borderBottom: '1px dashed #000000', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.70rem', lineHeight: 1.45 }}>
+                        {/* Left: Exchange Summary */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: '#000000' }}>
+                          <div>Mode: {payMethod.toUpperCase()}</div>
+                          <div>Items Bought: {purchaseLines.reduce((s, it) => s + it.quantity, 0)}</div>
+                          <div>Items Returned: {returnLines.reduce((s, it) => s + it.quantity, 0)}</div>
+                        </div>
+
+                        {/* Right: Exchange Financial Settlement */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', textAlign: 'right', color: '#000000' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
+                            <span>Purchased Total :</span>
+                            <span>₹{purchasedGrossTotal.toFixed(2)}</span>
+                          </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', color: '#DC2626', fontWeight: 800 }}>
-                            <span>Total Saving :</span>
-                            <span>{totalSavings.toFixed(totalSavings % 1 === 0 ? 0 : 2)}</span>
+                            <span>Return Credit :</span>
+                            <span>-₹{returnCreditTotal.toFixed(2)}</span>
                           </div>
-                        )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
-                          <span>Total Amount :</span>
-                          <span>{parseFloat(completedOrder.subtotal || completedOrder.total_amount).toFixed(2)}</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 900, fontSize: '0.82rem', borderTop: '1px dashed #000000', paddingTop: '3px', marginTop: '2px' }}>
+                            <span>{isNetRefundOrder ? 'Net Refund Paid :' : 'Net Payable :'}</span>
+                            <span>₹{Math.abs(netSettlementAmt).toFixed(2)}</span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 900, fontSize: '0.82rem', borderTop: '1px dashed #000000', paddingTop: '3px', marginTop: '2px' }}>
-                          <span>Payable Amount :</span>
-                          <span>{totalAmtFormatted}</span>
-                        </div>
-                        {(payMethod === 'partial' || parseFloat(completedOrder.balance_due || 0) > 0) && (
-                          <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 800, color: '#059669' }}>
-                              <span>Paid Now :</span>
-                              <span>₹{parseFloat(completedOrder.amount_paid || 0).toFixed(2)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 900, fontSize: '0.82rem', color: '#DC2626', borderTop: '1px dotted #000000', paddingTop: '2px' }}>
-                              <span>Balance Due :</span>
-                              <span>₹{parseFloat(completedOrder.balance_due || 0).toFixed(2)}</span>
-                            </div>
-                          </>
-                        )}
                       </div>
-                    </div>
+                    ) : (
+                      /* Standard Sale & Pure Return Payment Breakdown & Totals */
+                      <div style={{ padding: '8px 0', borderBottom: '1px dashed #000000', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', fontSize: '0.70rem', lineHeight: 1.45 }}>
+                        {/* Left: Payment Mode Breakdown */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: '#000000' }}>
+                          <div>Cash : {payMethod === 'cash' ? totalAmtFormatted : payMethod === 'split' ? parseFloat(completedOrder.split_cash_amount || 0).toFixed(2) : (payMethod === 'partial' && (completedOrder.initial_payment_method === 'cash' || !completedOrder.initial_payment_method)) ? parseFloat(completedOrder.amount_paid || 0).toFixed(2) : '0.00'}</div>
+                          <div>Card : {payMethod === 'vip_card' ? `${totalAmtFormatted} (VIP)` : (payMethod === 'card' ? totalAmtFormatted : (payMethod === 'partial' && completedOrder.initial_payment_method === 'card') ? parseFloat(completedOrder.amount_paid || 0).toFixed(2) : '0')}</div>
+                          <div>UPI - {payMethod === 'upi' || payMethod === 'qr' ? totalAmtFormatted : payMethod === 'split' ? parseFloat(completedOrder.split_upi_amount || 0).toFixed(2) : (payMethod === 'partial' && completedOrder.initial_payment_method === 'upi') ? parseFloat(completedOrder.amount_paid || 0).toFixed(2) : '0'}</div>
+                          {(payMethod === 'partial' || parseFloat(completedOrder.balance_due || 0) > 0) && (
+                            <div style={{ marginTop: '3px', paddingTop: '3px', borderTop: '1px dotted #000000', fontWeight: 900, color: '#DC2626' }}>
+                              DUE / KHATA: ₹{parseFloat(completedOrder.balance_due || 0).toFixed(2)}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right: Totals Breakdown */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', textAlign: 'right', color: '#000000' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
+                            <span>Total Qty :</span>
+                            <strong>{totalUnits}</strong>
+                          </div>
+                          {totalSavings > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', color: '#DC2626', fontWeight: 800 }}>
+                              <span>Total Saving :</span>
+                              <span>{totalSavings.toFixed(totalSavings % 1 === 0 ? 0 : 2)}</span>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px' }}>
+                            <span>Total Amount :</span>
+                            <span>{parseFloat(completedOrder.subtotal || completedOrder.total_amount).toFixed(2)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 900, fontSize: '0.82rem', borderTop: '1px dashed #000000', paddingTop: '3px', marginTop: '2px' }}>
+                            <span>Payable Amount :</span>
+                            <span>{totalAmtFormatted}</span>
+                          </div>
+                          {(payMethod === 'partial' || parseFloat(completedOrder.balance_due || 0) > 0) && (
+                            <>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 800, color: '#059669' }}>
+                                <span>Paid Now :</span>
+                                <span>₹{parseFloat(completedOrder.amount_paid || 0).toFixed(2)}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', fontWeight: 900, fontSize: '0.82rem', color: '#DC2626', borderTop: '1px dotted #000000', paddingTop: '2px' }}>
+                                <span>Balance Due :</span>
+                                <span>₹{parseFloat(completedOrder.balance_due || 0).toFixed(2)}</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Footer Details & Cashier Info */}
                     <div style={{ paddingTop: '8px', fontSize: '0.70rem', display: 'flex', flexDirection: 'column', gap: '2px', color: '#000000' }}>
@@ -9582,6 +10229,238 @@ export default function BillingView({
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return or Exchange Bill Lookup Modal */}
+      {isReturnLookupModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px',
+            animation: 'fadeIn 0.15s ease',
+          }}
+          onClick={() => {
+            if (!returnLookupLoading) {
+              setIsReturnLookupModalOpen(false);
+              setReturnLookupError('');
+            }
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '520px',
+              backgroundColor: 'var(--bg-surface-solid)',
+              borderRadius: 'var(--radius-xl)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.65)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              animation: 'fadeIn 0.2s ease',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(135deg, rgba(234, 88, 12, 0.12), rgba(249, 115, 22, 0.05))',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    background: 'rgba(234, 88, 12, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#FB923C',
+                  }}
+                >
+                  <RotateCcw size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                    Return or Exchange Bill Lookup
+                  </h3>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Load original bill items directly into active cart
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!returnLookupLoading) {
+                    setIsReturnLookupModalOpen(false);
+                    setReturnLookupError('');
+                  }
+                }}
+                disabled={returnLookupLoading}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleFetchBillForReturn} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
+                  Original Invoice / Bill Number
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={returnLookupInput}
+                    onChange={(e) => {
+                      setReturnLookupInput(e.target.value);
+                      if (returnLookupError) setReturnLookupError('');
+                    }}
+                    placeholder="e.g. INV-20261011-0001 (or scan barcode)"
+                    autoFocus
+                    disabled={returnLookupLoading}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      borderRadius: 'var(--radius-md)',
+                      border: returnLookupError ? '1px solid #EF4444' : '1px solid var(--border-subtle)',
+                      background: 'var(--bg-card)',
+                      color: 'var(--text-main)',
+                      fontSize: '0.95rem',
+                      fontWeight: 600,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                  Tip: You can scan the barcode on the physical bill or type the full bill number.
+                </div>
+              </div>
+
+              {returnLookupError && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#EF4444',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px',
+                  }}
+                >
+                  <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>{returnLookupError}</div>
+                </div>
+              )}
+
+              {/* Informational Guidance Box */}
+              <div
+                style={{
+                  padding: '14px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(56, 189, 248, 0.08)',
+                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                  fontSize: '0.78rem',
+                  color: 'var(--text-main)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}
+              >
+                <div style={{ fontWeight: 700, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <RotateCcw size={14} />
+                  <span>How Cart Return &amp; Exchange Works</span>
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  <li>All returnable items from the invoice load into your active cart with <strong>0 return quantity</strong>.</li>
+                  <li>Customer phone and name are automatically autofilled from the invoice.</li>
+                  <li>Click <strong>(+)</strong> on the returned items to specify how many units are being returned.</li>
+                  <li>Items preserve their exact discounted unit price paid on the original invoice.</li>
+                  <li>Scan or add new items to the same cart for a simultaneous <strong>instant exchange</strong>.</li>
+                </ul>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReturnLookupModalOpen(false);
+                    setReturnLookupError('');
+                  }}
+                  disabled={returnLookupLoading}
+                  className="btn btn-secondary"
+                  style={{ padding: '10px 18px', fontSize: '0.88rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={returnLookupLoading || !returnLookupInput.trim()}
+                  className="btn"
+                  style={{
+                    padding: '10px 22px',
+                    fontSize: '0.88rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #EA580C, #C2410C)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 14px rgba(234, 88, 12, 0.4)',
+                    cursor: returnLookupLoading || !returnLookupInput.trim() ? 'not-allowed' : 'pointer',
+                    opacity: returnLookupLoading || !returnLookupInput.trim() ? 0.6 : 1,
+                  }}
+                >
+                  {returnLookupLoading ? (
+                    <>
+                      <RefreshCw size={16} className="spin" />
+                      <span>Fetching Bill...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw size={16} />
+                      <span>Fetch Bill &amp; Load Items</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

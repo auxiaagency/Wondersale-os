@@ -228,10 +228,19 @@ def generate_invoice_pdf_buffer(order):
 
     elements = []
 
+    is_exchange = bool(
+        getattr(order, 'is_exchange', False) or
+        (order.invoice_number and str(order.invoice_number).startswith('EXC-')) or
+        (getattr(order, 'return_reference', None) and order.items.filter(is_return=True).exists() and order.items.filter(is_return=False).exists())
+    )
+
     is_return = bool(
-        getattr(order, 'is_return', False) or
-        (order.invoice_number and str(order.invoice_number).startswith('RET-')) or
-        getattr(order, 'return_reference', None)
+        not is_exchange and (
+            getattr(order, 'is_return', False) or
+            (order.invoice_number and str(order.invoice_number).startswith('RET-')) or
+            getattr(order, 'return_reference', None) or
+            getattr(order, 'status', '') == 'refunded'
+        )
     )
 
     # Store Header
@@ -240,7 +249,12 @@ def generate_invoice_pdf_buffer(order):
     store_phone = getattr(order.store, 'phone', '9755004996') if order.store else '9755004996'
 
     elements.append(Paragraph(f'<b>{store_name}</b>', header_style))
-    tagline_text = 'RETURN & REFUND VOUCHER' if is_return else 'FOR BETTER NATION'
+    if is_exchange:
+        tagline_text = 'RETURN & EXCHANGE INVOICE'
+    elif is_return:
+        tagline_text = 'RETURN & REFUND VOUCHER'
+    else:
+        tagline_text = 'FOR BETTER NATION'
     elements.append(Paragraph(tagline_text, tagline_style))
     elements.append(Spacer(1, 3))
     elements.append(Paragraph(f'{store_address}. M-{store_phone}', store_meta_style))
@@ -256,8 +270,15 @@ def generate_invoice_pdf_buffer(order):
     payment_mode = str(order.payment_method or 'Cash').capitalize()
     cashier_display = order.cashier_name or (order.cashier.get_full_name() if order.cashier else 'Salman')
 
-    voucher_title = 'VOUCHER NO.' if is_return else 'INVOICE NO.'
-    mode_label = 'Refund Mode' if is_return else 'Payment Mode'
+    if is_exchange:
+        voucher_title = 'EXCHANGE INVOICE NO.'
+        mode_label = 'Settlement Mode'
+    elif is_return:
+        voucher_title = 'VOUCHER NO.'
+        mode_label = 'Refund Mode'
+    else:
+        voucher_title = 'INVOICE NO.'
+        mode_label = 'Payment Mode'
 
     meta_table_data = [
         [
@@ -266,7 +287,7 @@ def generate_invoice_pdf_buffer(order):
         ]
     ]
 
-    if is_return and getattr(order, 'return_reference', None):
+    if (is_return or is_exchange) and getattr(order, 'return_reference', None):
         meta_table_data.append([
             Paragraph(f'<b>Original Bill:</b> #{order.return_reference}', receipt_text_bold),
             Paragraph(f'Time:{time_str}', receipt_text_right)
@@ -303,86 +324,201 @@ def generate_invoice_pdf_buffer(order):
     elements.append(Spacer(1, 4))
 
     # Items Table Header & Rows
-    # Qty, MRP, Rate, Dis, Total
-    items_table_data = [
-        [
-            Paragraph('<b>Qty</b>', receipt_text_bold),
-            Paragraph('<b>MRP</b>', receipt_text_right),
-            Paragraph('<b>Rate</b>', receipt_text_right),
-            Paragraph('<b>Dis</b>', receipt_text_right),
-            Paragraph('<b>Total</b>', receipt_text_right)
+    if is_exchange:
+        # 1. Section: Items Returned in Exchange
+        return_lines = [l for l in order.items.all() if getattr(l, 'is_return', False)]
+        purchase_lines = [l for l in order.items.all() if not getattr(l, 'is_return', False)]
+
+        if return_lines:
+            elements.append(Paragraph('<b>1. ITEMS RETURNED IN EXCHANGE</b>', receipt_text_bold))
+            elements.append(Spacer(1, 2))
+            ret_table_data = [
+                [
+                    Paragraph('<b>Qty</b>', receipt_text_bold),
+                    Paragraph('<b>Rate Paid</b>', receipt_text_right),
+                    Paragraph('<b>Credit</b>', receipt_text_right),
+                ]
+            ]
+            for rline in return_lines:
+                rqty = rline.quantity or 1
+                rrate = float(getattr(rline, 'unit_selling_price', getattr(rline, 'unit_price', 0)))
+                rtotal = float(rline.total_price or (rrate * rqty))
+                ret_table_data.append([
+                    Paragraph(f'<b>{rline.item_name.upper()}</b>', receipt_text_bold), '', ''
+                ])
+                ret_table_data.append([
+                    Paragraph(str(rqty), receipt_text),
+                    Paragraph(f'{rrate:,.2f}', receipt_text_right),
+                    Paragraph(f'-{rtotal:,.2f}', receipt_text_right),
+                ])
+            ret_table = Table(ret_table_data, colWidths=[35, 85, 85])
+            ret_style = [
+                ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.black),
+                ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
+                ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]
+            cr = 1
+            for _ in return_lines:
+                ret_style.append(('SPAN', (0, cr), (-1, cr)))
+                cr += 2
+            ret_table.setStyle(TableStyle(ret_style))
+            elements.append(ret_table)
+            elements.append(Spacer(1, 4))
+
+        # 2. Section: Items Purchased in Exchange
+        elements.append(Paragraph('<b>2. ITEMS PURCHASED</b>', receipt_text_bold))
+        elements.append(Spacer(1, 2))
+        pur_table_data = [
+            [
+                Paragraph('<b>Qty</b>', receipt_text_bold),
+                Paragraph('<b>MRP</b>', receipt_text_right),
+                Paragraph('<b>Rate</b>', receipt_text_right),
+                Paragraph('<b>Dis</b>', receipt_text_right),
+                Paragraph('<b>Total</b>', receipt_text_right)
+            ]
         ]
-    ]
+        total_pur_qty = 0
+        for pline in purchase_lines:
+            pqty = pline.quantity or 1
+            total_pur_qty += pqty
+            prate = float(getattr(pline, 'unit_selling_price', getattr(pline, 'unit_price', 0)))
+            pmrp = float(getattr(pline, 'mrp', getattr(pline, 'item_mrp', prate)) or prate)
+            pdis = max(0.0, (pmrp - prate) * pqty)
+            ptotal = float(pline.total_price or (prate * pqty))
 
-    total_qty = 0
-    for line in order.items.all():
-        qty = line.quantity or 1
-        total_qty += qty
-        unit_rate = float(getattr(line, 'unit_selling_price', getattr(line, 'unit_price', 0)))
-        mrp_val = float(getattr(line, 'mrp', getattr(line, 'item_mrp', unit_rate)) or unit_rate)
-        dis_val = max(0.0, (mrp_val - unit_rate) * qty)
-        total_val = float(line.total_price or (unit_rate * qty))
-
-        # Item Name Row spanning across columns
-        item_name = line.item_name or 'Item'
-        items_table_data.append([
-            Paragraph(f'<b>{item_name.upper()}</b>', receipt_text_bold),
-            '', '', '', ''
-        ])
-        # Values Row
-        items_table_data.append([
-            Paragraph(str(qty), receipt_text),
-            Paragraph(f'{mrp_val:,.2f}', receipt_text_right),
-            Paragraph(f'{unit_rate:,.2f}', receipt_text_right),
-            Paragraph(f'{dis_val:,.2f}', receipt_text_right),
-            Paragraph(f'{total_val:,.2f}', receipt_text_right)
-        ])
-
-    items_table = Table(items_table_data, colWidths=[25, 45, 45, 40, 50])
-    items_table_style = [
-        ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.black),
-        ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
-        ('TOPPADDING', (0, 0), (-1, -1), 1.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-    ]
-    # Span item names
-    curr_r = 1
-    for _ in order.items.all():
-        items_table_style.append(('SPAN', (0, curr_r), (-1, curr_r)))
-        curr_r += 2
-
-    items_table.setStyle(TableStyle(items_table_style))
-    elements.append(items_table)
-    elements.append(Spacer(1, 4))
-
-    # Totals Summary Section
-    grand_total_val = float(order.total_amount or 0)
-    totals_data = [
-        [
-            Paragraph(f'Cash : {grand_total_val:,.2f}', receipt_text_bold),
-            Paragraph(f'Total Qty : {total_qty}', receipt_text_right)
-        ],
-        [
-            Paragraph('Card : 0', receipt_text),
-            Paragraph(f'Total Amount : {grand_total_val:,.2f}', receipt_text_right)
-        ],
-        [
-            Paragraph('UPI : 0', receipt_text),
-            Paragraph(f'<b>Payable Amount : {grand_total_val:,.2f}</b>', receipt_text_right)
+            pur_table_data.append([
+                Paragraph(f'<b>{pline.item_name.upper()}</b>', receipt_text_bold),
+                '', '', '', ''
+            ])
+            pur_table_data.append([
+                Paragraph(str(pqty), receipt_text),
+                Paragraph(f'{pmrp:,.2f}', receipt_text_right),
+                Paragraph(f'{prate:,.2f}', receipt_text_right),
+                Paragraph(f'{pdis:,.2f}', receipt_text_right),
+                Paragraph(f'{ptotal:,.2f}', receipt_text_right)
+            ])
+        pur_table = Table(pur_table_data, colWidths=[25, 45, 45, 40, 50])
+        pur_style = [
+            ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.black),
+            ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]
-    ]
-    totals_table = Table(totals_data, colWidths=[105, 100])
-    totals_table.setStyle(TableStyle([
-        ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-    ]))
-    elements.append(totals_table)
-    elements.append(Spacer(1, 4))
+        pcr = 1
+        for _ in purchase_lines:
+            pur_style.append(('SPAN', (0, pcr), (-1, pcr)))
+            pcr += 2
+        pur_table.setStyle(TableStyle(pur_style))
+        elements.append(pur_table)
+        elements.append(Spacer(1, 4))
+
+        # 3. Section: Exchange Settlement Breakdown
+        pur_gross = float(getattr(order, 'exchange_purchase_amount', 0) or order.subtotal or 0)
+        ret_val = float(getattr(order, 'return_total_amount', 0) or 0)
+        net_val = float(getattr(order, 'net_payable_amount', order.total_amount) or order.total_amount or 0)
+
+        totals_data = [
+            [Paragraph(f'Purchased Total : {pur_gross:,.2f}', receipt_text), Paragraph(f'Items Bought : {total_pur_qty}', receipt_text_right)],
+            [Paragraph(f'Less Return Credit : -{ret_val:,.2f}', receipt_text), Paragraph(f'Items Returned : {len(return_lines)}', receipt_text_right)],
+            [Paragraph(f'<b>Net Payable : {net_val:,.2f}</b>', receipt_text_bold), Paragraph(f'<b>Mode : {payment_mode}</b>', receipt_text_right)],
+        ]
+        totals_table = Table(totals_data, colWidths=[115, 90])
+        totals_table.setStyle(TableStyle([
+            ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
+            ('LINEABOVE', (0, 0), (-1, 0), 0.5, colors.black),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(totals_table)
+        elements.append(Spacer(1, 4))
+
+    else:
+        # Standard Sale or Pure Return single-table layout
+        items_table_data = [
+            [
+                Paragraph('<b>Qty</b>', receipt_text_bold),
+                Paragraph('<b>MRP</b>', receipt_text_right),
+                Paragraph('<b>Rate</b>', receipt_text_right),
+                Paragraph('<b>Dis</b>', receipt_text_right),
+                Paragraph('<b>Total</b>', receipt_text_right)
+            ]
+        ]
+
+        total_qty = 0
+        for line in order.items.all():
+            qty = line.quantity or 1
+            total_qty += qty
+            unit_rate = float(getattr(line, 'unit_selling_price', getattr(line, 'unit_price', 0)))
+            mrp_val = float(getattr(line, 'mrp', getattr(line, 'item_mrp', unit_rate)) or unit_rate)
+            dis_val = max(0.0, (mrp_val - unit_rate) * qty)
+            total_val = float(line.total_price or (unit_rate * qty))
+
+            # Item Name Row spanning across columns
+            item_name = line.item_name or 'Item'
+            items_table_data.append([
+                Paragraph(f'<b>{item_name.upper()}</b>', receipt_text_bold),
+                '', '', '', ''
+            ])
+            # Values Row
+            items_table_data.append([
+                Paragraph(str(qty), receipt_text),
+                Paragraph(f'{mrp_val:,.2f}', receipt_text_right),
+                Paragraph(f'{unit_rate:,.2f}', receipt_text_right),
+                Paragraph(f'{dis_val:,.2f}', receipt_text_right),
+                Paragraph(f'{total_val:,.2f}', receipt_text_right)
+            ])
+
+        items_table = Table(items_table_data, colWidths=[25, 45, 45, 40, 50])
+        items_table_style = [
+            ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.black),
+            ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
+            ('TOPPADDING', (0, 0), (-1, -1), 1.5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]
+        curr_r = 1
+        for _ in order.items.all():
+            items_table_style.append(('SPAN', (0, curr_r), (-1, curr_r)))
+            curr_r += 2
+
+        items_table.setStyle(TableStyle(items_table_style))
+        elements.append(items_table)
+        elements.append(Spacer(1, 4))
+
+        # Totals Summary Section
+        grand_total_val = float(order.total_amount or 0)
+        totals_data = [
+            [
+                Paragraph(f'Cash : {grand_total_val:,.2f}', receipt_text_bold),
+                Paragraph(f'Total Qty : {total_qty}', receipt_text_right)
+            ],
+            [
+                Paragraph('Card : 0', receipt_text),
+                Paragraph(f'Total Amount : {grand_total_val:,.2f}', receipt_text_right)
+            ],
+            [
+                Paragraph('UPI : 0', receipt_text),
+                Paragraph(f'<b>Payable Amount : {grand_total_val:,.2f}</b>', receipt_text_right)
+            ]
+        ]
+        totals_table = Table(totals_data, colWidths=[105, 100])
+        totals_table.setStyle(TableStyle([
+            ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black),
+            ('TOPPADDING', (0, 0), (-1, -1), 1),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(totals_table)
+        elements.append(Spacer(1, 4))
 
     # Cashier & Footer
     elements.append(Paragraph(f'Cashier Name - {cashier_display}', receipt_text))
@@ -450,14 +586,25 @@ def send_whatsapp_bill_for_order(order, recipient_phone=None, pdf_bytes=None, fo
         # 2. Upload media
         media_url = f'https://graph.facebook.com/v20.0/{phone_id}/media'
         headers = {'Authorization': f'Bearer {access_token}'}
+        is_exchange = bool(
+            getattr(order, 'is_exchange', False) or
+            (order.invoice_number and str(order.invoice_number).startswith('EXC-'))
+        )
         is_return = bool(
-            getattr(order, 'is_return', False) or
-            (order.invoice_number and str(order.invoice_number).startswith('RET-')) or
-            getattr(order, 'return_reference', None) or
-            getattr(order, 'status', '') == 'refunded'
+            not is_exchange and (
+                getattr(order, 'is_return', False) or
+                (order.invoice_number and str(order.invoice_number).startswith('RET-')) or
+                getattr(order, 'return_reference', None) or
+                getattr(order, 'status', '') == 'refunded'
+            )
         )
 
-        filename = f'Wondersale_Return_Voucher_{order.invoice_number}.pdf' if is_return else f'Wondersale_Bill_{order.invoice_number}.pdf'
+        if is_exchange:
+            filename = f'Wondersale_Exchange_Invoice_{order.invoice_number}.pdf'
+        elif is_return:
+            filename = f'Wondersale_Return_Voucher_{order.invoice_number}.pdf'
+        else:
+            filename = f'Wondersale_Bill_{order.invoice_number}.pdf'
         files = {'file': (filename, pdf_bytes, 'application/pdf')}
         form_data = {'messaging_product': 'whatsapp', 'type': 'application/pdf'}
 
@@ -485,9 +632,29 @@ def send_whatsapp_bill_for_order(order, recipient_phone=None, pdf_bytes=None, fo
         # Allow customizing template names via environment variables
         bill_template_name = os.getenv('META_WHATSAPP_BILL_TEMPLATE_NAME', 'bill')
         return_template_name = os.getenv('META_WHATSAPP_RETURN_TEMPLATE_NAME', 'return_receipt')
-        template_name = return_template_name if is_return else bill_template_name
+        exchange_template_name = os.getenv('META_WHATSAPP_EXCHANGE_TEMPLATE_NAME', 'exchange_bill')
 
-        if is_return:
+        if is_exchange:
+            template_name = exchange_template_name
+            # Exchange template body parameters (6 parameters matching transactional exchange summary):
+            # {{1}} = Customer Name
+            # {{2}} = Exchange Invoice Number (e.g. EXC-20261011-0001)
+            # {{3}} = Original Bill Number (e.g. INV-20261011-0001)
+            # {{4}} = Date & Time
+            # {{5}} = Settlement Mode (e.g. CASH / UPI / VIP_CARD)
+            # {{6}} = Net Payable / Net Refund Amount
+            orig_ref = str(getattr(order, 'return_reference', '') or 'N/A')
+            net_amt_str = f'{abs(float(getattr(order, "net_payable_amount", order.total_amount) or order.total_amount or 0)):,.2f}'
+            body_params = [
+                {'type': 'text', 'text': cust_name or 'Dear Customer'},
+                {'type': 'text', 'text': order.invoice_number or 'EXC-0001'},
+                {'type': 'text', 'text': orig_ref},
+                {'type': 'text', 'text': dt_str or 'N/A'},
+                {'type': 'text', 'text': payment_mode or 'CASH'},
+                {'type': 'text', 'text': net_amt_str or '0.00'}
+            ]
+        elif is_return:
+            template_name = return_template_name
             # Return receipt / voucher body parameters:
             # {{1}} = Customer Name (e.g. Dear Customer)
             # {{2}} = Return Voucher Number (e.g. RET-0001)
@@ -507,6 +674,7 @@ def send_whatsapp_bill_for_order(order, recipient_phone=None, pdf_bytes=None, fo
                 {'type': 'text', 'text': total_amt or '0.00'}
             ]
         else:
+            template_name = bill_template_name
             # Standard sales bill body parameters:
             # {{1}} = Customer Name (e.g. Dear Customer)
             # {{2}} = Invoice Number
