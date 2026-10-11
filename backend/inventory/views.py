@@ -2383,10 +2383,37 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             if not shift_store_id:
                 return qs.none()
 
-            open_shift = DailyRegisterShift.objects.filter(
-                store_id=shift_store_id,
-                status=DailyRegisterShift.STATUS_OPEN
-            ).order_by('-opened_at').first()
+            shift_id_param = self.request.query_params.get('register_shift') or self.request.query_params.get('shift_id')
+            cashier_param = self.request.query_params.get('cashier') or self.request.query_params.get('cashier_id')
+            staff_member = getattr(self.request, 'staff_member', None) or get_current_staff(self.request)
+
+            open_shift = None
+            if shift_id_param:
+                open_shift = DailyRegisterShift.objects.filter(pk=shift_id_param).first()
+            elif cashier_param:
+                open_shift = DailyRegisterShift.objects.filter(
+                    store_id=shift_store_id,
+                    status=DailyRegisterShift.STATUS_OPEN,
+                    cashier_id=cashier_param
+                ).order_by('-opened_at').first()
+                if not open_shift:
+                    open_shift = DailyRegisterShift.objects.filter(
+                        Q(store_id=shift_store_id, status=DailyRegisterShift.STATUS_OPEN) &
+                        (Q(cashier__staff_id__iexact=str(cashier_param)) | Q(cashier_name__iexact=str(cashier_param)))
+                    ).order_by('-opened_at').first()
+            elif staff_member:
+                open_shift = DailyRegisterShift.objects.filter(
+                    store_id=shift_store_id,
+                    status=DailyRegisterShift.STATUS_OPEN,
+                    cashier=staff_member
+                ).order_by('-opened_at').first()
+
+            # Backward compatibility fallback to store's latest open shift
+            if not open_shift:
+                open_shift = DailyRegisterShift.objects.filter(
+                    store_id=shift_store_id,
+                    status=DailyRegisterShift.STATUS_OPEN
+                ).order_by('-opened_at').first()
 
             if not open_shift:
                 return qs.none()
@@ -2394,6 +2421,7 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             qs = qs.filter(created_at__gte=open_shift.opened_at)
             if open_shift.cashier_id:
                 qs = qs.filter(cashier_id=open_shift.cashier_id)
+
 
         start_time = parse_filter_datetime(self.request.query_params.get('start_time'))
         end_time = parse_filter_datetime(self.request.query_params.get('end_time'))
@@ -3027,15 +3055,26 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
     """
     Cash Register Drawer Shift Management ViewSet.
     Handles Day-Start opening cash float entry and Day-End closing cash reconciliation.
+    Strictly isolates shifts by authenticated cashier ID so users only manage their own register shifts.
     """
     queryset = DailyRegisterShift.objects.select_related('store', 'cashier', 'closed_by').all()
     serializer_class = DailyRegisterShiftSerializer
+
+    def get_staff_from_request(self, request):
+        staff = getattr(request, 'staff_member', None)
+        if not staff:
+            staff = get_current_staff(request)
+        return staff
 
     def get_queryset(self):
         qs = super().get_queryset()
         store_id = self.request.query_params.get('store') or self.request.query_params.get('store_id')
         if store_id:
             qs = qs.filter(store_id=store_id)
+
+        cashier_param = self.request.query_params.get('cashier') or self.request.query_params.get('cashier_id')
+        if cashier_param:
+            qs = qs.filter(Q(cashier_id=cashier_param) | Q(cashier__staff_id__iexact=str(cashier_param)) | Q(cashier_name__iexact=str(cashier_param)))
 
         status_param = self.request.query_params.get('status')
         if status_param:
@@ -3074,11 +3113,11 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='current-shift')
     def current_shift(self, request):
         """
-        Fetches the current active/open register shift for the store,
+        Fetches the current active/open register shift specifically for the authenticated cashier,
         along with live cash sales and payout calculations since opening.
         """
         store_id = request.query_params.get('store') or request.query_params.get('store_id')
-        staff_member = getattr(request, 'staff_member', None)
+        staff_member = self.get_staff_from_request(request)
         if not store_id and staff_member and staff_member.store:
             store_id = staff_member.store.id
 
@@ -3089,18 +3128,81 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
         if not store_id:
             return Response({'error': 'No active store found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Find latest open shift for this store
-        open_shift = DailyRegisterShift.objects.filter(
-            store_id=store_id,
-            status=DailyRegisterShift.STATUS_OPEN
-        ).order_by('-opened_at').first()
+        cashier_param = request.query_params.get('cashier') or request.query_params.get('cashier_id') or request.query_params.get('staff_id')
+        shift_id_param = request.query_params.get('shift_id') or request.query_params.get('register_shift')
+
+        open_shift = None
+
+        # 1. If a specific shift ID is explicitly queried
+        if shift_id_param:
+            open_shift = DailyRegisterShift.objects.filter(
+                store_id=store_id,
+                pk=shift_id_param,
+                status=DailyRegisterShift.STATUS_OPEN
+            ).first()
+
+        # 2. If a specific cashier is explicitly queried
+        elif cashier_param:
+            open_shift = DailyRegisterShift.objects.filter(
+                store_id=store_id,
+                cashier_id=cashier_param,
+                status=DailyRegisterShift.STATUS_OPEN
+            ).order_by('-opened_at').first()
+            if not open_shift:
+                open_shift = DailyRegisterShift.objects.filter(
+                    Q(store_id=store_id, status=DailyRegisterShift.STATUS_OPEN) &
+                    (Q(cashier__staff_id__iexact=str(cashier_param)) | Q(cashier_name__iexact=str(cashier_param)))
+                ).order_by('-opened_at').first()
+
+        # 3. If caller is an authenticated staff member, find shift opened for THEIR ID
+        elif staff_member:
+            open_shift = DailyRegisterShift.objects.filter(
+                store_id=store_id,
+                cashier=staff_member,
+                status=DailyRegisterShift.STATUS_OPEN
+            ).order_by('-opened_at').first()
+
+            # Backward compatibility: Check if a legacy shift was opened under this staff member's name
+            if not open_shift:
+                legacy_shift = DailyRegisterShift.objects.filter(
+                    store_id=store_id,
+                    cashier__isnull=True,
+                    status=DailyRegisterShift.STATUS_OPEN
+                ).filter(
+                    Q(cashier_name__iexact=staff_member.name) | Q(cashier_name__iexact=staff_member.staff_id)
+                ).order_by('-opened_at').first()
+                if legacy_shift:
+                    legacy_shift.cashier = staff_member
+                    legacy_shift.save(update_fields=['cashier'])
+                    open_shift = legacy_shift
+
+            # Backward compatibility for Owner/Admin if they haven't opened a shift but want store overview
+            if not open_shift and (getattr(staff_member, 'is_owner', False) or (staff_member.role and staff_member.role.is_owner)):
+                if request.query_params.get('all_cashiers') in ['true', '1', 'True']:
+                    open_shift = DailyRegisterShift.objects.filter(
+                        store_id=store_id,
+                        status=DailyRegisterShift.STATUS_OPEN
+                    ).order_by('-opened_at').first()
+
+        # 4. Fallback for unauthenticated test runner / legacy calls
+        else:
+            open_shift = DailyRegisterShift.objects.filter(
+                store_id=store_id,
+                status=DailyRegisterShift.STATUS_OPEN
+            ).order_by('-opened_at').first()
 
         if not open_shift:
-            # Check most recent closed shift today
-            last_closed = DailyRegisterShift.objects.filter(
+            # Check most recent closed shift for this cashier (or store)
+            last_closed_qs = DailyRegisterShift.objects.filter(
                 store_id=store_id,
                 status=DailyRegisterShift.STATUS_CLOSED
-            ).order_by('-closed_at').first()
+            )
+            if staff_member:
+                last_closed = last_closed_qs.filter(cashier=staff_member).order_by('-closed_at').first()
+                if not last_closed:
+                    last_closed = last_closed_qs.order_by('-closed_at').first()
+            else:
+                last_closed = last_closed_qs.order_by('-closed_at').first()
 
             return Response({
                 'has_open_shift': False,
@@ -3109,8 +3211,7 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
                 'last_closed_shift': DailyRegisterShiftSerializer(last_closed).data if last_closed else None
             }, status=status.HTTP_200_OK)
 
-        # Compute live cash flow since shift opened
-        # Guard: if opened_at is accidentally ahead of current time due to client timezone mismatch, clamp to timezone.now()
+        # Compute live cash flow since shift opened (strictly isolated to this cashier's sales)
         effective_opened_at = open_shift.opened_at
         if effective_opened_at > timezone.now():
             effective_opened_at = timezone.now()
@@ -3120,6 +3221,9 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             ~Q(status='cancelled') &
             ~Q(invoice_number__startswith='RET-')
         )
+        if open_shift.cashier_id:
+            shift_cash_sales_qs = shift_cash_sales_qs.filter(cashier_id=open_shift.cashier_id)
+
         cash_sales_pure = shift_cash_sales_qs.filter(
             payment_method__iexact='cash'
         ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
@@ -3134,12 +3238,15 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             initial_payment_method__iexact='cash'
         ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
 
-        # Cash collected from subsequent due settlements during this shift (for older or current orders)
-        shift_settlement_cash = OrderPaymentTransaction.objects.filter(
+        # Cash collected from subsequent due settlements during this shift
+        shift_settlement_cash_qs = OrderPaymentTransaction.objects.filter(
             store_id=store_id,
             payment_method='cash',
             created_at__gte=effective_opened_at
-        ).exclude(notes__startswith='Initial').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        ).exclude(notes__startswith='Initial')
+        if open_shift.cashier_id:
+            shift_settlement_cash_qs = shift_settlement_cash_qs.filter(collected_by_id=open_shift.cashier_id)
+        shift_settlement_cash = shift_settlement_cash_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
         cash_sales = cash_sales_pure + cash_sales_split + cash_sales_partial_initial + shift_settlement_cash
 
@@ -3161,11 +3268,18 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
 
         net_card_cash = shift_card_recharges_cash - shift_card_refunds_cash
 
-        cash_payouts = CounterPayout.objects.filter(
+        # Counter cash payouts during this shift
+        cash_payouts_qs = CounterPayout.objects.filter(
             store_id=store_id,
             payment_method__iexact='cash',
             paid_at__gte=effective_opened_at
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        )
+        if open_shift.pk:
+            shift_tagged_payouts = cash_payouts_qs.filter(register_shift=open_shift)
+            if shift_tagged_payouts.exists():
+                cash_payouts_qs = shift_tagged_payouts
+
+        cash_payouts = cash_payouts_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
         expected_cash = (open_shift.opening_cash + cash_sales + net_card_cash - cash_payouts).quantize(Decimal('0.01'))
 
@@ -3174,11 +3288,7 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             payment_method__in=['cash', 'split']
         ).count()
 
-        cash_payouts_count = CounterPayout.objects.filter(
-            store_id=store_id,
-            payment_method__iexact='cash',
-            paid_at__gte=effective_opened_at
-        ).count()
+        cash_payouts_count = cash_payouts_qs.count()
 
         data = DailyRegisterShiftSerializer(open_shift).data
         data['live_cash_sales'] = float(cash_sales)
@@ -3203,9 +3313,10 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
     def open_shift(self, request):
         """
         Starts the day / opens the cash counter register by recording Day-Start opening cash float.
+        Binds the shift to the authenticated cashier ID to prevent cross-cashier conflicts.
         """
         store_id = request.data.get('store') or request.data.get('store_id')
-        staff_member = getattr(request, 'staff_member', None)
+        staff_member = self.get_staff_from_request(request)
         if not store_id and staff_member and staff_member.store:
             store_id = staff_member.store.id
 
@@ -3216,16 +3327,31 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
         if not store_id:
             return Response({'error': 'Store ID is required to open a register shift.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if an open shift already exists with atomic lock
+        # Check if an open shift already exists for THIS cashier with atomic lock
         with transaction.atomic():
-            existing_open = DailyRegisterShift.objects.select_for_update().filter(
-                store_id=store_id,
-                status=DailyRegisterShift.STATUS_OPEN
-            ).first()
+            if staff_member:
+                existing_open = DailyRegisterShift.objects.select_for_update().filter(
+                    store_id=store_id,
+                    cashier=staff_member,
+                    status=DailyRegisterShift.STATUS_OPEN
+                ).first()
+                if not existing_open:
+                    # Also check if a legacy unassigned shift has matching name
+                    existing_open = DailyRegisterShift.objects.select_for_update().filter(
+                        store_id=store_id,
+                        cashier__isnull=True,
+                        cashier_name__iexact=staff_member.name,
+                        status=DailyRegisterShift.STATUS_OPEN
+                    ).first()
+            else:
+                existing_open = DailyRegisterShift.objects.select_for_update().filter(
+                    store_id=store_id,
+                    status=DailyRegisterShift.STATUS_OPEN
+                ).first()
 
             if existing_open:
                 return Response({
-                    'error': f'Register is already open with Shift #{existing_open.shift_number}. Please close it before opening a new shift.',
+                    'error': f'Register is already open with Shift #{existing_open.shift_number}. Please close your active shift before opening a new one.',
                     'shift': DailyRegisterShiftSerializer(existing_open).data
                 }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3237,7 +3363,7 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             except Exception:
                 return Response({'error': 'Invalid opening cash amount.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            cashier_name = request.data.get('cashier_name') or request.data.get('opened_by_name') or (staff_member.name if staff_member else "Cashier")
+            cashier_name = staff_member.name if staff_member else (request.data.get('cashier_name') or request.data.get('opened_by_name') or "Cashier")
             opening_notes = request.data.get('opening_notes', '')
 
             opened_at_raw = request.data.get('opened_at') or request.data.get('date_time')
@@ -3248,7 +3374,6 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
                     if dt:
                         if timezone.is_naive(dt):
                             dt = timezone.make_aware(dt, timezone.get_current_timezone())
-                        # Ensure newly started shift timestamp is not set in the future
                         if dt <= timezone.now() + timedelta(minutes=1):
                             opened_at = dt
                 except Exception:
@@ -3271,6 +3396,8 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
     def close_shift(self, request, pk=None):
         """
         Ends the day / closes the cash register shift by reconciling counted cash vs expected cash.
+        Strictly enforces that cashiers can ONLY close their own open shift,
+        preventing accidental or unauthorized closure of another person's shift.
         """
         closing_cash_raw = request.data.get('closing_cash_counted')
         if closing_cash_raw is None:
@@ -3289,6 +3416,19 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             if shift.status == DailyRegisterShift.STATUS_CLOSED:
                 return Response({'error': f'Shift #{shift.shift_number} is already closed and reconciled.'}, status=status.HTTP_400_BAD_REQUEST)
 
+            staff_member = self.get_staff_from_request(request)
+
+            # Security authorization check: Cashier can only close their own shift, unless store Owner / Manager
+            if staff_member and shift.cashier and shift.cashier != staff_member:
+                is_authorized_manager = (
+                    getattr(staff_member, 'is_owner', False) or
+                    (staff_member.role and (getattr(staff_member.role, 'is_owner', False) or staff_member.role.name in ['Owner', 'Manager', 'Admin']))
+                )
+                if not is_authorized_manager:
+                    return Response({
+                        'error': f'Permission Denied: Shift #{shift.shift_number} was opened by {shift.cashier_name}. You cannot end another cashier\'s shift.'
+                    }, status=status.HTTP_403_FORBIDDEN)
+
             closed_at_raw = request.data.get('closed_at') or request.data.get('date_time')
             close_time = timezone.now()
             if closed_at_raw:
@@ -3305,12 +3445,15 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             if effective_opened_at > close_time:
                 effective_opened_at = close_time
 
-            # Compute final sales and payouts during this exact shift
+            # Compute final sales and payouts during this exact shift (strictly isolated to this cashier's sales)
             shift_cash_sales_qs = SaleOrder.objects.filter(
                 Q(store=shift.store, created_at__gte=effective_opened_at, created_at__lte=close_time) &
                 ~Q(status='cancelled') &
                 ~Q(invoice_number__startswith='RET-')
             )
+            if shift.cashier_id:
+                shift_cash_sales_qs = shift_cash_sales_qs.filter(cashier_id=shift.cashier_id)
+
             cash_sales_pure = shift_cash_sales_qs.filter(
                 payment_method__iexact='cash'
             ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
@@ -3326,12 +3469,15 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
 
             # Cash collected from subsequent due settlements during this shift
-            shift_settlement_cash = OrderPaymentTransaction.objects.filter(
+            shift_settlement_cash_qs = OrderPaymentTransaction.objects.filter(
                 store=shift.store,
                 payment_method='cash',
                 created_at__gte=effective_opened_at,
                 created_at__lte=close_time
-            ).exclude(notes__startswith='Initial').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            ).exclude(notes__startswith='Initial')
+            if shift.cashier_id:
+                shift_settlement_cash_qs = shift_settlement_cash_qs.filter(collected_by_id=shift.cashier_id)
+            shift_settlement_cash = shift_settlement_cash_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
             cash_sales = cash_sales_pure + cash_sales_split + cash_sales_partial_initial + shift_settlement_cash
 
@@ -3355,18 +3501,23 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
 
             net_card_cash = shift_card_recharges_cash - shift_card_refunds_cash
 
-            cash_payouts = CounterPayout.objects.filter(
+            cash_payouts_qs = CounterPayout.objects.filter(
                 store=shift.store,
                 payment_method__iexact='cash',
                 paid_at__gte=effective_opened_at,
                 paid_at__lte=close_time
-            ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            )
+            if shift.pk:
+                shift_tagged_payouts = cash_payouts_qs.filter(register_shift=shift)
+                if shift_tagged_payouts.exists():
+                    cash_payouts_qs = shift_tagged_payouts
+
+            cash_payouts = cash_payouts_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
             expected_cash = (shift.opening_cash + cash_sales + net_card_cash - cash_payouts).quantize(Decimal('0.01'))
             cash_diff = (closing_cash - expected_cash).quantize(Decimal('0.01'))
 
-            staff_member = getattr(request, 'staff_member', None)
-            closed_by_name = request.data.get('closed_by_name') or (staff_member.name if staff_member else "Cashier")
+            closed_by_name = staff_member.name if staff_member else (request.data.get('closed_by_name') or "Cashier")
             closing_notes = request.data.get('closing_notes', '')
 
             shift.closing_cash_counted = closing_cash

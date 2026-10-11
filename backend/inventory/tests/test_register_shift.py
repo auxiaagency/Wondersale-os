@@ -133,3 +133,148 @@ class RegisterShiftManagementTests(TestCase):
         }, format='json')
         self.assertEqual(close_res.status_code, status.HTTP_200_OK)
         self.assertEqual(float(close_res.data['cash_difference']), -50.00)
+
+    def test_cashier_shift_isolation_and_cross_closing_prevention(self):
+        """Ensure Cashier A's shift is not visible or closable by Cashier B."""
+        cashier_b = StaffMember.objects.create(
+            staff_id='CASH_TEST_2',
+            name='Alice Cashier',
+            role=self.role,
+            store=self.store
+        )
+
+        # 1. Cashier A opens a shift
+        open_res = self.client.post('/api/inventory/register-shifts/open-shift/', {
+            'store': self.store.id,
+            'opening_cash': '1000.00',
+            'opening_notes': 'Morning register float'
+        }, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+        self.assertEqual(open_res.status_code, status.HTTP_201_CREATED)
+        shift_a_id = open_res.data['id']
+        self.assertEqual(open_res.data['cashier'], self.cashier.id)
+
+        # 2. Cashier A checks current shift -> sees active shift
+        cur_a = self.client.get(
+            f'/api/inventory/register-shifts/current-shift/?store={self.store.id}',
+            HTTP_X_STAFF_ID=self.cashier.staff_id
+        )
+        self.assertEqual(cur_a.status_code, status.HTTP_200_OK)
+        self.assertTrue(cur_a.data['has_open_shift'])
+        self.assertEqual(cur_a.data['shift']['id'], shift_a_id)
+
+        # 3. Cashier B checks current shift -> should NOT see Cashier A's shift
+        cur_b = self.client.get(
+            f'/api/inventory/register-shifts/current-shift/?store={self.store.id}',
+            HTTP_X_STAFF_ID=cashier_b.staff_id
+        )
+        self.assertEqual(cur_b.status_code, status.HTTP_200_OK)
+        self.assertFalse(cur_b.data['has_open_shift'])
+        self.assertIsNone(cur_b.data['shift'])
+
+        # 4. Cashier B attempts to close Cashier A's shift -> 403 Forbidden
+        close_b_attempt = self.client.post(
+            f'/api/inventory/register-shifts/{shift_a_id}/close-shift/',
+            {'closing_cash_counted': '1000.00', 'closing_notes': 'Unauthorized close attempt'},
+            format='json',
+            HTTP_X_STAFF_ID=cashier_b.staff_id
+        )
+        self.assertEqual(close_b_attempt.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('permission', close_b_attempt.data['error'].lower())
+
+        # 5. Cashier A can close their own shift
+        close_a = self.client.post(
+            f'/api/inventory/register-shifts/{shift_a_id}/close-shift/',
+            {'closing_cash_counted': '1000.00', 'closing_notes': 'End of shift'},
+            format='json',
+            HTTP_X_STAFF_ID=self.cashier.staff_id
+        )
+        self.assertEqual(close_a.status_code, status.HTTP_200_OK)
+        self.assertEqual(close_a.data['status'], 'closed')
+
+    def test_owner_can_close_cashier_shift(self):
+        """Ensure Store Owner / Head Cashier has administrative privilege to close another cashier's shift."""
+        owner_role = StaffRole.objects.create(name='Owner', is_owner=True)
+        owner_staff = StaffMember.objects.create(
+            staff_id='OWNER_01',
+            name='Store Boss',
+            role=owner_role,
+            store=self.store
+        )
+
+        # Cashier A opens a shift
+        open_res = self.client.post('/api/inventory/register-shifts/open-shift/', {
+            'store': self.store.id,
+            'opening_cash': '1500.00',
+        }, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+        shift_id = open_res.data['id']
+
+        # Owner closes Cashier A's shift -> succeeds
+        close_res = self.client.post(
+            f'/api/inventory/register-shifts/{shift_id}/close-shift/',
+            {'closing_cash_counted': '1500.00', 'closing_notes': 'Manager audit close'},
+            format='json',
+            HTTP_X_STAFF_ID=owner_staff.staff_id
+        )
+        self.assertEqual(close_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(close_res.data['status'], 'closed')
+
+    def test_shift_cash_sales_isolated_per_cashier(self):
+        """Ensure Cashier A's register drawer only sums Cashier A's sales, not Cashier B's sales."""
+        cashier_b = StaffMember.objects.create(
+            staff_id='CASH_TEST_B',
+            name='Bob Cashier',
+            role=self.role,
+            store=self.store
+        )
+
+        # Cashier A opens shift
+        open_a = self.client.post('/api/inventory/register-shifts/open-shift/', {
+            'store': self.store.id,
+            'opening_cash': '500.00'
+        }, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+        shift_a_id = open_a.data['id']
+
+        # Sale by Cashier A: ₹800
+        SaleOrder.objects.create(
+            invoice_number='INV-CASH-A',
+            store=self.store,
+            cashier=self.cashier,
+            customer_phone='9999999991',
+            subtotal=Decimal('800.00'),
+            total_amount=Decimal('800.00'),
+            amount_paid=Decimal('800.00'),
+            payment_method='cash',
+            status='completed'
+        )
+
+        # Sale by Cashier B: ₹1200
+        SaleOrder.objects.create(
+            invoice_number='INV-CASH-B',
+            store=self.store,
+            cashier=cashier_b,
+            customer_phone='9999999992',
+            subtotal=Decimal('1200.00'),
+            total_amount=Decimal('1200.00'),
+            amount_paid=Decimal('1200.00'),
+            payment_method='cash',
+            status='completed'
+        )
+
+        # Current shift for Cashier A should only count 500 + 800 = 1300
+        cur_a = self.client.get(
+            f'/api/inventory/register-shifts/current-shift/?store={self.store.id}',
+            HTTP_X_STAFF_ID=self.cashier.staff_id
+        )
+        self.assertEqual(cur_a.data['shift']['live_cash_sales'], 800.00)
+        self.assertEqual(cur_a.data['shift']['live_expected_cash'], 1300.00)
+
+        # Shift billing orders endpoint should also only return Cashier A's orders
+        orders_a = self.client.get(
+            f'/api/inventory/sales/?store={self.store.id}&current_shift=true&register_shift={shift_a_id}',
+            HTTP_X_STAFF_ID=self.cashier.staff_id
+        )
+        self.assertEqual(orders_a.status_code, status.HTTP_200_OK)
+        order_list = orders_a.data if isinstance(orders_a.data, list) else orders_a.data.get('results', [])
+        order_invoices = [o['invoice_number'] for o in order_list]
+        self.assertIn('INV-CASH-A', order_invoices)
+        self.assertNotIn('INV-CASH-B', order_invoices)

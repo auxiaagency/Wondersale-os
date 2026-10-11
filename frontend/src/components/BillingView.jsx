@@ -1105,7 +1105,10 @@ export default function BillingView({
     }
     setLoadingShift(true);
     try {
-      const data = await getCurrentRegisterShift({ store: storeId });
+      const params = { store: storeId };
+      if (currentUser?.id) params.cashier = currentUser.id;
+      if (currentUser?.staff_id) params.staff_id = currentUser.staff_id;
+      const data = await getCurrentRegisterShift(params);
       const current = data?.shift || data?.active_shift || null;
       setActiveShift(current);
     } catch (err) {
@@ -1118,7 +1121,7 @@ export default function BillingView({
 
   useEffect(() => {
     loadActiveRegisterShift();
-  }, [activeStore?.id, effectiveStoreId]);
+  }, [activeStore?.id, effectiveStoreId, currentUser?.id, currentUser?.staff_id]);
 
   const loadShiftBillingOrders = async () => {
     const storeId = activeStore?.id || effectiveStoreId;
@@ -1131,12 +1134,15 @@ export default function BillingView({
       const params = {
         store: storeId,
         current_shift: 'true',
+        register_shift: activeShift.id,
       };
       if (activeShift?.opened_at) {
         params.since = activeShift.opened_at;
       }
       if (activeShift?.cashier) {
         params.cashier = activeShift.cashier;
+      } else if (currentUser?.id) {
+        params.cashier = currentUser.id;
       }
       const data = await getSaleOrders(params);
       let list = Array.isArray(data) ? data : data?.results || [];
@@ -8161,11 +8167,11 @@ export default function BillingView({
                   </div>
                 </div>
               ) : (
-                /* UNIFIED SIMPLIFIED ENTRY FORM */
+                /* UNIFIED SIMPLIFIED ENTRY FORM (OPENING SHOWN ONLY WHEN CLOSED, CLOSING ONLY WHEN OPEN) */
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (shiftEntryType === 'shift_start') {
+                    if (!activeShift) {
                       handleStartShiftSubmit(e);
                     } else {
                       handleCloseShiftSubmit(e);
@@ -8173,67 +8179,57 @@ export default function BillingView({
                   }}
                   style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
                 >
-                  {/* 1. Dropdown Option for Shift Start vs Shift End */}
+                  {/* 1. Logged-in Cashier ID & Name (Locked to active user to prevent impersonation) */}
                   <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.80rem', fontWeight: 800, color: 'var(--text-muted)' }}>
-                      Entry Type / Shift Operation <span style={{ color: 'var(--color-danger)' }}>*</span>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>
+                      Register Cashier
                     </label>
-                    <select
-                      value={shiftEntryType}
-                      onChange={(e) => setShiftEntryType(e.target.value)}
-                      className="form-select"
+                    <div
                       style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        height: '42px',
-                        fontSize: '0.88rem',
+                        padding: '10px 14px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '0.86rem',
                         fontWeight: 700,
+                        color: 'var(--text-main)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
                       }}
                     >
-                      <option value="shift_start">☀️ Shift Start (Opening Cash)</option>
-                      <option value="shift_end">🔒 Shift End (Closing Cash &amp; Reconciliation)</option>
-                    </select>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: activeShift ? '#10B981' : '#F59E0B', display: 'inline-block' }} />
+                        <span>{currentUser?.name || currentUser?.username || 'Cashier'}</span>
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        ID: {currentUser?.staff_id || 'Current User'}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* 2. Cashier / Staff Name */}
-                  <div>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-                      Cashier / Staff Name <span style={{ color: 'var(--color-danger)' }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={shiftCashierName}
-                      onChange={(e) => setShiftCashierName(e.target.value)}
-                      placeholder="Cashier Name"
-                      className="form-input"
-                      style={{ width: '100%', boxSizing: 'border-box', height: '40px', fontSize: '0.84rem' }}
-                    />
-                  </div>
-
-                  {/* 3. Dynamic Section: Shift Start Form vs Shift End Form */}
-                  {shiftEntryType === 'shift_start' ? (
+                  {/* 2. DYNAMIC CONTENT: OPENING SHOWN ONLY WHEN CLOSED, CLOSING ONLY WHEN OPEN */}
+                  {!activeShift ? (
+                    /* ================= SHIFT START (OPENING CASH FLOAT) ================= */
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {activeShift && (
-                        <div
-                          style={{
-                            padding: '10px 14px',
-                            borderRadius: 'var(--radius-md)',
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            border: '1px solid rgba(59, 130, 246, 0.25)',
-                            fontSize: '0.78rem',
-                            color: '#93C5FD',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}
-                        >
-                          <AlertCircle size={16} style={{ color: '#60A5FA', flexShrink: 0 }} />
-                          <span>
-                            Shift #{activeShift.shift_number} is currently active. To reconcile and close this shift, select <strong>Shift End</strong> in the dropdown above.
-                          </span>
-                        </div>
-                      )}
+                      <div
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'rgba(245, 158, 11, 0.08)',
+                          border: '1px solid rgba(245, 158, 11, 0.25)',
+                          fontSize: '0.78rem',
+                          color: '#FCD34D',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <AlertCircle size={16} style={{ color: '#F59E0B', flexShrink: 0 }} />
+                        <span>
+                          Register is currently closed for your ID. Enter Day-Start cash float to open your register shift and begin billing.
+                        </span>
+                      </div>
 
                       {/* Opening Cash Input */}
                       <div>
@@ -8326,129 +8322,101 @@ export default function BillingView({
                       </div>
                     </div>
                   ) : (
-                    /* Shift End Form (Blind Shift Close) */
+                    /* ================= SHIFT END (CLOSING RECONCILIATION) ================= */
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {activeShift ? (
-                        <>
-                          {/* Shift Starting Cash Card */}
-                          <div
+                      {/* Shift Starting Cash Card */}
+                      <div
+                        style={{
+                          borderRadius: 'var(--radius-md)',
+                          background: 'var(--bg-surface-hover)',
+                          border: '1px solid var(--border-subtle)',
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Shift #{activeShift.shift_number} Active
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            Cashier: <strong>{activeShift.cashier_name || currentUser?.name || 'Cashier'}</strong>
+                            {activeShift.opened_at && (
+                              <span> · Started: {new Date(activeShift.opened_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                            STARTING FLOAT
+                          </div>
+                          <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#F59E0B', marginTop: '2px' }}>
+                            ₹{parseFloat(activeShift.opening_cash || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Physical Counted Cash Input */}
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.80rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                          Physical Cash Counted in Drawer (₹) <span style={{ color: 'var(--color-danger)' }}>*</span>
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <span
                             style={{
-                              borderRadius: 'var(--radius-md)',
-                              background: 'var(--bg-surface-hover)',
-                              border: '1px solid var(--border-subtle)',
-                              padding: '12px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
+                              position: 'absolute',
+                              left: '14px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              fontWeight: 900,
+                              color: 'var(--color-primary)',
+                              fontSize: '1.25rem',
                             }}
                           >
-                            <div>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                Shift #{activeShift.shift_number}
-                              </div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                Cashier: <strong>{activeShift.cashier_name || activeShift.opened_by_name || 'Cashier'}</strong>
-                              </div>
-                            </div>
-
-                            <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                                STARTING CASH
-                              </div>
-                              <div style={{ fontSize: '1.20rem', fontWeight: 900, color: '#F59E0B', marginTop: '2px' }}>
-                                ₹{parseFloat(activeShift.opening_cash || 0).toFixed(2)}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Physical Counted Cash Input (Blind entry without showing expected cash or sales) */}
-                          <div>
-                            <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.80rem', fontWeight: 800, color: 'var(--text-muted)' }}>
-                              Physical Cash Counted in Drawer (₹) <span style={{ color: 'var(--color-danger)' }}>*</span>
-                            </label>
-                            <div style={{ position: 'relative' }}>
-                              <span
-                                style={{
-                                  position: 'absolute',
-                                  left: '14px',
-                                  top: '50%',
-                                  transform: 'translateY(-50%)',
-                                  fontWeight: 900,
-                                  color: 'var(--color-primary)',
-                                  fontSize: '1.25rem',
-                                }}
-                              >
-                                ₹
-                              </span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                required
-                                placeholder="Enter physical cash counted in drawer"
-                                value={closingCashCountedInput}
-                                onChange={(e) => setClosingCashCountedInput(e.target.value)}
-                                className="form-input"
-                                autoFocus
-                                style={{
-                                  width: '100%',
-                                  boxSizing: 'border-box',
-                                  paddingLeft: '34px',
-                                  fontSize: '1.25rem',
-                                  fontWeight: 800,
-                                  height: '48px',
-                                }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Closing Notes */}
-                          <div>
-                            <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)' }}>
-                              Closing Notes / Remarks <span style={{ fontSize: '0.70rem', color: 'var(--text-muted)' }}>(Optional)</span>
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Reason for any discrepancy or closing remarks..."
-                              value={closingNotesInput}
-                              onChange={(e) => setClosingNotesInput(e.target.value)}
-                              className="form-input"
-                              style={{ width: '100%', boxSizing: 'border-box', height: '38px', fontSize: '0.82rem' }}
-                            />
-                          </div>
-                        </>
-                      ) : (
-                        <div
-                          style={{
-                            padding: '24px 16px',
-                            borderRadius: 'var(--radius-md)',
-                            background: 'var(--bg-surface-hover)',
-                            border: '1px dashed var(--border-subtle)',
-                            textAlign: 'center',
-                            color: 'var(--text-muted)',
-                            fontSize: '0.84rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}
-                        >
-                          <AlertCircle size={24} style={{ color: 'var(--text-muted)' }} />
-                          <div>No active shift is currently open to close.</div>
-                          <button
-                            type="button"
-                            onClick={() => setShiftEntryType('shift_start')}
-                            className="btn btn-secondary btn-sm"
-                            style={{ marginTop: '4px', color: '#FBBF24' }}
-                          >
-                            Switch to Shift Start (Opening Cash)
-                          </button>
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            required
+                            placeholder="Enter physical cash counted in drawer"
+                            value={closingCashCountedInput}
+                            onChange={(e) => setClosingCashCountedInput(e.target.value)}
+                            className="form-input"
+                            autoFocus
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              paddingLeft: '34px',
+                              fontSize: '1.25rem',
+                              fontWeight: 800,
+                              height: '48px',
+                            }}
+                          />
                         </div>
-                      )}
+                      </div>
+
+                      {/* Closing Notes */}
+                      <div>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                          Closing Notes / Remarks <span style={{ fontSize: '0.70rem', color: 'var(--text-muted)' }}>(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Reason for any discrepancy or closing remarks..."
+                          value={closingNotesInput}
+                          onChange={(e) => setClosingNotesInput(e.target.value)}
+                          className="form-input"
+                          style={{ width: '100%', boxSizing: 'border-box', height: '38px', fontSize: '0.82rem' }}
+                        />
+                      </div>
                     </div>
                   )}
 
-                  {/* 4. Action Buttons Bar */}
+                  {/* 3. Action Buttons Bar */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
                     <button
                       type="button"
@@ -8465,7 +8433,7 @@ export default function BillingView({
                       className="btn btn-primary"
                       disabled={
                         isSubmittingShift ||
-                        (shiftEntryType === 'shift_start' ? !openingCashInput : !activeShift || closingCashCountedInput === '')
+                        (!activeShift ? !openingCashInput : closingCashCountedInput === '')
                       }
                       style={{
                         padding: '8px 22px',
@@ -8474,10 +8442,10 @@ export default function BillingView({
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
-                        background: shiftEntryType === 'shift_start'
+                        background: !activeShift
                           ? 'linear-gradient(135deg, #10B981, #059669)'
                           : 'linear-gradient(135deg, #EF4444, #DC2626)',
-                        borderColor: shiftEntryType === 'shift_start' ? '#10B981' : '#EF4444',
+                        borderColor: !activeShift ? '#10B981' : '#EF4444',
                       }}
                     >
                       {isSubmittingShift ? (
@@ -8485,7 +8453,7 @@ export default function BillingView({
                           <RefreshCw size={15} className="spin" />
                           <span>Saving Entry...</span>
                         </>
-                      ) : shiftEntryType === 'shift_start' ? (
+                      ) : !activeShift ? (
                         <>
                           <CheckCircle2 size={16} />
                           <span>Record Opening Cash &amp; Start Shift</span>

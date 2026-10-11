@@ -1451,6 +1451,12 @@ export async function getCurrentRegisterShift(params = {}) {
   const query = new URLSearchParams();
   const storeId = typeof params === 'object' ? params.store : params;
   if (storeId) query.append('store', storeId);
+  if (typeof params === 'object') {
+    if (params.cashier) query.append('cashier', params.cashier);
+    if (params.staff_id) query.append('staff_id', params.staff_id);
+    if (params.shift_id) query.append('shift_id', params.shift_id);
+    if (params.all_cashiers) query.append('all_cashiers', params.all_cashiers);
+  }
 
   const url = `${API_BASE}/register-shifts/current-shift/${query.toString() ? `?${query.toString()}` : ''}`;
   const res = await fetch(url, { headers: getAuthHeaders() });

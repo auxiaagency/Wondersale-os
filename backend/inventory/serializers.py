@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from decimal import Decimal
+from django.db.models import Q
 
 from .models import (
     Store, Category, SubCategory, Supplier, Section, Item, StockMovement, ItemImage,
@@ -1795,16 +1796,29 @@ class CheckoutSerializer(serializers.Serializer):
         except Store.DoesNotExist:
             raise serializers.ValidationError({"store_id": "Selected store branch does not exist."})
 
+        request = self.context.get('request')
+        staff = get_current_staff(request) if request else None
+        cashier_name = staff.name if staff else "Cashier"
+
         # Enforce Active Register Shift: Cannot bill anything if register shift is not open
-        open_shift = DailyRegisterShift.objects.filter(
+        shift_qs = DailyRegisterShift.objects.filter(
             store=store,
             status=DailyRegisterShift.STATUS_OPEN
-        ).order_by('-opened_at').first()
+        )
+        if staff:
+            open_shift = shift_qs.filter(cashier=staff).order_by('-opened_at').first()
+            if not open_shift:
+                # Backward compatibility: check if there is an unassigned open shift or matching name
+                open_shift = shift_qs.filter(
+                    Q(cashier__isnull=True) | Q(cashier_name__iexact=staff.name)
+                ).order_by('-opened_at').first()
+        else:
+            open_shift = shift_qs.order_by('-opened_at').first()
 
         if not open_shift:
             raise serializers.ValidationError({
-                "error": "Cannot complete sale: Cash register shift is not open. Please open a shift before billing.",
-                "shift": "Register shift is not open for this store."
+                "error": "Cannot complete sale: Cash register shift is not open for this cashier. Please open your register shift before billing.",
+                "shift": "Register shift is not open."
             })
 
         raw_phone = validated_data['customer_phone'].strip()
@@ -1817,10 +1831,6 @@ class CheckoutSerializer(serializers.Serializer):
         tax_amount = Decimal(str(validated_data.get('tax_amount', 0.00)))
         notes = validated_data.get('notes', '')
         cart_items = validated_data['items']
-
-        request = self.context.get('request')
-        staff = get_current_staff(request) if request else None
-        cashier_name = staff.name if staff else "Cashier"
 
         with transaction.atomic():
             # 1. Validate all items and their stock availability
