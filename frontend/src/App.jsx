@@ -893,7 +893,7 @@ export default function App() {
             <>
               {/* Antigravity Stat Cards Grid */}
               {loading && items.length === 0 ? (
-                <SkeletonStatsCards count={6} />
+                <SkeletonStatsCards count={5} />
               ) : (
                 <div
                   className="inv-stats-grid"
@@ -1041,44 +1041,6 @@ export default function App() {
                         <span style={{ color: 'var(--color-warning)', fontSize: '1.1rem' }}>
                           ({lowStockCount} Low)
                         </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Barcode Labels Needing Print */}
-                  <div
-                    className="glass-panel glass-panel-interactive inv-stat-card"
-                    onClick={() => setNeedsBarcodeFilter(!needsBarcodeFilter)}
-                    style={{
-                      padding: '18px 20px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                      cursor: 'pointer',
-                      borderColor: needsBarcodeFilter ? 'var(--brand-primary)' : 'var(--border-subtle)',
-                    }}
-                  >
-                    <div
-                      className="inv-stat-icon-box"
-                      style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--brand-ruby-glow)',
-                        color: 'var(--brand-primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Barcode size={22} />
-                    </div>
-                    <div className="inv-stat-content">
-                      <div className="inv-stat-label" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                        Labels to Print
-                      </div>
-                      <div className="inv-stat-value" style={{ fontSize: '1.45rem', fontWeight: 800, color: needsBarcodeCount > 0 ? 'var(--brand-primary)' : 'inherit' }}>
-                        {needsBarcodeCount}
                       </div>
                     </div>
                   </div>
