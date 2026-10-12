@@ -417,11 +417,138 @@ export default function SalesInvoicesLedgerView({
     return Object.values(map).sort((a, b) => b.turnover - a.turnover);
   }, [filteredOrders, computeOrderProfit]);
 
-  // Pie chart hover state
+  // ─── Per-payment-method breakdown & Cashier payment attribution ─────────────
+  const PAYMENT_METHOD_CONFIG = useMemo(() => ({
+    cash: { label: 'Cash', color: '#10B981', icon: Banknote },
+    upi: { label: 'UPI / QR', color: '#38BDF8', icon: QrCode },
+    card: { label: 'Card / VIP Card', color: '#818CF8', icon: CreditCard },
+    due: { label: 'Pending Dues (Khata)', color: '#EC4899', icon: Receipt },
+    other: { label: 'Other / Credit', color: '#F59E0B', icon: Tag },
+  }), []);
+
+  const { paymentMethodBreakdown, cashierPaymentBreakdown, paymentMethodTotals } = useMemo(() => {
+    const payMap = {
+      cash: { id: 'cash', label: 'Cash', color: '#10B981', amount: 0, ordersCount: 0 },
+      upi: { id: 'upi', label: 'UPI / QR', color: '#38BDF8', amount: 0, ordersCount: 0 },
+      card: { id: 'card', label: 'Card / VIP Card', color: '#818CF8', amount: 0, ordersCount: 0 },
+      due: { id: 'due', label: 'Pending Dues (Khata)', color: '#EC4899', amount: 0, ordersCount: 0 },
+      other: { id: 'other', label: 'Other / Credit', color: '#F59E0B', amount: 0, ordersCount: 0 },
+    };
+
+    const cashierMap = {};
+
+    filteredOrders.forEach((o) => {
+      const cName = o.cashier_name || 'Counter Staff';
+      if (!cashierMap[cName]) {
+        cashierMap[cName] = {
+          name: cName,
+          totalCollected: 0,
+          ordersCount: 0,
+          methods: {
+            cash: 0,
+            upi: 0,
+            card: 0,
+            due: 0,
+            other: 0,
+          },
+        };
+      }
+
+      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+      const sign = isRet ? -1 : 1;
+      const totalAmt = parseFloat(o.total_amount) || 0;
+      const rawMethod = (o.payment_method || 'cash').trim().toLowerCase();
+
+      // Track order count for cashier
+      cashierMap[cName].ordersCount += 1;
+
+      // Calculate component breakdown
+      let cashAmt = 0;
+      let upiAmt = 0;
+      let cardAmt = 0;
+      let dueAmt = 0;
+      let otherAmt = 0;
+
+      if (rawMethod === 'split') {
+        cashAmt = (parseFloat(o.split_cash_amount) || 0) * sign;
+        upiAmt = (parseFloat(o.split_upi_amount) || 0) * sign;
+        // If split values are empty or sum is less than total, allocate remainder to upi or cash
+        if (cashAmt === 0 && upiAmt === 0) {
+          cashAmt = (totalAmt / 2) * sign;
+          upiAmt = (totalAmt / 2) * sign;
+        }
+      } else if (rawMethod === 'partial' || parseFloat(o.balance_due || 0) > 0) {
+        const balDue = (parseFloat(o.balance_due) || 0) * sign;
+        const paid = (parseFloat(o.amount_paid) || (totalAmt - Math.abs(balDue))) * sign;
+        dueAmt = balDue;
+
+        const initMethod = (o.initial_payment_method || 'cash').trim().toLowerCase();
+        if (initMethod === 'upi' || initMethod === 'qr') {
+          upiAmt = paid;
+        } else if (initMethod === 'card' || initMethod === 'vip_card') {
+          cardAmt = paid;
+        } else {
+          cashAmt = paid;
+        }
+      } else if (rawMethod === 'cash') {
+        cashAmt = totalAmt * sign;
+      } else if (rawMethod === 'upi' || rawMethod === 'qr') {
+        upiAmt = totalAmt * sign;
+      } else if (rawMethod === 'card' || rawMethod === 'vip_card') {
+        cardAmt = totalAmt * sign;
+      } else if (rawMethod === 'credit') {
+        dueAmt = totalAmt * sign;
+      } else {
+        otherAmt = totalAmt * sign;
+      }
+
+      // Aggregate into payment breakdown
+      if (cashAmt !== 0) {
+        payMap.cash.amount += cashAmt;
+        payMap.cash.ordersCount += 1;
+        cashierMap[cName].methods.cash += cashAmt;
+      }
+      if (upiAmt !== 0) {
+        payMap.upi.amount += upiAmt;
+        payMap.upi.ordersCount += 1;
+        cashierMap[cName].methods.upi += upiAmt;
+      }
+      if (cardAmt !== 0) {
+        payMap.card.amount += cardAmt;
+        payMap.card.ordersCount += 1;
+        cashierMap[cName].methods.card += cardAmt;
+      }
+      if (dueAmt !== 0) {
+        payMap.due.amount += dueAmt;
+        payMap.due.ordersCount += 1;
+        cashierMap[cName].methods.due += dueAmt;
+      }
+      if (otherAmt !== 0) {
+        payMap.other.amount += otherAmt;
+        payMap.other.ordersCount += 1;
+        cashierMap[cName].methods.other += otherAmt;
+      }
+
+      cashierMap[cName].totalCollected += (cashAmt + upiAmt + cardAmt + dueAmt + otherAmt);
+    });
+
+    const breakdownList = Object.values(payMap).filter((item) => Math.abs(item.amount) > 0 || item.ordersCount > 0);
+    const cashierList = Object.values(cashierMap).sort((a, b) => b.totalCollected - a.totalCollected);
+    const totalCollectedAll = breakdownList.reduce((sum, item) => sum + Math.max(0, item.amount), 0);
+
+    return {
+      paymentMethodBreakdown: breakdownList,
+      cashierPaymentBreakdown: cashierList,
+      paymentMethodTotals: totalCollectedAll,
+    };
+  }, [filteredOrders]);
+
+  // Pie chart hover states
   const [pieCashierHovered, setPieCashierHovered] = useState(null);
   const [pieMetric, setPieMetric] = useState('revenue'); // 'revenue' | 'profit'
+  const [piePaymentHovered, setPiePaymentHovered] = useState(null);
 
-  // Export to CSV (Enhanced with Profit, Cost, and Cashier Summary)
+  // Export to CSV (Enhanced with Profit, Cost, Cashier Summary, and Payment Method Attributions)
   const handleExportCsv = () => {
     if (filteredOrders.length === 0) return;
 
@@ -491,7 +618,7 @@ export default function SalesInvoicesLedgerView({
       [`"Total Units Sold"`, kpiSummary.totalUnits],
       [`"Average Order Value"`, kpiSummary.aov.toFixed(2)],
       [],
-      ['=== CASHIER PERFORMANCE ==='],
+      ['=== CASHIER OVERALL PERFORMANCE ==='],
       ['Cashier', 'Orders', 'Units Sold', 'Turnover', 'Gross Profit', 'Profit Margin %', 'Avg Order Value'],
       ...cashierBreakdown.map((c) => {
         const margin = c.turnover > 0 ? (c.profit / c.turnover) * 100 : 0;
@@ -504,6 +631,39 @@ export default function SalesInvoicesLedgerView({
           c.profit.toFixed(2),
           margin.toFixed(1) + '%',
           aov.toFixed(2),
+        ];
+      }),
+      [],
+      ['=== PAYMENT METHOD BREAKDOWN (OVERALL) ==='],
+      ['Payment Method', 'Transactions Count', 'Amount Collected', 'Share %'],
+      ...paymentMethodBreakdown.map((pm) => {
+        const share = paymentMethodTotals > 0 ? ((Math.max(0, pm.amount) / paymentMethodTotals) * 100).toFixed(1) + '%' : '0.0%';
+        return [
+          `"${pm.label}"`,
+          pm.ordersCount,
+          pm.amount.toFixed(2),
+          `"${share}"`,
+        ];
+      }),
+      [],
+      ['=== CASHIER PAYMENT METHOD BREAKDOWN (CASH & UPI ATTRIBUTION) ==='],
+      ['Cashier', 'Total Collected', 'Cash Amount', 'Cash Share %', 'UPI Amount', 'UPI Share %', 'Card Amount', 'Card Share %', 'Pending Due', 'Other Amount'],
+      ...cashierPaymentBreakdown.map((cp) => {
+        const tot = cp.totalCollected > 0 ? cp.totalCollected : 1;
+        const cashShare = cp.totalCollected > 0 ? ((Math.max(0, cp.methods.cash) / tot) * 100).toFixed(1) + '%' : '0.0%';
+        const upiShare  = cp.totalCollected > 0 ? ((Math.max(0, cp.methods.upi) / tot) * 100).toFixed(1) + '%' : '0.0%';
+        const cardShare = cp.totalCollected > 0 ? ((Math.max(0, cp.methods.card) / tot) * 100).toFixed(1) + '%' : '0.0%';
+        return [
+          `"${cp.name}"`,
+          cp.totalCollected.toFixed(2),
+          cp.methods.cash.toFixed(2),
+          `"${cashShare}"`,
+          cp.methods.upi.toFixed(2),
+          `"${upiShare}"`,
+          cp.methods.card.toFixed(2),
+          `"${cardShare}"`,
+          cp.methods.due.toFixed(2),
+          cp.methods.other.toFixed(2),
         ];
       }),
     ];
@@ -633,6 +793,18 @@ export default function SalesInvoicesLedgerView({
     '#10B981', '#6366F1', '#14B8A6', '#F43F5E', '#A855F7',
   ];
 
+  function buildArc(cx, cy, ri, ro, s, e) {
+    const delta = e - s;
+    const full = delta >= 2 * Math.PI - 0.001;
+    const se = full ? s + 2 * Math.PI - 0.0001 : e;
+    const la = delta > Math.PI ? 1 : 0;
+    const x1 = cx + ro * Math.cos(s), y1 = cy + ro * Math.sin(s);
+    const x2 = cx + ro * Math.cos(se), y2 = cy + ro * Math.sin(se);
+    const x3 = cx + ri * Math.cos(se), y3 = cy + ri * Math.sin(se);
+    const x4 = cx + ri * Math.cos(s), y4 = cy + ri * Math.sin(s);
+    return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${ro} ${ro} 0 ${la} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${ri} ${ri} 0 ${la} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
+  }
+
   function CashierDonutChart({ data, metric }) {
     const cx = 110, cy = 110, rOuter = 90, rInner = 52;
     const vals = data.map((d) => Math.max(0, metric === 'profit' ? d.profit : d.turnover));
@@ -647,18 +819,6 @@ export default function SalesInvoicesLedgerView({
       startAngle = end;
       return slice;
     });
-
-    function buildArc(cx, cy, ri, ro, s, e) {
-      const delta = e - s;
-      const full = delta >= 2 * Math.PI - 0.001;
-      const se = full ? s + 2 * Math.PI - 0.0001 : e;
-      const la = delta > Math.PI ? 1 : 0;
-      const x1 = cx + ro * Math.cos(s), y1 = cy + ro * Math.sin(s);
-      const x2 = cx + ro * Math.cos(se), y2 = cy + ro * Math.sin(se);
-      const x3 = cx + ri * Math.cos(se), y3 = cy + ri * Math.sin(se);
-      const x4 = cx + ri * Math.cos(s), y4 = cy + ri * Math.sin(s);
-      return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${ro} ${ro} 0 ${la} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L${x3.toFixed(1)} ${y3.toFixed(1)} A${ri} ${ri} 0 ${la} 0 ${x4.toFixed(1)} ${y4.toFixed(1)} Z`;
-    }
 
     const hovered = pieCashierHovered !== null ? data[pieCashierHovered] : null;
     const centerVal = hovered
@@ -687,6 +847,52 @@ export default function SalesInvoicesLedgerView({
         {hovered && (
           <text x={cx} y={cy + 28} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="Inter, sans-serif">
             {(slices[pieCashierHovered]?.share * 100).toFixed(1)}% share
+          </text>
+        )}
+      </svg>
+    );
+  }
+
+  function PaymentMethodDonutChart({ data, total }) {
+    const cx = 110, cy = 110, rOuter = 90, rInner = 52;
+    const vals = data.map((d) => Math.max(0, d.amount));
+    const totalVal = vals.reduce((a, b) => a + b, 0) || total || 0;
+    if (totalVal === 0) return null;
+
+    let startAngle = -Math.PI / 2;
+    const slices = data.map((d, i) => {
+      const share = totalVal > 0 ? vals[i] / totalVal : 0;
+      const end = startAngle + share * 2 * Math.PI;
+      const slice = { d: buildArc(cx, cy, rInner, rOuter, startAngle, end), color: d.color, share, item: d };
+      startAngle = end;
+      return slice;
+    });
+
+    const hovered = piePaymentHovered !== null ? data[piePaymentHovered] : null;
+    const centerVal = hovered ? hovered.amount : totalVal;
+    const centerLabel = hovered ? hovered.label.split(' ')[0] : 'Payment';
+
+    return (
+      <svg width={220} height={220} viewBox="0 0 220 220">
+        {slices.map((sl, i) => (
+          <path
+            key={i}
+            d={sl.d}
+            fill={sl.color}
+            opacity={piePaymentHovered === null || piePaymentHovered === i ? 1 : 0.35}
+            style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
+            onMouseEnter={() => setPiePaymentHovered(i)}
+            onMouseLeave={() => setPiePaymentHovered(null)}
+          />
+        ))}
+        {/* Centre text */}
+        <text x={cx} y={cy - 10} textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.7">{centerLabel}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fill="#F8FAFC" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
+          ₹{centerVal >= 1000 ? (centerVal / 1000).toFixed(1) + 'k' : centerVal.toFixed(0)}
+        </text>
+        {hovered && (
+          <text x={cx} y={cy + 28} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="Inter, sans-serif">
+            {(slices[piePaymentHovered]?.share * 100).toFixed(1)}% share
           </text>
         )}
       </svg>
@@ -1197,6 +1403,214 @@ export default function SalesInvoicesLedgerView({
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #94A3B8)', fontFamily: 'monospace', fontWeight: 600 }}>
                       ₹{kpiSummary.aov.toFixed(2)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1c. METHOD OF PAYMENT BREAKDOWN SECTION (Pie Chart + Cashier Breakdown List/Table) */}
+      {paymentMethodBreakdown.length > 0 && (
+        <div
+          style={{
+            padding: '20px',
+            borderRadius: '16px',
+            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
+            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: 34, height: 34, borderRadius: '10px', background: 'rgba(56,189,248,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(56,189,248,0.3)' }}>
+                <Wallet size={17} color="#38BDF8" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--text-primary, #F8FAFC)' }}>Payment Methods &amp; Cashier Settlement Breakdown</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>Distribution of collection channels (UPI, Cash, Cards) &amp; per-cashier payment breakdown</div>
+              </div>
+            </div>
+
+            {/* Quick summary badges */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {paymentMethodBreakdown.map((pm) => {
+                const share = paymentMethodTotals > 0 ? ((Math.max(0, pm.amount) / paymentMethodTotals) * 100).toFixed(1) : '0';
+                return (
+                  <div
+                    key={pm.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '4px 9px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-main, #0B0E17)',
+                      border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
+                      fontSize: '0.74rem',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: pm.color, display: 'inline-block' }} />
+                    <span style={{ color: 'var(--text-secondary, #94A3B8)', fontWeight: 600 }}>{pm.label}:</span>
+                    <span style={{ color: 'var(--text-primary, #F8FAFC)', fontWeight: 700, fontFamily: 'monospace' }}>₹{pm.amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                    <span style={{ color: pm.color, fontWeight: 800, fontSize: '0.68rem' }}>({share}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Content: Pie Chart on Left + Cashier Payment Table on Right */}
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* Donut Pie Chart for Payment Methods */}
+            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <PaymentMethodDonutChart data={paymentMethodBreakdown} total={paymentMethodTotals} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '10px', width: '100%', maxWidth: '220px' }}>
+                {paymentMethodBreakdown.map((pm, idx) => {
+                  const share = paymentMethodTotals > 0 ? ((Math.max(0, pm.amount) / paymentMethodTotals) * 100).toFixed(1) : '0';
+                  const isHov = piePaymentHovered === idx;
+                  return (
+                    <div
+                      key={pm.id}
+                      onMouseEnter={() => setPiePaymentHovered(idx)}
+                      onMouseLeave={() => setPiePaymentHovered(null)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '3px 6px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        backgroundColor: isHov ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        transition: 'background 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: pm.color }} />
+                        <span style={{ fontSize: '0.74rem', color: isHov ? '#F8FAFC' : 'var(--text-secondary, #94A3B8)', fontWeight: isHov ? 700 : 500 }}>
+                          {pm.label}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.74rem', color: '#F8FAFC', fontWeight: 700, fontFamily: 'monospace' }}>
+                          ₹{pm.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                        </span>
+                        <span style={{ fontSize: '0.68rem', color: pm.color, fontWeight: 700, minWidth: '34px', textAlign: 'right' }}>
+                          {share}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Cashier Payment Breakdown List & Table */}
+            <div style={{ flex: 1, minWidth: '340px', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))', color: 'var(--text-muted, #94A3B8)', fontSize: '0.70rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left' }}>Cashier</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Collected</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>
+                      <span style={{ color: '#10B981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Banknote size={12} /> Cash (₹ / %)
+                      </span>
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>
+                      <span style={{ color: '#38BDF8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <QrCode size={12} /> UPI / QR (₹ / %)
+                      </span>
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>
+                      <span style={{ color: '#818CF8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CreditCard size={12} /> Card (₹ / %)
+                      </span>
+                    </th>
+                    <th style={{ padding: '8px 12px', textAlign: 'right' }}>
+                      <span style={{ color: '#EC4899', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Receipt size={12} /> Khata Due
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashierPaymentBreakdown.map((cp, i) => {
+                    const tot = cp.totalCollected > 0 ? cp.totalCollected : 0;
+                    const cashPct = tot > 0 ? ((Math.max(0, cp.methods.cash) / tot) * 100).toFixed(1) : '0.0';
+                    const upiPct  = tot > 0 ? ((Math.max(0, cp.methods.upi) / tot) * 100).toFixed(1) : '0.0';
+                    const cardPct = tot > 0 ? ((Math.max(0, cp.methods.card) / tot) * 100).toFixed(1) : '0.0';
+                    const color   = CASHIER_PALETTE[i % CASHIER_PALETTE.length];
+
+                    return (
+                      <tr
+                        key={cp.name}
+                        style={{
+                          borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.04))',
+                          transition: 'background 0.15s ease',
+                          cursor: 'default',
+                        }}
+                      >
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                            <div>
+                              <span style={{ fontWeight: 700, color: 'var(--text-primary, #F8FAFC)' }}>{cp.name}</span>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted, #94A3B8)' }}>{cp.ordersCount} transactions</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#F8FAFC', fontFamily: 'monospace' }}>
+                          ₹{cp.totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
+                          <div style={{ fontWeight: 700, color: '#10B981' }}>
+                            ₹{cp.methods.cash.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#10B981', opacity: 0.85 }}>{cashPct}%</div>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
+                          <div style={{ fontWeight: 700, color: '#38BDF8' }}>
+                            ₹{cp.methods.upi.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#38BDF8', opacity: 0.85 }}>{upiPct}%</div>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
+                          <div style={{ fontWeight: 700, color: '#818CF8' }}>
+                            ₹{cp.methods.card.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#818CF8', opacity: 0.85 }}>{cardPct}%</div>
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
+                          <div style={{ fontWeight: 700, color: cp.methods.due > 0 ? '#EC4899' : 'var(--text-muted, #64748B)' }}>
+                            ₹{cp.methods.due.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {/* Payment Breakdown Footer */}
+                <tfoot>
+                  <tr style={{ borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.12))', background: 'rgba(255,255,255,0.02)' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)', fontSize: '0.80rem' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#F8FAFC', fontFamily: 'monospace' }}>
+                      ₹{paymentMethodTotals.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#10B981', fontFamily: 'monospace' }}>
+                      ₹{(paymentMethodBreakdown.find((p) => p.id === 'cash')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#38BDF8', fontFamily: 'monospace' }}>
+                      ₹{(paymentMethodBreakdown.find((p) => p.id === 'upi')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#818CF8', fontFamily: 'monospace' }}>
+                      ₹{(paymentMethodBreakdown.find((p) => p.id === 'card')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#EC4899', fontFamily: 'monospace' }}>
+                      ₹{(paymentMethodBreakdown.find((p) => p.id === 'due')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 </tfoot>
