@@ -1054,3 +1054,299 @@ def start_background_batch_description_job(job_id: str, custom_api_keys: Optiona
         name=f"AIDescriptionWorker-{job_id[:8]}"
     )
     t.start()
+
+
+# =====================================================================
+# HISTORICAL TALLY SHEET MULTI-BILL EXTRACTION & CATALOG VERIFICATION
+# =====================================================================
+
+HISTORICAL_SHEET_SYSTEM_PROMPT = """
+You are an expert OCR and retail audit AI specializing in extracting daily handwritten sales register sheets, clipboard tally ledgers, and physical bill slips (including Indian retail formats in English, Hindi/Hinglish, and shorthand numbers).
+
+SHEET LAYOUT & CONVENTIONS:
+1. Multi-Bill Division: A single sheet contains MULTIPLE distinct customer sale transactions written sequentially, separated by horizontal dividing lines.
+2. Columns:
+   - "BARCODE" / "CODE": Product barcode number, numeric UID (e.g. "24439", "25461", "25092"), alphanumeric code (e.g. "BB24772", "BB24753"), or product name (e.g. "ORANGE BALL 23R", "MOON BALL 7CM", "Dart Mini").
+   - "QNT": Quantity. Can be a single integer ("1", "2", "4") or a formula like "5 x 39", "2 x 99", "10 x 19" meaning {quantity} x {unit_price}.
+   - "AMT": Total amount for that line item (e.g. "195", "198", "489").
+   - "CASH", "UPI", "CARD": Columns with checkmarks (✓), ticks, or specific amount numbers indicating the payment method for that bill.
+   - "MOBILE": Customer 10-digit mobile phone number (e.g. "9893042523", "9340456774", "9630316638", "7354825860").
+3. Subtotals: Each customer bill group ends with an underlined total or written amount (e.g., "3106", "1124", "2850", "7131").
+
+TASK:
+Analyze the sheet image and extract EVERY distinct customer bill into a structured JSON array.
+If an item quantity is written as "5 x 39", parse quantity = 5, unit_price = 39.00, total_price = 195.00.
+If quantity is "1" and AMT is "289", parse quantity = 1, unit_price = 289.00, total_price = 289.00.
+Extract the customer mobile phone number if written (clean 10 digits). If missing, set "".
+Determine the payment method: "card", "cash", "upi", or "split".
+
+OUTPUT FORMAT:
+Return ONLY valid JSON matching this schema:
+{
+  "sheet_date": "YYYY-MM-DD or string or null",
+  "sheet_section": "string or null",
+  "bills": [
+    {
+      "bill_index": 1,
+      "customer_phone": "10-digit string or ''",
+      "payment_method": "cash | upi | card | split",
+      "subtotal_written": "numeric string or null",
+      "items": [
+        {
+          "barcode_or_code": "string",
+          "raw_qnt_text": "string",
+          "quantity": 1,
+          "unit_price": "289.00",
+          "total_price": "289.00"
+        }
+      ]
+    }
+  ]
+}
+"""
+
+
+def extract_historical_sheet_bills(
+    files_data: List[Dict[str, Any]],
+    custom_prompt: Optional[str] = None,
+    store_id: Optional[int] = None,
+    custom_api_keys: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Multimodal OCR function for historical sales sheets:
+    1. Extracts multi-bill groupings via Gemini Vision cascade.
+    2. Cross-references every line item barcode against the store's Item inventory.
+    3. Segregates bills into valid_bills (100% catalog match) and rejected_bills (missing items/anomalies).
+    """
+    from .models import Item
+    from django.db.models import Q
+
+    if not files_data or len(files_data) == 0:
+        raise ValueError("No sheet images or documents provided for processing.")
+
+    # 1. Build API key pool
+    key_pool = []
+    if custom_api_keys:
+        for k in custom_api_keys:
+            if isinstance(k, str) and k.strip() and k.strip() not in key_pool:
+                key_pool.append(k.strip())
+    for k in get_configured_gemini_api_keys():
+        if k not in key_pool:
+            key_pool.append(k)
+
+    if not key_pool:
+        raise GeminiRateLimitError("No Gemini API keys configured.", raw_error="Missing API keys.")
+
+    # 2. Encode image parts
+    parts = []
+    for f in files_data:
+        raw_bytes = f.get('bytes')
+        mime_type = f.get('mime_type', 'image/jpeg')
+        if not raw_bytes:
+            continue
+        parts.append({
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": base64.b64encode(raw_bytes).decode('utf-8')
+            }
+        })
+
+    if not parts:
+        raise ValueError("Could not read valid image bytes from uploaded files.")
+
+    # 3. Construct prompt with user's custom context
+    prompt_text = HISTORICAL_SHEET_SYSTEM_PROMPT
+    if custom_prompt and str(custom_prompt).strip():
+        user_context = str(custom_prompt).strip()
+        prompt_text += f"""
+
+======================================================================
+OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
+======================================================================
+"{user_context}"
+======================================================================
+"""
+
+    parts.append({"text": prompt_text})
+
+    # 4. Call Gemini with multi-key and multi-model rotation
+    MAX_ATTEMPTS = 3
+    attempts = 0
+    successful_response = None
+    used_model = ""
+
+    for idx, key in enumerate(key_pool):
+        if attempts >= MAX_ATTEMPTS or successful_response is not None:
+            break
+        for model in GEMINI_MODELS:
+            if attempts >= MAX_ATTEMPTS or successful_response is not None:
+                break
+            try:
+                raw_resp = call_gemini_api(key, parts, model=model)
+                candidates = raw_resp.get('candidates', [])
+                if candidates and candidates[0].get('content', {}).get('parts'):
+                    raw_text = candidates[0]['content']['parts'][0].get('text', '{}').strip()
+                    if raw_text.startswith('```json'):
+                        raw_text = raw_text[7:]
+                    if raw_text.startswith('```'):
+                        raw_text = raw_text[3:]
+                    if raw_text.endswith('```'):
+                        raw_text = raw_text[:-3]
+
+                    successful_response = json.loads(raw_text.strip())
+                    used_model = model
+                    break
+            except Exception as e:
+                logger.warning(f"Gemini attempt failed on model {model}: {e}")
+                continue
+
+    if not successful_response or not isinstance(successful_response, dict):
+        raise ValueError("Failed to extract structured bills from sheet image. Please verify image clarity and API keys.")
+
+    raw_bills = successful_response.get('bills', [])
+    sheet_date = successful_response.get('sheet_date') or ''
+    sheet_section = successful_response.get('sheet_section') or ''
+
+    # 5. Catalog Verification Gate
+    item_qs = Item.objects.all()
+    if store_id:
+        item_qs = item_qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
+
+    items_list = list(item_qs.only('id', 'uid', 'legacy_uid', 'name', 'selling_price', 'mrp', 'quantity'))
+    uid_map: Dict[str, Any] = {}
+    legacy_map: Dict[str, Any] = {}
+    name_map: Dict[str, Any] = {}
+
+    for it in items_list:
+        if it.uid:
+            uid_map[it.uid.strip().lower()] = it
+        if it.legacy_uid:
+            legacy_map[it.legacy_uid.strip().lower()] = it
+        if it.name:
+            name_map[it.name.strip().lower()] = it
+
+    def find_catalog_item(raw_code: str):
+        c = str(raw_code or '').strip().lower()
+        if not c:
+            return None
+        if c in uid_map:
+            return uid_map[c]
+        if c in legacy_map:
+            return legacy_map[c]
+        if c in name_map:
+            return name_map[c]
+        # Clean special chars / spaces
+        clean = re.sub(r'[^\w]', '', c)
+        if clean and clean in uid_map:
+            return uid_map[clean]
+        # Fuzzy match on item title
+        for n, it_obj in name_map.items():
+            if len(c) >= 4 and (c in n or n in c):
+                return it_obj
+        return None
+
+    valid_bills = []
+    rejected_bills = []
+
+    for idx, b in enumerate(raw_bills):
+        b_idx = b.get('bill_index') or (idx + 1)
+        raw_phone = re.sub(r'\D', '', str(b.get('customer_phone') or '').strip())
+        cust_phone = raw_phone if len(raw_phone) == 10 else ''
+        pay_method = str(b.get('payment_method') or 'cash').strip().lower()
+        if pay_method not in ['cash', 'upi', 'card', 'split']:
+            pay_method = 'cash'
+
+        items_in_bill = b.get('items', [])
+        verified_items = []
+        anomalies = []
+        anomalous_indices = []
+        calc_total = Decimal('0.00')
+
+        for item_idx, it_data in enumerate(items_in_bill):
+            raw_code = str(it_data.get('barcode_or_code') or '').strip()
+            qty = int(it_data.get('quantity') or 1)
+            if qty <= 0:
+                qty = 1
+
+            try:
+                unit_p = Decimal(str(it_data.get('unit_price') or '0.00')).quantize(Decimal('0.01'))
+            except Exception:
+                unit_p = Decimal('0.00')
+
+            try:
+                line_p = Decimal(str(it_data.get('total_price') or (unit_p * qty))).quantize(Decimal('0.01'))
+            except Exception:
+                line_p = (unit_p * qty).quantize(Decimal('0.01'))
+
+            calc_total += line_p
+
+            cat_item = find_catalog_item(raw_code)
+            if cat_item:
+                verified_items.append({
+                    "item_id": cat_item.id,
+                    "item_uid": cat_item.uid,
+                    "item_name": cat_item.name,
+                    "quantity": qty,
+                    "unit_price": float(unit_p if unit_p > Decimal('0.00') else cat_item.selling_price),
+                    "total_price": float(line_p if line_p > Decimal('0.00') else (cat_item.selling_price * qty)),
+                    "catalog_selling_price": float(cat_item.selling_price),
+                    "catalog_mrp": float(cat_item.effective_mrp),
+                    "raw_code": raw_code,
+                    "is_valid": True,
+                    "error": None
+                })
+            else:
+                anomalies.append(f"Barcode/Item '{raw_code}' not found in inventory catalog.")
+                anomalous_indices.append(item_idx)
+                verified_items.append({
+                    "item_id": None,
+                    "item_uid": raw_code,
+                    "item_name": f"Unrecognized Item ({raw_code})",
+                    "quantity": qty,
+                    "unit_price": float(unit_p),
+                    "total_price": float(line_p),
+                    "catalog_selling_price": None,
+                    "catalog_mrp": None,
+                    "raw_code": raw_code,
+                    "is_valid": False,
+                    "error": f"Item code '{raw_code}' does not exist in inventory catalog"
+                })
+
+        # Written subtotal cross-check
+        sub_written = None
+        if b.get('subtotal_written'):
+            try:
+                sub_written = float(Decimal(str(b.get('subtotal_written'))).quantize(Decimal('0.01')))
+            except Exception:
+                pass
+
+        bill_dict = {
+            "bill_index": b_idx,
+            "customer_phone": cust_phone,
+            "payment_method": pay_method,
+            "items": verified_items,
+            "total_amount": float(calc_total),
+            "subtotal_written": sub_written,
+            "has_subtotal_variance": bool(sub_written and abs(Decimal(str(sub_written)) - calc_total) > Decimal('2.00')),
+            "is_valid": (len(anomalies) == 0 and len(verified_items) > 0),
+            "rejection_reasons": anomalies,
+            "anomalous_indices": anomalous_indices,
+            "status": "valid" if (len(anomalies) == 0 and len(verified_items) > 0) else "rejected"
+        }
+
+        if bill_dict["is_valid"]:
+            valid_bills.append(bill_dict)
+        else:
+            rejected_bills.append(bill_dict)
+
+    return {
+        "sheet_date": sheet_date,
+        "sheet_section": sheet_section,
+        "total_bills_extracted": len(raw_bills),
+        "valid_bills_count": len(valid_bills),
+        "rejected_bills_count": len(rejected_bills),
+        "valid_bills": valid_bills,
+        "rejected_bills": rejected_bills,
+        "used_model": used_model
+    }
+

@@ -3025,6 +3025,257 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
                 'data': res_data
             }, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=False, methods=['post'], url_path='parse-historical-sheet')
+    def parse_historical_sheet(self, request):
+        """
+        AI Multimodal OCR Endpoint for Multi-Bill Historical Tally Sheets:
+        - Accepts uploaded sheet photo(s) and operator custom prompt.
+        - Parses all distinct customer bills on the sheet.
+        - Enforces Strict Catalog Verification: Checks all line items against store Item inventory.
+        - Returns separate valid_bills and rejected_bills queues with highlighted anomaly details.
+        """
+        from inventory.ai_service import extract_historical_sheet_bills
+
+        files = request.FILES.getlist('files') or request.FILES.getlist('images')
+        single_file = request.FILES.get('file') or request.FILES.get('image')
+        if single_file and single_file not in files:
+            files.append(single_file)
+
+        if not files:
+            return Response(
+                {'error': 'No sheet image provided. Please upload at least one tally sheet image.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        store_id = request.data.get('store') or request.data.get('store_id')
+        staff_member = get_current_staff(request)
+        if not store_id and staff_member and staff_member.store:
+            store_id = staff_member.store.id
+
+        custom_prompt = request.data.get('custom_prompt', '') or request.data.get('context', '')
+        if not isinstance(custom_prompt, str):
+            custom_prompt = ''
+
+        # Parse optional custom API keys passed by the client
+        api_keys = []
+        raw_keys = request.data.get('api_keys')
+        if raw_keys:
+            if isinstance(raw_keys, list):
+                api_keys = raw_keys
+            elif isinstance(raw_keys, str):
+                try:
+                    parsed_keys = json.loads(raw_keys)
+                    if isinstance(parsed_keys, list):
+                        api_keys = parsed_keys
+                    else:
+                        api_keys = [raw_keys]
+                except Exception:
+                    api_keys = [k.strip() for k in raw_keys.split(',') if k.strip()]
+
+        files_data = []
+        for f in files:
+            files_data.append({
+                'name': f.name,
+                'bytes': f.read(),
+                'mime_type': getattr(f, 'content_type', 'image/jpeg') or 'image/jpeg'
+            })
+
+        try:
+            result = extract_historical_sheet_bills(
+                files_data=files_data,
+                custom_prompt=custom_prompt,
+                store_id=int(store_id) if store_id else None,
+                custom_api_keys=api_keys
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except ValueError as v_err:
+            return Response({'error': str(v_err)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as err:
+            logger.error(f"Historical sheet extraction error: {err}")
+            return Response({'error': f"AI Sheet extraction failed: {str(err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], url_path='commit-historical-batch')
+    def commit_historical_batch(self, request):
+        """
+        Atomic Commit Endpoint for Verified Historical Bills:
+        - Validates that every line item has a valid item_id existing in the catalog.
+        - Blocks and rejects any batch containing uncataloged items (production integrity gate).
+        - Saves SaleOrders with created_at = manual_batch_datetime and is_backdated = True.
+        - Isolates from today's active register shift cash drawer.
+        - Supports optional stock deduction toggle (default: False).
+        """
+        from django.db import transaction
+        from django.utils.dateparse import parse_datetime
+        from inventory.models import GlobalSequence, Store, Item, Customer, SaleOrder, SaleOrderItem, StockMovement
+        from inventory.services import adjust_stock
+        import re
+
+        store_id = request.data.get('store_id') or request.data.get('store')
+        staff_member = get_current_staff(request)
+        if not store_id and staff_member and staff_member.store:
+            store_id = staff_member.store.id
+
+        if not store_id:
+            return Response({'error': 'Store branch ID is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            store = Store.objects.get(id=store_id)
+        except Store.DoesNotExist:
+            return Response({'error': 'Specified store branch does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+
+        raw_batch_dt = request.data.get('batch_datetime')
+        if not raw_batch_dt:
+            return Response({'error': 'Manual batch datetime is required for historical inward.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        parsed_dt = parse_datetime(raw_batch_dt)
+        if not parsed_dt:
+            try:
+                from datetime import datetime
+                parsed_dt = datetime.fromisoformat(raw_batch_dt.replace('Z', '+00:00'))
+            except Exception:
+                return Response({'error': f"Invalid batch datetime format: '{raw_batch_dt}'. Use ISO format (YYYY-MM-DDTHH:mm:ss)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if parsed_dt and timezone.is_naive(parsed_dt):
+            parsed_dt = timezone.make_aware(parsed_dt)
+
+        # Billing always deducts stock from inventory
+        deduct_stock = True
+        entry_source = request.data.get('entry_source', 'sheet_photo_ocr')
+        sheet_ref = request.data.get('sheet_reference', '')
+        bills_data = request.data.get('bills', [])
+
+        if not bills_data or not isinstance(bills_data, list):
+            return Response({'error': 'No bills provided in batch.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # STRICT VALIDATION GATE: Check that all items in all submitted bills exist in DB!
+        catalog_item_ids = set(Item.objects.filter(Q(store=store) | Q(store__isnull=True)).values_list('id', flat=True))
+
+        for idx, b in enumerate(bills_data):
+            b_num = b.get('bill_index') or (idx + 1)
+            b_items = b.get('items', [])
+            if not b_items:
+                return Response(
+                    {'error': f"Bill #{b_num} has no line items. Cannot commit empty bill."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            for it in b_items:
+                i_id = it.get('item_id')
+                if not i_id or i_id not in catalog_item_ids:
+                    return Response(
+                        {
+                            'error': f"Production Gate Rejection: Bill #{b_num} contains unverified item '{it.get('raw_code') or it.get('item_name')}'. All items must be resolved against catalog before pushing.",
+                            'rejected_bill_index': b_num
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+        # ATOMIC INWARD COMMIT
+        cashier_name = staff_member.name if staff_member else "Manager (Historical)"
+        created_orders = []
+        total_revenue = Decimal('0.00')
+
+        with transaction.atomic():
+            date_prefix = parsed_dt.strftime('%Y%m%d')
+            seq_name = f"hist_order_{store.id}_{date_prefix}"
+
+            for idx, b in enumerate(bills_data):
+                b_num = b.get('bill_index') or (idx + 1)
+                cust_phone = re.sub(r'\D', '', str(b.get('customer_phone') or '').strip())
+                if len(cust_phone) != 10:
+                    cust_phone = "0000000000"
+
+                cust_name = b.get('customer_name') or (f"Customer ({cust_phone})" if cust_phone != "0000000000" else "Walk-in Customer")
+                customer, _ = Customer.objects.get_or_create(phone=cust_phone, defaults={'name': cust_name, 'store': store})
+
+                next_val = GlobalSequence.get_next_val(seq_name)
+                inv_num = f"INV-{date_prefix}-HIST{next_val:03d}"
+
+                b_items = b.get('items', [])
+                gross_subtotal = Decimal('0.00')
+                for it in b_items:
+                    unit_p = Decimal(str(it.get('unit_price', '0.00'))).quantize(Decimal('0.01'))
+                    qty = int(it.get('quantity', 1))
+                    gross_subtotal += (unit_p * qty).quantize(Decimal('0.01'))
+
+                pay_method = str(b.get('payment_method') or 'cash').strip().lower()
+                if pay_method not in ['cash', 'upi', 'card', 'split']:
+                    pay_method = 'cash'
+
+                total_revenue += gross_subtotal
+
+                order = SaleOrder.objects.create(
+                    invoice_number=inv_num,
+                    store=store,
+                    cashier=staff_member,
+                    cashier_name=cashier_name,
+                    customer=customer,
+                    customer_phone=cust_phone,
+                    customer_name=cust_name,
+                    subtotal=gross_subtotal,
+                    tax_amount=Decimal('0.00'),
+                    discount_amount=Decimal('0.00'),
+                    total_amount=gross_subtotal,
+                    payment_method=pay_method,
+                    amount_paid=gross_subtotal,
+                    balance_due=Decimal('0.00'),
+                    is_fully_paid=True,
+                    status=SaleOrder.STATUS_COMPLETED,
+                    notes=f"Historical Past Bill (Batch: {date_prefix}, Sheet Ref: {sheet_ref or 'Clipboard Slip'})",
+                    is_backdated=True,
+                    entry_source=entry_source,
+                    entered_at=timezone.now(),
+                    entered_by=staff_member,
+                    original_bill_reference=f"Bill #{b_num}",
+                    inventory_deducted=deduct_stock,
+                    created_at=parsed_dt
+                )
+
+                for it in b_items:
+                    item_obj = Item.objects.select_for_update().get(id=it['item_id'])
+                    qty = int(it.get('quantity', 1))
+                    unit_p = Decimal(str(it.get('unit_price', item_obj.selling_price))).quantize(Decimal('0.01'))
+                    line_tot = (unit_p * qty).quantize(Decimal('0.01'))
+
+                    SaleOrderItem.objects.create(
+                        sale_order=order,
+                        item=item_obj,
+                        item_name=item_obj.name,
+                        item_uid=item_obj.uid,
+                        unit_cost_price=item_obj.cost_price,
+                        unit_selling_price=unit_p,
+                        unit_mrp=item_obj.effective_mrp,
+                        quantity=qty,
+                        total_price=line_tot
+                    )
+
+                    if deduct_stock:
+                        adjust_stock(
+                            item=item_obj,
+                            change=-qty,
+                            reason=StockMovement.REASON_SALE,
+                            note=f"Historical Sale #{inv_num} ({parsed_dt.strftime('%d-%m-%Y')})",
+                            performed_by=staff_member
+                        )
+
+                created_orders.append({
+                    'id': order.id,
+                    'invoice_number': order.invoice_number,
+                    'customer_phone': order.customer_phone,
+                    'total_amount': float(order.total_amount),
+                    'payment_method': order.payment_method,
+                    'items_count': len(b_items)
+                })
+
+        return Response({
+            'success': True,
+            'message': f"Successfully committed {len(created_orders)} historical bills for date {parsed_dt.strftime('%d-%m-%Y')}.",
+            'total_bills_committed': len(created_orders),
+            'total_revenue_recorded': float(total_revenue),
+            'batch_datetime': parsed_dt.isoformat(),
+            'created_orders': created_orders
+        }, status=status.HTTP_201_CREATED)
+
+
 
 
 
@@ -3268,7 +3519,8 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
         shift_cash_sales_qs = SaleOrder.objects.filter(
             Q(store_id=store_id, created_at__gte=effective_opened_at) &
             ~Q(status='cancelled') &
-            ~Q(invoice_number__startswith='RET-')
+            ~Q(invoice_number__startswith='RET-') &
+            Q(is_backdated=False)
         )
         if open_shift.cashier_id:
             shift_cash_sales_qs = shift_cash_sales_qs.filter(cashier_id=open_shift.cashier_id)
@@ -3498,7 +3750,8 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
             shift_cash_sales_qs = SaleOrder.objects.filter(
                 Q(store=shift.store, created_at__gte=effective_opened_at, created_at__lte=close_time) &
                 ~Q(status='cancelled') &
-                ~Q(invoice_number__startswith='RET-')
+                ~Q(invoice_number__startswith='RET-') &
+                Q(is_backdated=False)
             )
             if shift.cashier_id:
                 shift_cash_sales_qs = shift_cash_sales_qs.filter(cashier_id=shift.cashier_id)

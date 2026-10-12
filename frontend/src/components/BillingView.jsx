@@ -51,6 +51,7 @@ import {
   FileSpreadsheet,
   Edit3,
   Lock,
+  Database,
 } from 'lucide-react';
 import {
   fetchItems,
@@ -73,6 +74,7 @@ import {
 } from '../api';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 import ProductReturnModal from './ProductReturnModal';
+import HistoricalBillMigrationModal from './HistoricalBillMigrationModal';
 import { getVipSettings } from '../utils/vipSettings';
 import {
   connectRfidReader,
@@ -175,6 +177,7 @@ export default function BillingView({
   const [returnReference, setReturnReference] = useState('');
   const [originalReturnBill, setOriginalReturnBill] = useState(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isHistoricalModalOpen, setIsHistoricalModalOpen] = useState(false);
 
   // Counter Cash / Stock Payout State
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -2207,6 +2210,33 @@ export default function BillingView({
             <RotateCcw size={15} style={{ color: '#FB923C' }} />
             <span>{returnReference ? `Return: #${returnReference}` : 'Return / Exchange'}</span>
           </button>
+
+          {/* One-Time Historical Past Bills Inward Button (Owner / Head Cashier Only) */}
+          {isHeadCashierOrOwner && (
+            <button
+              type="button"
+              onClick={() => setIsHistoricalModalOpen(true)}
+              className="btn btn-secondary btn-sm billing-historical-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.08))',
+                borderColor: 'rgba(245, 158, 11, 0.5)',
+                color: '#FBBF24',
+                fontWeight: 800,
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-pill)',
+                boxShadow: '0 2px 10px rgba(245, 158, 11, 0.15)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="One-Time Inward: Digitize past paper register sheets and sales bills"
+            >
+              <Database size={15} style={{ color: '#F59E0B' }} />
+              <span>Inward Past Bills</span>
+            </button>
+          )}
 
           {activeStore && (
             <div
@@ -10475,6 +10505,19 @@ export default function BillingView({
           showNotification('success', result.message || 'Return processed successfully!');
           loadShiftBillingOrders();
           loadActiveRegisterShift();
+          loadStoreItems();
+        }}
+      />
+
+      {/* One-Time Historical Past Bills Inward Modal */}
+      <HistoricalBillMigrationModal
+        isOpen={isHistoricalModalOpen}
+        onClose={() => setIsHistoricalModalOpen(false)}
+        store={activeStore}
+        currentUser={currentUser}
+        items={items}
+        onSuccess={(result) => {
+          showNotification('success', result.message || 'Historical bills committed successfully!');
           loadStoreItems();
         }}
       />

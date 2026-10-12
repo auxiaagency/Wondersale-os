@@ -1453,6 +1453,12 @@ class SaleOrderSerializer(serializers.ModelSerializer):
             'payments',
             'is_editable',
             'is_return',
+            'is_backdated',
+            'entry_source',
+            'entered_at',
+            'receipt_image',
+            'original_bill_reference',
+            'inventory_deducted',
             'created_at',
             'updated_at',
         ]

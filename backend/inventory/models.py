@@ -1162,8 +1162,55 @@ class SaleOrder(models.Model):
         help_text="Net payable amount after deducting return credit (₹)"
     )
     notes = models.TextField(blank=True, default="")
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # --- Historical / Backdated Bills Inward Audit ---
+    is_backdated = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Flag indicating this invoice was imported retrospectively from historical paper records."
+    )
+    entry_source = models.CharField(
+        max_length=30,
+        default='live_pos',
+        choices=[
+            ('live_pos', 'Live POS Terminal'),
+            ('sheet_photo_ocr', 'Handwritten Sheet Photo OCR'),
+            ('csv_migration', 'CSV Migration Import'),
+            ('manual_migration', 'Manual Historical Entry'),
+        ],
+        db_index=True,
+        help_text="Source channel through which this billing record was ingested."
+    )
+    entered_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="Audit timestamp of when this past record was entered into the system."
+    )
+    entered_by = models.ForeignKey(
+        'staff.StaffMember',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historical_bills_migrated',
+        help_text="Staff member or manager who submitted this historical bill inward."
+    )
+    receipt_image = models.ImageField(
+        upload_to='historical_sheet_photos/',
+        null=True,
+        blank=True,
+        help_text="Photo of the handwritten tally sheet or physical paper receipt."
+    )
+    original_bill_reference = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Original paper memo/sheet index number or physical bill slip number."
+    )
+    inventory_deducted = models.BooleanField(
+        default=False,
+        help_text="Flag indicating whether inventory stock was decremented for this past bill."
+    )
 
     class Meta:
         ordering = ['-created_at']

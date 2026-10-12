@@ -2976,6 +2976,35 @@ export async function markBrokenItemNoFine(reportId) {
   return await res.json();
 }
 
+// ----------------- One-Time Historical Inward & Past Bills Migration -----------------
+
+export async function parseHistoricalSheet(formData) {
+  const res = await fetch(`${API_BASE}/sales/parse-historical-sheet/`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to parse historical sheet image.');
+  }
+  return data;
+}
+
+export async function commitHistoricalBatch(payload) {
+  const res = await fetch(`${API_BASE}/sales/commit-historical-batch/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to commit historical bills batch.');
+  }
+  return data;
+}
+
+
 
 
 
