@@ -44,6 +44,7 @@ import { SkeletonInventoryRows } from './Skeleton';
 import SubcategoryPickerPopover from './SubcategoryPickerPopover';
 import SubcategoryViewerDropdown, { SubcategoriesBadgeList } from './SubcategoryViewerDropdown';
 import BrokenItemModal from './BrokenItemModal';
+import BulkEditModal, { BulkConfirmModal } from './BulkEditModal';
 
 // Helper to calculate volume and volumetric weight metrics
 export const calculateVolumeMetrics = (length, width, height) => {
@@ -150,6 +151,8 @@ export default function ItemTable({
   const [savingEdits, setSavingEdits] = useState(false);
   const [deletingBulk, setDeletingBulk] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [bulkEditConfirmData, setBulkEditConfirmData] = useState(null); // { changes, count, targetIds }
   const [subcatPickerAnchor, setSubcatPickerAnchor] = useState(null); // { itemId, anchorRect }
   const [activeSubcatViewer, setActiveSubcatViewer] = useState(null); // { itemId, itemName, anchorEl, anchorRect, primarySubcat, allSubcategories }
   const [internalSortBy, setInternalSortBy] = useState('');
@@ -872,6 +875,96 @@ export default function ItemTable({
     } finally {
       setDeletingBulk(false);
     }
+  };
+
+  // Bulk Apply Changes to Selected Products in Edit Mode
+  const handleApplyBulkChangesToInventory = (changes) => {
+    const targetIds = selectedItemIds.length > 0 ? selectedItemIds : [];
+    if (!targetIds || targetIds.length === 0) return;
+
+    setEditBuffer((prev) => {
+      const next = { ...prev };
+      targetIds.forEach((id) => {
+        const orig = items.find((it) => it.id === id);
+        const currentEdit = next[id] || {
+          name: orig?.name || '',
+          cost_price: orig?.cost_price || '',
+          selling_price: orig?.selling_price || '',
+          mrp: orig?.mrp || '',
+          section_id: orig?.section || orig?.section_details?.id || '',
+          expiry_date: orig?.expiry_date || '',
+          weight: orig?.weight || '',
+          length: orig?.length || '',
+          width: orig?.width || '',
+          height: orig?.height || '',
+          description: orig?.description || '',
+          supplier_id: orig?.supplier ? (typeof orig.supplier === 'object' ? orig.supplier.id : orig.supplier) : '',
+          subcategory_ids: (orig?.subcategories || []).map((sc) => sc.id || sc),
+          primary_subcategory_id: orig?.primary_subcategory?.id || orig?.primary_subcategory_id || '',
+        };
+
+        const updated = { ...currentEdit };
+
+        // 1. Section
+        if (changes.sectionId !== undefined && changes.sectionId !== null && !isSectionRestricted) {
+          updated.section_id = changes.sectionId || '';
+        }
+
+        // 2. Supplier
+        if (changes.supplierId !== undefined && changes.supplierId !== null) {
+          updated.supplier_id = changes.supplierId || '';
+        }
+
+        // 3. Subcategory (Append mode)
+        if (changes.subcategoryId) {
+          const currentSubs = updated.subcategory_ids || [];
+          if (!currentSubs.includes(changes.subcategoryId)) {
+            updated.subcategory_ids = [...currentSubs, changes.subcategoryId];
+          }
+        }
+
+        // 4. Cost Price
+        if (changes.costPrice !== undefined && changes.costPrice !== '') {
+          updated.cost_price = changes.costPrice;
+        }
+
+        // 5. Selling Price
+        if (changes.sellingPrice !== undefined && changes.sellingPrice !== '') {
+          updated.selling_price = changes.sellingPrice;
+        }
+
+        // 6. MRP
+        if (changes.mrp !== undefined && changes.mrp !== '') {
+          updated.mrp = changes.mrp;
+        }
+
+        // 7. Weight
+        if (changes.weight !== undefined && changes.weight !== '') {
+          updated.weight = changes.weight;
+        }
+
+        // 8. Expiry Date
+        if (changes.expiryDate !== undefined && changes.expiryDate !== '') {
+          updated.expiry_date = changes.expiryDate;
+        }
+
+        // 9. Description
+        if (changes.description !== undefined && changes.description !== '') {
+          updated.description = changes.description;
+        }
+
+        next[id] = updated;
+      });
+      return next;
+    });
+
+    setDirtyItemIds((prev) => {
+      const next = new Set(prev);
+      targetIds.forEach((id) => next.add(id));
+      return next;
+    });
+
+    showFeedback(`Bulk updated fields for ${targetIds.length} product(s) in edit mode! Click "Save Changes" to commit.`);
   };
 
   // Helper to test if an edited item has genuine differences compared to original item
@@ -3833,6 +3926,38 @@ export default function ItemTable({
           </button>
         )}
 
+        {/* Bulk Change Fields Button when items are selected in Edit Mode */}
+        {isEditMode && selectedItemIds.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              if (justDraggedRef.current) return;
+              setIsBulkEditModalOpen(true);
+            }}
+            className="btn inv-floating-btn"
+            style={{
+              background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-pill)',
+              boxShadow: '0 8px 24px rgba(59, 130, 246, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontWeight: 800,
+              padding: '10px 18px',
+              fontSize: '0.88rem',
+              cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+            title="Bulk change dropdowns, prices, suppliers, sections for selected products"
+          >
+            <Edit3 size={16} className="inv-float-icon" />
+            <span className="inv-btn-text-full">Bulk Change ({selectedItemIds.length})</span>
+            <span className="inv-btn-text-mobile">Bulk ({selectedItemIds.length})</span>
+          </button>
+        )}
+
         {/* AI Product Description Generator Button when in Edit Mode */}
         {isEditMode && (
           <button
@@ -4229,6 +4354,37 @@ export default function ItemTable({
           }}
         />
       )}
+
+      {/* BULK EDIT FIELDS MODAL (NORMAL INVENTORY EDIT MODE) */}
+      <BulkEditModal
+        isOpen={isBulkEditModalOpen}
+        onClose={() => setIsBulkEditModalOpen(false)}
+        selectedCount={selectedItemIds.length}
+        isEditMode={true}
+        sections={sections}
+        suppliers={suppliers}
+        subcategories={subcategories}
+        isSectionRestricted={isSectionRestricted}
+        onConfirmChanges={({ changes, changesDesc, count }) => {
+          setIsBulkEditModalOpen(false);
+          setBulkEditConfirmData({
+            changes,
+            changesDesc,
+            count,
+            targetIds: [...selectedItemIds],
+          });
+        }}
+      />
+
+      {/* BULK EDIT CONFIRMATION DIALOG (NORMAL INVENTORY EDIT MODE) */}
+      <BulkConfirmModal
+        isOpen={Boolean(bulkEditConfirmData)}
+        onClose={() => setBulkEditConfirmData(null)}
+        confirmData={bulkEditConfirmData}
+        onConfirm={(changes) => {
+          handleApplyBulkChangesToInventory(changes);
+        }}
+      />
     </div>
   );
 }

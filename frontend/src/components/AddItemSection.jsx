@@ -37,6 +37,7 @@ import ItemImageModal from './ItemImageModal';
 import SubcategoryPickerPopover from './SubcategoryPickerPopover';
 import ImportCsvModal from './ImportCsvModal';
 import ScanBillModal from './ScanBillModal';
+import BulkEditModal, { BulkConfirmModal } from './BulkEditModal';
 import { calculateVolumeMetrics } from './ItemTable';
 
 // Validation helper for staged product rows (ensures missing or invalid text fields are treated as RED errors)
@@ -284,6 +285,17 @@ export default function AddItemSection({
   // Staged Table selection states
   const [selectedStagedIds, setSelectedStagedIds] = useState([]);
 
+  // Bulk Edit Modal & Confirmation State (Staging List)
+  const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [bulkEditConfirmData, setBulkEditConfirmData] = useState(null); // { changes, count, targetIds }
+
+  // Barcode Scanner Timing & Buffer Refs for Custom UID input fields
+  const formUidInputRef = useRef(null);
+  const stagedUidInputRefs = useRef({}); // { [itemId]: inputEl }
+  const barcodeScanBufferRef = useRef('');
+  const lastScanKeyTimeRef = useRef(0);
+  const lastScanProcessedRef = useRef({ code: '', time: 0 });
+
   // Status states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -469,6 +481,83 @@ export default function AddItemSection({
       clearTimeout(timer);
     };
   }, [customUid, stagedItems, existingUidMap, checkingUids]);
+
+  // Barcode Scanner Listener for Custom UID input fields (Top form and Staged table)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeEl = document.activeElement;
+      if (!activeEl) return;
+
+      // Determine if focused element is a custom UID input
+      const isFormUid = activeEl === formUidInputRef.current || (activeEl.tagName === 'INPUT' && activeEl.dataset?.uidTarget === 'form');
+      const isStagedUid = activeEl.tagName === 'INPUT' && activeEl.dataset?.uidItemId;
+      const targetItemId = activeEl.dataset?.uidItemId;
+
+      // Only capture when actively focused inside a UID input area, or if form UID input exists
+      if (!isFormUid && !isStagedUid) {
+        return;
+      }
+
+      const now = Date.now();
+      const diff = now - lastScanKeyTimeRef.current;
+      lastScanKeyTimeRef.current = now;
+
+      // Handle barcode scanner terminator (Enter or Tab)
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const buffer = barcodeScanBufferRef.current.trim();
+        // Hardware scanners burst characters with rapid keystrokes (<75ms per key, terminator <80ms)
+        // If an input is focused, only intercept if it's a genuine hardware scanner burst
+        const isHardwareBurst = diff < 80 && buffer.length >= 2;
+
+        if (isHardwareBurst) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === 'function') {
+            e.stopImmediatePropagation();
+          }
+          barcodeScanBufferRef.current = '';
+
+          // Normalize barcode (strip control chars, quotes, and AIM symbology headers like ]C1, ]e0)
+          const cleaned = buffer
+            .replace(/[\x00-\x1f\x7f-\x9f]/g, '')
+            .trim()
+            .replace(/^\][A-Za-z0-9]{2}/, '')
+            .trim()
+            .replace(/^['"]+|['"]+$/g, '');
+
+          if (!cleaned) return;
+
+          // Debounce duplicate scans within 600ms
+          if (
+            lastScanProcessedRef.current.code === cleaned.toLowerCase() &&
+            now - lastScanProcessedRef.current.time < 600
+          ) {
+            return;
+          }
+          lastScanProcessedRef.current = { code: cleaned.toLowerCase(), time: now };
+
+          if (isStagedUid && targetItemId) {
+            handleUpdateStagedField(targetItemId, 'uid', cleaned);
+            if (activeEl) activeEl.value = cleaned;
+          } else {
+            setCustomUid(cleaned);
+            if (formUidInputRef.current) formUidInputRef.current.value = cleaned;
+          }
+          return;
+        }
+        barcodeScanBufferRef.current = '';
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (diff > 160) {
+          barcodeScanBufferRef.current = e.key;
+        } else {
+          barcodeScanBufferRef.current += e.key;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
 
   // Close top dropdown on outside click
   useEffect(() => {
@@ -789,6 +878,108 @@ export default function AddItemSection({
     const count = hasSelection ? selectedStagedIds.length : stagedItems.length;
     setFormFeedback(`Added subcategory "${subcatObj.name}" to ${count} staged item(s)!`);
     setTimeout(() => setFormFeedback(''), 4000);
+  };
+
+  // Bulk Apply Changes to Selected / All Staged Items
+  const handleApplyBulkChangesToStaged = (changes) => {
+    const targetIds = selectedStagedIds.length > 0 ? selectedStagedIds : stagedItems.map((i) => i.id);
+    if (!targetIds || targetIds.length === 0) return;
+
+    setStagedItems((prev) =>
+      prev.map((item) => {
+        if (!targetIds.includes(item.id)) return item;
+        const updated = { ...item };
+        const updatedDismissed = { ...(item._dismissedWarnings || {}) };
+
+        // 1. Section
+        if (changes.sectionId !== undefined && changes.sectionId !== null && !isSectionRestricted) {
+          updated.sectionId = changes.sectionId || '';
+        }
+
+        // 2. Supplier
+        if (changes.supplierId !== undefined && changes.supplierId !== null) {
+          updated.supplierId = changes.supplierId || '';
+          const sObj = suppliers.find((s) => String(s.id) === String(changes.supplierId));
+          updated.supplierName = sObj ? sObj.name : '';
+        }
+
+        // 3. Subcategory (Append mode)
+        if (changes.subcategoryId) {
+          const currentSubcats = item.subcategories || [];
+          const nextSubcats = currentSubcats.includes(changes.subcategoryId)
+            ? currentSubcats
+            : [...currentSubcats, changes.subcategoryId];
+          updated.subcategories = nextSubcats;
+          updated.subcategoryObjects = subcategories.filter((s) => nextSubcats.includes(s.id));
+        }
+
+        // 4. Cost Price
+        if (changes.costPrice !== undefined && changes.costPrice !== '') {
+          updated.costPrice = changes.costPrice;
+          updated.cost_price = parseFloat(changes.costPrice) || 0;
+          updatedDismissed.costPrice = true;
+          updatedDismissed.cost_price = true;
+        }
+
+        // 5. Selling Price
+        if (changes.sellingPrice !== undefined && changes.sellingPrice !== '') {
+          updated.sellingPrice = changes.sellingPrice;
+          updated.selling_price = parseFloat(changes.sellingPrice) || 0;
+          updatedDismissed.sellingPrice = true;
+          updatedDismissed.selling_price = true;
+        }
+
+        // 6. MRP
+        if (changes.mrp !== undefined && changes.mrp !== '') {
+          updated.mrp = changes.mrp;
+          updated.mrp_val = parseFloat(changes.mrp) || null;
+          updatedDismissed.mrp = true;
+        }
+
+        // 7. Stock Quantity
+        if (changes.initialQuantity !== undefined && changes.initialQuantity !== '') {
+          updated.initialQuantity = changes.initialQuantity;
+          updated.initial_quantity = parseInt(changes.initialQuantity, 10) || 0;
+          updatedDismissed.initialQuantity = true;
+          updatedDismissed.quantity = true;
+        }
+
+        // 8. Weight
+        if (changes.weight !== undefined && changes.weight !== '') {
+          updated.weight = changes.weight;
+          updatedDismissed.weight = true;
+        }
+
+        // 9. Expiry Date
+        if (changes.expiryDate !== undefined && changes.expiryDate !== '') {
+          updated.expiryDate = changes.expiryDate;
+          updatedDismissed.expiryDate = true;
+          updatedDismissed.expiry_date = true;
+        }
+
+        // 10. Dimensions (Length, Width, Height)
+        if (changes.length !== undefined && changes.length !== '') {
+          updated.length = changes.length;
+        }
+        if (changes.width !== undefined && changes.width !== '') {
+          updated.width = changes.width;
+        }
+        if (changes.height !== undefined && changes.height !== '') {
+          updated.height = changes.height;
+        }
+
+        // 11. Description
+        if (changes.description !== undefined && changes.description !== '') {
+          updated.description = changes.description;
+        }
+
+        updated._dismissedWarnings = updatedDismissed;
+        return updated;
+      })
+    );
+
+    setFormFeedback(`Successfully updated ${targetIds.length} staged product(s) in bulk!`);
+    setTimeout(() => setFormFeedback(''), 4500);
   };
 
   // Inline update a field directly in the Staged Table
@@ -1386,6 +1577,8 @@ export default function AddItemSection({
               </label>
               <div style={{ position: 'relative' }}>
                 <input
+                  ref={formUidInputRef}
+                  data-uid-target="form"
                   type="text"
                   value={customUid}
                   onChange={(e) => setCustomUid(e.target.value)}
@@ -1404,7 +1597,7 @@ export default function AddItemSection({
                       ? 'var(--color-danger)'
                       : undefined,
                   }}
-                  title={existingUidMap[customUid.trim().toLowerCase()]?.exists ? `UID already in use by: ${existingUidMap[customUid.trim().toLowerCase()]?.item_name}` : 'Custom product barcode/UID'}
+                  title={existingUidMap[customUid.trim().toLowerCase()]?.exists ? `UID already in use by: ${existingUidMap[customUid.trim().toLowerCase()]?.item_name}` : 'Custom product barcode/UID (scan or type)'}
                 />
                 {customUid && checkingUids[customUid.trim().toLowerCase()] && (
                   <Loader2
@@ -2316,9 +2509,14 @@ export default function AddItemSection({
               <select
                 value=""
                 onChange={(e) => {
-                  if (e.target.value !== undefined) {
-                    handleBatchAssignSupplier(e.target.value);
-                  }
+                  const sVal = e.target.value;
+                  const sObj = suppliers.find((s) => String(s.id) === String(sVal));
+                  setBulkEditConfirmData({
+                    changes: { supplierId: sVal },
+                    changesDesc: [sVal ? `Set supplier: "${sObj?.name || sVal}"` : 'Remove supplier (No Supplier)'],
+                    count: selectedStagedIds.length > 0 ? selectedStagedIds.length : stagedItems.length,
+                    targetIds: selectedStagedIds.length > 0 ? selectedStagedIds : stagedItems.map((i) => i.id),
+                  });
                 }}
                 className="form-input"
                 style={{ height: '30px', fontSize: '0.76rem', padding: '0 8px', minWidth: '170px' }}
@@ -2340,7 +2538,12 @@ export default function AddItemSection({
                 value=""
                 onChange={(e) => {
                   if (e.target.value) {
-                    handleBatchAssignSubcategory(e.target.value);
+                    setBulkEditConfirmData({
+                      changes: { subcategoryId: e.target.value },
+                      changesDesc: [`Add subcategory: "${subcategories.find((s) => String(s.id) === String(e.target.value))?.name || 'Selected'}"`],
+                      count: selectedStagedIds.length > 0 ? selectedStagedIds.length : stagedItems.length,
+                      targetIds: selectedStagedIds.length > 0 ? selectedStagedIds : stagedItems.map((i) => i.id),
+                    });
                   }
                 }}
                 className="form-input"
@@ -2354,6 +2557,61 @@ export default function AddItemSection({
                 ))}
               </select>
             </div>
+
+            {/* Batch Section Select (If not section restricted) */}
+            {!isSectionRestricted && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Layers size={13} style={{ color: '#A855F7' }} />
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const secVal = e.target.value;
+                    const secObj = sections.find((s) => String(s.id) === String(secVal));
+                    setBulkEditConfirmData({
+                      changes: { sectionId: secVal },
+                      changesDesc: [secVal ? `Assign section: "${secObj?.name || secVal}"` : 'Clear section (No Section)'],
+                      count: selectedStagedIds.length > 0 ? selectedStagedIds.length : stagedItems.length,
+                      targetIds: selectedStagedIds.length > 0 ? selectedStagedIds : stagedItems.map((i) => i.id),
+                    });
+                  }}
+                  className="form-input"
+                  style={{ height: '30px', fontSize: '0.76rem', padding: '0 8px', minWidth: '150px' }}
+                >
+                  <option value="">Set Section for {selectedStagedIds.length > 0 ? 'Selected' : 'All'}...</option>
+                  <option value="">-- No Section --</option>
+                  {sections.map((sec) => (
+                    <option key={sec.id} value={sec.id}>
+                      {sec.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Open Full Bulk Edit Modal Button */}
+            <button
+              type="button"
+              onClick={() => setIsBulkEditModalOpen(true)}
+              className="btn btn-secondary btn-sm"
+              style={{
+                height: '30px',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '0 12px',
+                background: 'rgba(129, 140, 248, 0.12)',
+                borderColor: 'rgba(129, 140, 248, 0.35)',
+                color: '#A5B4FC',
+                borderRadius: 'var(--radius-sm)',
+                marginLeft: 'auto',
+              }}
+              title="Bulk change dropdowns, prices, stock, supplier, or sections for all selected products"
+            >
+              <Edit3 size={13} />
+              <span>Bulk Change Fields {selectedStagedIds.length > 0 ? `(${selectedStagedIds.length})` : `(${stagedItems.length})`}</span>
+            </button>
           </div>
 
           {/* Validation Error Alert Banner if any row has invalid fields */}
@@ -2743,6 +3001,7 @@ export default function AddItemSection({
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                 <input
+                                  data-uid-item-id={item.id}
                                   type="text"
                                   value={item.uid || ''}
                                   onChange={(e) => handleUpdateStagedField(item.id, 'uid', e.target.value)}
@@ -2770,7 +3029,7 @@ export default function AddItemSection({
                                       ? 'var(--color-success)'
                                       : undefined,
                                   }}
-                                  title={item._errors?.uid || (item.uid ? `Custom UID: ${item.uid}` : 'Leave blank for auto-generated sequential UID')}
+                                  title={item._errors?.uid || (item.uid ? `Custom UID: ${item.uid} (scan or type)` : 'Leave blank for auto-generated sequential UID')}
                                 />
                                 {item.uid && checkingUids[String(item.uid).trim().toLowerCase()] && (
                                   <Loader2
@@ -3575,6 +3834,37 @@ export default function AddItemSection({
         suppliers={suppliers}
         effectiveStoreId={currentStoreObj?.id || effectiveStoreId}
         onOpenSettings={onOpenSettings}
+      />
+
+      {/* BULK EDIT FIELDS MODAL */}
+      <BulkEditModal
+        isOpen={isBulkEditModalOpen}
+        onClose={() => setIsBulkEditModalOpen(false)}
+        selectedCount={selectedStagedIds.length > 0 ? selectedStagedIds.length : stagedItems.length}
+        isEditMode={false}
+        sections={sections}
+        suppliers={suppliers}
+        subcategories={subcategories}
+        isSectionRestricted={isSectionRestricted}
+        onConfirmChanges={({ changes, changesDesc, count }) => {
+          setIsBulkEditModalOpen(false);
+          setBulkEditConfirmData({
+            changes,
+            changesDesc,
+            count,
+            targetIds: selectedStagedIds.length > 0 ? selectedStagedIds : stagedItems.map((i) => i.id),
+          });
+        }}
+      />
+
+      {/* BULK EDIT CONFIRMATION DIALOG */}
+      <BulkConfirmModal
+        isOpen={Boolean(bulkEditConfirmData)}
+        onClose={() => setBulkEditConfirmData(null)}
+        confirmData={bulkEditConfirmData}
+        onConfirm={(changes) => {
+          handleApplyBulkChangesToStaged(changes);
+        }}
       />
     </div>
   );
