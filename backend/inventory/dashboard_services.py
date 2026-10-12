@@ -1263,7 +1263,8 @@ def get_product_analytics(item: Item, request=None):
         s_price = float(cit['selling_price'])
         tot_c = c_price * u_sold
         profit = round(rev - tot_c, 2)
-        m_pct = round((profit / rev * 100), 2) if rev > 0 else round(((s_price - c_price) / s_price * 100), 2) if s_price > 0 else 0.0
+        # Consistent catalog margin % based on active selling price & cost price
+        m_pct = round(((s_price - c_price) / s_price * 100), 2) if s_price > 0 else 0.0
 
         c_days = max(1, (end_date - cit['created_at'].date()).days + 1)
         velocity = round(u_sold / c_days, 2)
