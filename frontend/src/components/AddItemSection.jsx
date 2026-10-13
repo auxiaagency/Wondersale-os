@@ -38,6 +38,7 @@ import SubcategoryPickerPopover from './SubcategoryPickerPopover';
 import ImportCsvModal from './ImportCsvModal';
 import ScanBillModal from './ScanBillModal';
 import BulkEditModal, { BulkConfirmModal } from './BulkEditModal';
+import UIDConflictVerificationModal from './UIDConflictVerificationModal';
 import { calculateVolumeMetrics } from './ItemTable';
 
 // Validation helper for staged product rows (ensures missing or invalid text fields are treated as RED errors)
@@ -314,6 +315,10 @@ export default function AddItemSection({
 
   // Gemini AI Bill Scanner Modal state
   const [isScanBillOpen, setIsScanBillOpen] = useState(false);
+
+  // UID Conflict Verification Modal state
+  const [isUidConflictModalOpen, setIsUidConflictModalOpen] = useState(false);
+  const [conflictingStagedItems, setConflictingStagedItems] = useState([]);
 
   const handleImportCsvSuccess = (importedProducts) => {
     if (!importedProducts || importedProducts.length === 0) return;
@@ -1144,49 +1149,32 @@ export default function AddItemSection({
     setActivePhotoModalStagedItem(null);
   };
 
-  // 3. ADD ALL STAGED PRODUCTS BATCH ACTION
-  const handleAddAllProducts = async () => {
-    if (stagedItems.length === 0) return;
-
-    if (totalErrorRows > 0) {
-      setError(`Cannot save products from the list. Please resolve all ${totalErrorRows} problematic row(s) first.`);
-      return;
-    }
-
-    // Validate all items in staged queue before submitting
-    for (let i = 0; i < stagedItems.length; i++) {
-      const item = stagedItems[i];
-      const errors = getItemErrors(item, stagedItems, existingUidMap);
-      if (Object.keys(errors).length > 0) {
-        setError(`"${item.name || `Row #${i + 1}`}": ${Object.values(errors)[0]}`);
-        return;
-      }
-    }
+  // Helper to execute saving a given list of staged products into inventory
+  const executeSaveProducts = async (productsToSave, onAfterSuccess) => {
+    if (!productsToSave || productsToSave.length === 0) return 0;
 
     setBatchSubmitting(true);
     setBatchSuccessCount(null);
     setError('');
 
-    // Check if any staged items have images attached
-    const hasAnyImages = stagedItems.some(
+    const hasAnyImages = productsToSave.some(
       (item) =>
         (item.imageFiles && item.imageFiles.length > 0) ||
         (item.storedImages && item.storedImages.length > 0) ||
         (item.imagePreviews && item.imagePreviews.length > 0)
     );
 
-    // OPTIMIZED FAST PATH: If items don't have local image files to upload (e.g. from CSV import or quick lists)
-    // Send all of them to the high-performance atomic bulk-create endpoint in ONE single fast request!
+    // Fast path: bulk endpoint for items without local photos
     if (!hasAnyImages) {
       try {
         setBatchProgress({
-          current: stagedItems.length,
-          total: stagedItems.length,
-          name: `Saving all ${stagedItems.length} products...`,
+          current: productsToSave.length,
+          total: productsToSave.length,
+          name: `Saving ${productsToSave.length} product(s)...`,
         });
 
         const storeTargetId = currentStoreObj?.id || effectiveStoreId;
-        const bulkPayload = stagedItems.map((item) => ({
+        const bulkPayload = productsToSave.map((item) => ({
           name: item.name.trim(),
           store: item.store || storeTargetId,
           subcategories: item.subcategories || [],
@@ -1212,36 +1200,32 @@ export default function AddItemSection({
         }));
 
         const bulkRes = await bulkCreateItems(bulkPayload, storeTargetId);
-
-        setBatchSuccessCount(bulkRes.created_count || stagedItems.length);
-        setStagedItems([]);
-        setSelectedStagedIds([]);
-        try {
-          localStorage.removeItem(STAGED_STORAGE_KEY);
-        } catch (e) {}
+        const countSaved = bulkRes.created_count || productsToSave.length;
+        setBatchSuccessCount(countSaved);
         onProductCreated?.(null);
         onMetaUpdated?.();
         setBatchSubmitting(false);
         setBatchProgress(null);
-        return;
+        if (onAfterSuccess) onAfterSuccess(countSaved);
+        return countSaved;
       } catch (err) {
         console.error('Bulk create items failed:', err);
-        setError(`Failed to bulk register products: ${err.message}`);
+        setError(`Failed to save products: ${err.message}`);
         setBatchSubmitting(false);
         setBatchProgress(null);
-        return;
+        throw err;
       }
     }
 
-    // REGULAR PATH (with photos): Loops through items with retry backoff for rate limits
+    // Path with photos: save items sequentially
     let successCount = 0;
     let lastCreated = null;
 
-    for (let i = 0; i < stagedItems.length; i++) {
-      const item = stagedItems[i];
+    for (let i = 0; i < productsToSave.length; i++) {
+      const item = productsToSave[i];
       setBatchProgress({
         current: i + 1,
-        total: stagedItems.length,
+        total: productsToSave.length,
         name: item.name,
       });
 
@@ -1272,7 +1256,6 @@ export default function AddItemSection({
           ...(item.uid && String(item.uid).trim() ? { uid: String(item.uid).trim() } : {}),
         };
 
-        // Create item with automatic backoff retry if throttled
         let created = null;
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
@@ -1289,7 +1272,6 @@ export default function AddItemSection({
 
         lastCreated = created;
 
-        // Restore or convert image files for upload
         let filesToUpload = [];
         if (item.imageFiles && item.imageFiles.length > 0) {
           filesToUpload = item.imageFiles;
@@ -1332,14 +1314,117 @@ export default function AddItemSection({
 
     if (successCount > 0) {
       setBatchSuccessCount(successCount);
-      setStagedItems((prev) => prev.slice(successCount));
-      setSelectedStagedIds([]);
-      try {
-        localStorage.removeItem(STAGED_STORAGE_KEY);
-      } catch (e) {}
       onProductCreated?.(lastCreated);
       onMetaUpdated?.();
+      if (onAfterSuccess) onAfterSuccess(successCount);
     }
+    return successCount;
+  };
+
+  // 3. ADD ALL STAGED PRODUCTS BATCH ACTION WITH UID CLASH VERIFICATION
+  const handleAddAllProducts = async () => {
+    if (stagedItems.length === 0) return;
+
+    // Check if there are non-UID blocking errors (like missing product name or negative prices)
+    const itemsWithNonUidErrors = stagedItemsWithErrors.filter(
+      (item) => item._hasErrors && !item._isOnlyUidConflict
+    );
+
+    if (itemsWithNonUidErrors.length > 0) {
+      const firstErrItem = itemsWithNonUidErrors[0];
+      const nonUidErrors = Object.entries(firstErrItem._errors)
+        .filter(([k]) => k !== 'uid')
+        .map(([, v]) => v);
+      setError(`Cannot save products. "${firstErrItem.name || 'Row'}": ${nonUidErrors[0] || 'Please resolve field errors first.'}`);
+      return;
+    }
+
+    // Separate clean/valid items from UID clashing items
+    const uidConflictItems = stagedItemsWithErrors.filter((item) => item._errors?.uid);
+    const validCleanItems = stagedItems.filter(
+      (item) => !uidConflictItems.some((conf) => conf.id === item.id)
+    );
+
+    // If there are UID clashes, isolate them into the verification modal
+    if (uidConflictItems.length > 0) {
+      setConflictingStagedItems(uidConflictItems);
+
+      // If we also have valid clean items, save the valid ones directly now!
+      if (validCleanItems.length > 0) {
+        try {
+          await executeSaveProducts(validCleanItems, (savedCount) => {
+            // Keep only the conflicting items in the staged list
+            const remaining = stagedItems.filter(
+              (item) => !validCleanItems.some((v) => v.id === item.id)
+            );
+            setStagedItems(remaining);
+            setSelectedStagedIds([]);
+            try {
+              localStorage.setItem(STAGED_STORAGE_KEY, JSON.stringify(remaining));
+            } catch (e) {}
+            // Open the verification dialog for the conflicting items
+            setIsUidConflictModalOpen(true);
+            setFormFeedback(`Saved ${savedCount} valid product(s). ${uidConflictItems.length} product(s) have UID conflicts to verify.`);
+          });
+        } catch (saveErr) {
+          // Error already captured in executeSaveProducts
+          return;
+        }
+      } else {
+        // All staged items are conflicting: open the verification dialog directly
+        setIsUidConflictModalOpen(true);
+      }
+      return;
+    }
+
+    // No UID clashes and no other errors: save all staged items cleanly
+    try {
+      await executeSaveProducts(stagedItems, (savedCount) => {
+        setStagedItems([]);
+        setSelectedStagedIds([]);
+        try {
+          localStorage.removeItem(STAGED_STORAGE_KEY);
+        } catch (e) {}
+        setFormFeedback(`Successfully registered all ${savedCount} products into inventory!`);
+      });
+    } catch (err) {
+      // Handled in executeSaveProducts
+    }
+  };
+
+  // Callback from UIDConflictVerificationModal when user resolves conflicts (modified UIDs)
+  const handleSaveResolvedConflicts = async (resolvedItems) => {
+    if (!resolvedItems || resolvedItems.length === 0) return;
+
+    try {
+      await executeSaveProducts(resolvedItems, (savedCount) => {
+        // Remove resolved items from staged list
+        const remaining = stagedItems.filter(
+          (item) => !resolvedItems.some((r) => r.id === item.id)
+        );
+        setStagedItems(remaining);
+        setConflictingStagedItems([]);
+        setSelectedStagedIds([]);
+        try {
+          if (remaining.length === 0) {
+            localStorage.removeItem(STAGED_STORAGE_KEY);
+          } else {
+            localStorage.setItem(STAGED_STORAGE_KEY, JSON.stringify(remaining));
+          }
+        } catch (e) {}
+        setFormFeedback(`Successfully saved ${savedCount} resolved product(s) with updated UIDs!`);
+        setTimeout(() => setFormFeedback(''), 5000);
+      });
+    } catch (err) {
+      setError(`Failed to save resolved products: ${err.message}`);
+    }
+  };
+
+  // Discard a single conflicting item from queue
+  const handleDiscardConflictingItem = (itemId) => {
+    setStagedItems((prev) => prev.filter((i) => i.id !== itemId));
+    setConflictingStagedItems((prev) => prev.filter((i) => i.id !== itemId));
+    setSelectedStagedIds((prev) => prev.filter((i) => i !== itemId));
   };
 
   // Compute validation errors and AI warnings on every staged row
@@ -1349,6 +1434,8 @@ export default function AddItemSection({
       const warnings = getItemWarnings(item, stagedItems, existingUidMap);
       const errorCount = Object.keys(errors).length;
       const warningCount = Object.keys(warnings).length;
+      const isOnlyUidConflict = errorCount === 1 && Boolean(errors.uid);
+      const hasUidConflict = Boolean(errors.uid);
       return {
         ...item,
         _errors: errors,
@@ -1356,6 +1443,8 @@ export default function AddItemSection({
         _errorCount: errorCount,
         _warningCount: warningCount,
         _hasErrors: errorCount > 0,
+        _isOnlyUidConflict: isOnlyUidConflict,
+        _hasUidConflict: hasUidConflict,
         _hasWarnings: errorCount === 0 && warningCount > 0,
       };
     });
@@ -1363,6 +1452,14 @@ export default function AddItemSection({
 
   const totalErrorRows = useMemo(() => {
     return stagedItemsWithErrors.filter((i) => i._hasErrors).length;
+  }, [stagedItemsWithErrors]);
+
+  const totalUidConflictRows = useMemo(() => {
+    return stagedItemsWithErrors.filter((i) => i._hasUidConflict).length;
+  }, [stagedItemsWithErrors]);
+
+  const totalNonUidErrorRows = useMemo(() => {
+    return stagedItemsWithErrors.filter((i) => i._hasErrors && !i._isOnlyUidConflict).length;
   }, [stagedItemsWithErrors]);
 
   const totalWarningRows = useMemo(() => {
@@ -2426,7 +2523,7 @@ export default function AddItemSection({
               <button
                 type="button"
                 onClick={handleAddAllProducts}
-                disabled={totalErrorRows > 0 || batchSubmitting}
+                disabled={totalNonUidErrorRows > 0 || batchSubmitting}
                 className="btn btn-primary btn-sm"
                 style={{
                   fontSize: '0.78rem',
@@ -2435,11 +2532,17 @@ export default function AddItemSection({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  opacity: totalErrorRows > 0 ? 0.65 : 1,
-                  cursor: totalErrorRows > 0 ? 'not-allowed' : 'pointer',
-                  boxShadow: totalErrorRows === 0 ? '0 2px 10px var(--brand-ruby-glow)' : 'none',
+                  opacity: totalNonUidErrorRows > 0 ? 0.65 : 1,
+                  cursor: totalNonUidErrorRows > 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: totalNonUidErrorRows === 0 ? '0 2px 10px var(--brand-ruby-glow)' : 'none',
                 }}
-                title={totalErrorRows > 0 ? `Fix ${totalErrorRows} error row(s) before saving` : `Save all ${stagedItems.length} products into inventory`}
+                title={
+                  totalNonUidErrorRows > 0
+                    ? `Fix ${totalNonUidErrorRows} required field error(s) before saving`
+                    : totalUidConflictRows > 0
+                    ? `Save valid items & open UID Verification for ${totalUidConflictRows} conflicting product(s)`
+                    : `Save all ${stagedItems.length} products into inventory`
+                }
               >
                 {batchSubmitting ? (
                   <>
@@ -2449,7 +2552,11 @@ export default function AddItemSection({
                 ) : (
                   <>
                     <Sparkles size={13} />
-                    <span>Save All ({stagedItems.length})</span>
+                    <span>
+                      {totalUidConflictRows > 0 && totalNonUidErrorRows === 0
+                        ? `Save & Verify (${stagedItems.length})`
+                        : `Save All (${stagedItems.length})`}
+                    </span>
                   </>
                 )}
               </button>
@@ -2621,9 +2728,9 @@ export default function AddItemSection({
                 padding: '14px 18px',
                 marginBottom: '14px',
                 borderRadius: 'var(--radius-lg)',
-                background: 'var(--color-danger-bg)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
-                color: 'var(--color-danger)',
+                background: totalNonUidErrorRows === 0 ? 'var(--color-warning-bg, rgba(245, 158, 11, 0.12))' : 'var(--color-danger-bg)',
+                border: totalNonUidErrorRows === 0 ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(239, 68, 68, 0.4)',
+                color: totalNonUidErrorRows === 0 ? 'var(--color-warning, #D97706)' : 'var(--color-danger)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -2635,10 +2742,14 @@ export default function AddItemSection({
                 <AlertCircle size={20} style={{ flexShrink: 0 }} />
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>
-                    {totalErrorRows} Problematic Product Row{totalErrorRows > 1 ? 's' : ''} Detected ({totalErrorCount} Total Error{totalErrorCount > 1 ? 's' : ''})
+                    {totalNonUidErrorRows > 0
+                      ? `${totalNonUidErrorRows} Product Row(s) with Required Field Errors`
+                      : `${totalUidConflictRows} Product Row(s) with UID / Barcode Conflicts`}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                    Rows with issues have been sorted to the top with red highlighted inputs. Please fix all errors directly in the table to unlock saving.
+                    {totalNonUidErrorRows > 0
+                      ? 'Please fix all red highlighted product names, prices, or quantities directly in the table to unlock saving.'
+                      : 'You can click "Save & Verify" to save all clean products immediately and review/modify the conflicting UIDs in a verification dialog.'}
                   </div>
                 </div>
               </div>
@@ -2646,13 +2757,14 @@ export default function AddItemSection({
                 style={{
                   fontSize: '0.75rem',
                   fontWeight: 700,
-                  padding: '4px 10px',
-                  background: 'rgba(239, 68, 68, 0.15)',
+                  padding: '4px 12px',
+                  background: totalNonUidErrorRows === 0 ? 'rgba(245, 158, 11, 0.18)' : 'rgba(239, 68, 68, 0.15)',
                   borderRadius: 'var(--radius-pill)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  border: totalNonUidErrorRows === 0 ? '1px solid rgba(245, 158, 11, 0.35)' : '1px solid rgba(239, 68, 68, 0.3)',
+                  color: totalNonUidErrorRows === 0 ? 'var(--color-warning, #D97706)' : 'var(--color-danger)',
                 }}
               >
-                Saving Locked
+                {totalNonUidErrorRows > 0 ? 'Fix Required Fields' : 'UID Verification Ready'}
               </div>
             </div>
           )}
@@ -3865,6 +3977,16 @@ export default function AddItemSection({
         onConfirm={(changes) => {
           handleApplyBulkChangesToStaged(changes);
         }}
+      />
+
+      {/* UID CONFLICT VERIFICATION MODAL */}
+      <UIDConflictVerificationModal
+        isOpen={isUidConflictModalOpen}
+        onClose={() => setIsUidConflictModalOpen(false)}
+        conflictingItems={conflictingStagedItems}
+        existingUidMap={existingUidMap}
+        onSaveResolved={handleSaveResolvedConflicts}
+        onDiscardItem={handleDiscardConflictingItem}
       />
     </div>
   );
