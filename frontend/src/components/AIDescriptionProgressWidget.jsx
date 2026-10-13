@@ -131,7 +131,9 @@ export default function AIDescriptionProgressWidget({
   const total = job.total_items || 0;
   const processed = (job.completed_items || 0) + (job.failed_items || 0) + (job.skipped_items || 0);
   const percentage = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : (job.status === 'completed' ? 100 : 0);
-  const isRunning = job.status === 'running';
+  // Job is truly running only if status is running and there are still unfinished items
+  const isFinished = (total > 0 && processed >= total) || job.status === 'completed';
+  const isRunning = job.status === 'running' && !isFinished;
   const readyCount = job.ready_items !== undefined ? job.ready_items : (job.completed_items || 0);
   const inProgressCount = isRunning ? (job.generating_items !== undefined ? job.generating_items : Math.max(0, total - processed)) : 0;
   const skippedCount = job.skipped_items || 0;
@@ -245,6 +247,8 @@ export default function AIDescriptionProgressWidget({
               <span className="ai-progress-subtitle" style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {isRunning
                   ? `Running (${processed}/${total})`
+                  : isFinished && total > 0
+                  ? `Completed (${processed}/${total})`
                   : hasPendingReview
                   ? `${readyCount} ready`
                   : 'Idle'}
@@ -343,7 +347,7 @@ export default function AIDescriptionProgressWidget({
             )}
 
             {/* Real-time Rate Limit / Pause / Daily Quota Banner */}
-            {job.status_message && (
+            {job.status_message && (!isFinished || job.status_message.toLowerCase().includes('daily')) && (
               <div
                 style={{
                   background: job.status_message.toLowerCase().includes('daily')
@@ -406,6 +410,23 @@ export default function AIDescriptionProgressWidget({
                 <span>
                   <strong>{readyCount} new draft{readyCount > 1 ? 's' : ''}</strong> ready for catalog approval.
                 </span>
+              </div>
+            ) : isFinished && total > 0 ? (
+              <div
+                style={{
+                  background: 'var(--color-success-bg, rgba(16, 185, 129, 0.08))',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: '10px',
+                  padding: '7px 10px',
+                  fontSize: '0.74rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <CheckCircle2 size={15} style={{ color: '#10B981', flexShrink: 0 }} />
+                <span>Job completed ({processed} of {total} items processed)</span>
               </div>
             ) : (
               <div

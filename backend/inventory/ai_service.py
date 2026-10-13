@@ -63,19 +63,21 @@ def get_configured_gemini_api_keys() -> List[str]:
     return keys
 
 
-# Models to attempt in priority order (aligned with Google AI current endpoints)
+# Models to attempt in priority order (high quota production models first, followed by fallbacks and preview models)
 GEMINI_MODELS = [
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-flash-latest',
+    'gemini-1.5-flash-8b',
     'gemini-flash-lite-latest',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-pro',
+    'gemini-2.5-flash',
     'gemini-3.5-flash',
     'gemini-3.6-flash',
     'gemini-3.7-flash',
     'gemini-3.5-flash-lite',
     'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-8b',
-    'gemini-1.5-pro',
 ]
 
 EXTRACTION_SYSTEM_PROMPT = """
@@ -305,6 +307,8 @@ def test_gemini_api_key(api_key: str) -> Dict[str, Any]:
     parts = [{"text": "Respond with JSON: {\"status\": \"ok\"}"}]
 
     last_err = None
+    quota_err_msg = None
+
     for model in GEMINI_MODELS:
         try:
             res = call_gemini_api(cleaned_key, parts, model=model, timeout=8)
@@ -327,11 +331,13 @@ def test_gemini_api_key(api_key: str) -> Dict[str, Any]:
                 pass
 
             if http_err.code in (429, 403):
-                raise ValueError(f"Gemini API Quota/Rate Limit Exceeded (HTTP {http_err.code}): {error_content or http_err.reason}")
+                # Save the quota error and try the next model in the priority list (e.g. gemini-1.5-flash or gemini-2.0-flash)
+                quota_err_msg = f"Gemini API Quota/Rate Limit Exceeded (HTTP {http_err.code}): {error_content or http_err.reason}"
+                continue
             elif http_err.code == 400:
                 raise ValueError(f"Invalid API Key or Request format (HTTP 400): {error_content or http_err.reason}")
             elif http_err.code == 404:
-                # Try next model
+                # Model endpoint not found, try next model
                 continue
             else:
                 raise ValueError(f"Gemini API Error (HTTP {http_err.code}): {error_content or http_err.reason}")
@@ -339,6 +345,8 @@ def test_gemini_api_key(api_key: str) -> Dict[str, Any]:
             last_err = e
             continue
 
+    if quota_err_msg:
+        raise ValueError(quota_err_msg)
     raise ValueError(f"Failed to connect to Gemini API: {str(last_err)}")
 
 
