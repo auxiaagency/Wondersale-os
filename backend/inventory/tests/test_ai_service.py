@@ -534,6 +534,44 @@ class AIDescriptionServiceAndEndpointTests(TestCase):
         self.assertTrue(res['success'])
         self.assertEqual(res['name'], "Premium Stainless Steel Insulated Water Bottle (750ml)")
 
+    @patch('inventory.ai_service.call_gemini_api')
+    def test_generate_product_name_503_fallback_cascade(self, mock_gemini):
+        """Verify that HTTP 503 on the first model cascades to the next healthy model without crashing."""
+        from inventory.ai_service import generate_product_name
+        import io
+
+        err_503 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com",
+            code=503,
+            msg="Service Unavailable",
+            hdrs={},
+            fp=io.BytesIO(b'{"error": "The model is overloaded. Please try again later."}')
+        )
+
+        mock_gemini.side_effect = [
+            err_503,  # First model fails with 503
+            {         # Second model in cascade succeeds
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {"text": "Cascaded Healthy Product Name"}
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+
+        res = generate_product_name(
+            image_bytes=b"fake_image",
+            mime_type="image/jpeg",
+            item_data={"name": "TEST-ITEM"},
+            custom_api_keys=["custom_key_test"]
+        )
+        self.assertTrue(res['success'])
+        self.assertEqual(res['name'], "Cascaded Healthy Product Name")
+
     @patch('inventory.views.generate_product_name')
     def test_single_ai_generate_name_endpoint(self, mock_gen_name):
         mock_gen_name.return_value = {

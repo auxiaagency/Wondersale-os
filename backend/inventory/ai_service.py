@@ -987,7 +987,7 @@ def generate_product_name(
                     api_key=current_key,
                     parts=parts,
                     model=model_name,
-                    timeout=20,
+                    timeout=30,
                     response_mime_type=None,
                     temperature=0.2,
                     max_output_tokens=100
@@ -1029,24 +1029,34 @@ def generate_product_name(
                     attempts += 1
                     err_str_lower = (err_detail or http_err.reason or "").lower()
                     is_daily = any(phrase in err_str_lower for phrase in [
-                        'day', 'daily', 'quota exceeded', 'free_tier_requests_per_day', 'rpd'
+                        'day', 'daily', 'quota exceeded', 'free_tier_requests_per_day', 'rpd',
+                        'per day', 'requests per day', 'per-day', 'generate content api requests per day'
                     ])
                     if is_daily:
                         has_daily_quota_error = True
                         break
                     else:
-                        continue
+                        logger.warning(f"Key {key_idx + 1} minute rate limit on {model_name}. Rotating...")
+                        break
+                elif http_err.code in (404, 503, 502, 504):
+                    # Model not available or temporary Google server overload (503), cascade to next model without consuming an attempt
+                    logger.warning(f"Model {model_name} temporarily unavailable or overloaded (HTTP {http_err.code}). Trying next model in cascade...")
+                    continue
                 elif http_err.code == 400:
                     attempts += 1
-                    continue
+                    logger.warning(f"Gemini API error 400 on model {model_name}: {http_err.reason}. Trying next key...")
+                    break
                 else:
-                    attempts += 1
+                    logger.warning(f"Gemini API error {http_err.code} on model {model_name}: {http_err.reason}. Trying next model...")
                     continue
 
             except Exception as e:
                 last_error = e
-                attempts += 1
+                logger.warning(f"Gemini connection error on model {model_name}: {e}. Trying next model...")
                 continue
+        else:
+            # All models on this key were attempted without success
+            attempts += 1
 
     if has_daily_quota_error:
         raise GeminiRateLimitError(
