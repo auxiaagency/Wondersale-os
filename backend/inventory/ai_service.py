@@ -1107,6 +1107,10 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
     item_pks = job.item_ids or []
     gen_name_pks = set(job.generate_name_ids or [])
     idx = 0
+    consecutive_errors = 0
+    consecutive_rate_limits = 0
+    MAX_CONSECUTIVE_ERRORS = 5
+    MAX_CONSECUTIVE_RATE_LIMITS = 3
 
     while idx < len(item_pks):
         pk = item_pks[idx]
@@ -1225,6 +1229,8 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
                 job.status_message = ''
                 job.save(update_fields=['completed_items', 'status_message', 'updated_at'])
                 idx += 1
+                consecutive_errors = 0
+                consecutive_rate_limits = 0
                 # Small pause to smooth request cadence
                 time.sleep(0.4)
             else:
@@ -1234,15 +1240,16 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
                 job.failed_items += 1
                 job.save(update_fields=['failed_items', 'updated_at'])
                 idx += 1
+                consecutive_errors += 1
 
         except GeminiRateLimitError as rate_err:
             logger.warning(f"Rate limit encountered on batch job {job_id}: {rate_err.message} (is_daily={rate_err.is_daily})")
             if rate_err.is_daily:
-                # Daily quota exhausted: remove remaining items from active queue and finish job
-                daily_msg = "Daily AI quota exhausted. You can resume tomorrow or add another free Gemini API key in Settings."
+                # Daily quota exhausted: halt immediately to prevent credit waste
+                daily_msg = "Daily AI quota exhausted. Generation halted to protect your credits. You can resume tomorrow or add another free Gemini API key in Settings."
                 job.status_message = daily_msg
 
-                # Mark current and all remaining queued items as failed with clear tomorrow notice
+                # Mark remaining queued items as failed with clear notice
                 remaining_pks = item_pks[idx:]
                 for rem_pk in remaining_pks:
                     try:
@@ -1256,17 +1263,39 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
 
                 job.status = AIDescriptionBatchJob.STATUS_COMPLETED
                 job.save(update_fields=['status', 'status_message', 'failed_items', 'updated_at'])
-                logger.info(f"AIDescriptionBatchJob {job_id} halted due to daily quota. Removed {len(remaining_pks)} remaining items from queue.")
+                logger.info(f"AIDescriptionBatchJob {job_id} halted due to daily quota exhaustion.")
                 return
             else:
-                # Per-minute rate limit: pause for 60 seconds, keep items in queue, then retry
-                pause_msg = "Minute rate limit reached (15 RPM). Paused, auto-resuming in 60s..."
+                consecutive_rate_limits += 1
+                if consecutive_rate_limits >= MAX_CONSECUTIVE_RATE_LIMITS:
+                    # Repeated rate limit hits - stop loop properly rather than getting stuck indefinitely
+                    rate_limit_halt_msg = f"Repeated rate limits reached across keys ({consecutive_rate_limits} pauses). Halted to preserve quota/credits. Please check keys or resume later."
+                    job.status_message = rate_limit_halt_msg
+
+                    remaining_pks = item_pks[idx:]
+                    for rem_pk in remaining_pks:
+                        try:
+                            Item.objects.filter(pk=rem_pk).exclude(ai_description_status__in=['ready', 'applied']).update(
+                                ai_description_status='failed',
+                                ai_description_error=rate_limit_halt_msg
+                            )
+                            job.failed_items += 1
+                        except Exception:
+                            pass
+
+                    job.status = AIDescriptionBatchJob.STATUS_COMPLETED
+                    job.save(update_fields=['status', 'status_message', 'failed_items', 'updated_at'])
+                    logger.info(f"AIDescriptionBatchJob {job_id} halted after reaching max rate limit pause retries.")
+                    return
+
+                # Per-minute rate limit: pause for 60 seconds
+                pause_msg = f"Minute rate limit reached. Paused for 60s (Attempt {consecutive_rate_limits}/{MAX_CONSECUTIVE_RATE_LIMITS})..."
                 job.status_message = pause_msg
                 job.save(update_fields=['status_message', 'updated_at'])
                 logger.info(f"AIDescriptionBatchJob {job_id} paused for 60s due to per-minute rate limit.")
                 time.sleep(60)
 
-                # Clear pause message and retry same item without advancing idx
+                # Clear pause message and retry
                 job.status_message = "Resuming AI generation..."
                 job.save(update_fields=['status_message', 'updated_at'])
                 continue
@@ -1283,6 +1312,26 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
             job.failed_items += 1
             job.save(update_fields=['failed_items', 'updated_at'])
             idx += 1
+            consecutive_errors += 1
+
+            # Circuit breaker: if consecutive errors exceed threshold (e.g. invalid keys or broken images), halt cleanly
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                halt_msg = f"AI Generation stopped automatically after {consecutive_errors} consecutive failures to preserve your API credits. Please check your Gemini API keys or network connection."
+                job.status_message = halt_msg
+                remaining_pks = item_pks[idx:]
+                for rem_pk in remaining_pks:
+                    try:
+                        Item.objects.filter(pk=rem_pk).exclude(ai_description_status__in=['ready', 'applied']).update(
+                            ai_description_status='failed',
+                            ai_description_error=halt_msg
+                        )
+                        job.failed_items += 1
+                    except Exception:
+                        pass
+                job.status = AIDescriptionBatchJob.STATUS_COMPLETED
+                job.save(update_fields=['status', 'status_message', 'failed_items', 'updated_at'])
+                logger.warning(f"AIDescriptionBatchJob {job_id} stopped cleanly due to circuit breaker ({consecutive_errors} consecutive failures).")
+                return
 
     job.status = AIDescriptionBatchJob.STATUS_COMPLETED
     job.status_message = ''

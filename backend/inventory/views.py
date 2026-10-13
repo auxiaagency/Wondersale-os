@@ -1351,6 +1351,51 @@ class ItemViewSet(viewsets.ModelViewSet):
             'message': f"Background description generation started for {len(target_ids)} items."
         }, status=status.HTTP_202_ACCEPTED)
 
+    @action(detail=False, methods=['post'], url_path='stop-ai-description-job')
+    def stop_ai_description_job(self, request):
+        """
+        Safely halts and cancels an active running background AI description job,
+        preventing continuous looping and conserving API quota/credits.
+        Resets remaining in-progress items to pending.
+        """
+        member = get_current_staff(request)
+        store = member.store if member and member.store else None
+        store_id = request.data.get('store') or request.query_params.get('store') or (store.id if store else None)
+        target_store = Store.objects.filter(pk=store_id).first() if store_id else (store or Store.objects.first())
+
+        job_id = request.data.get('job_id')
+        job = None
+        if job_id and job_id not in ['active', 'latest', 'virtual']:
+            job = AIDescriptionBatchJob.objects.filter(id=job_id).first()
+        if not job and target_store:
+            job = AIDescriptionBatchJob.objects.filter(store=target_store, status=AIDescriptionBatchJob.STATUS_RUNNING).first()
+            if not job:
+                job = AIDescriptionBatchJob.objects.filter(store=target_store).order_by('-created_at').first()
+
+        if not job:
+            return Response({'error': 'No active AI generation job found to stop.'}, status=status.HTTP_404_NOT_FOUND)
+
+        job.status = AIDescriptionBatchJob.STATUS_CANCELLED
+        job.status_message = 'Generation stopped by user to preserve API quota/credits.'
+        job.save(update_fields=['status', 'status_message', 'updated_at'])
+
+        # Reset any stuck generating or pending items in this batch to pending
+        if job.item_ids:
+            Item.objects.filter(id__in=job.item_ids, ai_description_status__in=['generating', 'pending']).update(
+                ai_description_status='pending',
+                ai_description_error='Generation halted by user.'
+            )
+            Item.objects.filter(id__in=job.item_ids, ai_name_status__in=['generating', 'pending']).update(
+                ai_name_status='pending',
+                ai_name_error='Generation halted by user.'
+            )
+
+        return Response({
+            'success': True,
+            'message': 'AI Studio generation stopped successfully.',
+            'job': AIDescriptionBatchJobSerializer(job).data
+        })
+
     @action(detail=False, methods=['get'], url_path='active-ai-description-job')
     def active_ai_description_job(self, request):
         """

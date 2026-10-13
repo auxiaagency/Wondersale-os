@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, CheckCircle2, AlertTriangle, RefreshCw, X, ChevronRight, Minimize2, Maximize2 } from 'lucide-react';
-import { fetchActiveAIDescriptionJob } from '../api';
+import { Sparkles, CheckCircle2, AlertTriangle, RefreshCw, X, ChevronRight, Minimize2, Maximize2, Square } from 'lucide-react';
+import { fetchActiveAIDescriptionJob, stopActiveAIDescriptionJob } from '../api';
 
 export default function AIDescriptionProgressWidget({
   activeStoreId,
@@ -17,7 +17,21 @@ export default function AIDescriptionProgressWidget({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [networkError, setNetworkError] = useState(null);
+  const [isStopping, setIsStopping] = useState(false);
   const dragStartRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0 });
+
+  const handleStopJob = async () => {
+    setIsStopping(true);
+    try {
+      await stopActiveAIDescriptionJob(job?.id, activeStoreId);
+      await pollJob();
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+    } catch (err) {
+      console.error("Failed to stop AI job:", err);
+    } finally {
+      setIsStopping(false);
+    }
+  };
 
   const toggleMinimized = (val) => {
     setIsMinimized(prev => {
@@ -258,6 +272,29 @@ export default function AIDescriptionProgressWidget({
 
           {/* Action Buttons */}
           <div className="ai-progress-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            {isRunning && (
+              <button
+                type="button"
+                onClick={handleStopJob}
+                disabled={isStopping}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'var(--transition-smooth)',
+                }}
+                title="Stop AI generation to preserve API credits and quota"
+              >
+                {isStopping ? <RefreshCw size={12} className="animate-spin" /> : <Square size={11} fill="#f87171" />}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => toggleMinimized()}

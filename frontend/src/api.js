@@ -2652,6 +2652,22 @@ export async function retryAIDescription(itemId) {
   return data;
 }
 
+export async function stopActiveAIDescriptionJob(jobId = null, storeId = null) {
+  const payload = {};
+  if (jobId) payload.job_id = jobId;
+  if (storeId) payload.store = storeId;
+  const res = await fetch(`${API_BASE}/items/stop-ai-description-job/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || 'Failed to stop AI description generation.');
+  }
+  return data;
+}
+
 
 // -----------------------------------------------------------------------------
 // Variant / Batch Management

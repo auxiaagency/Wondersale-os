@@ -19,7 +19,8 @@ import {
   Search,
   ArrowUpDown,
   SlidersHorizontal,
-  RotateCcw
+  RotateCcw,
+  Square
 } from 'lucide-react';
 import ItemImageModal from './ItemImageModal';
 import {
@@ -35,6 +36,7 @@ import {
   applyAIName,
   discardAIName,
   bulkApplyAINames,
+  stopActiveAIDescriptionJob,
 } from '../api';
 
 export default function AIDescriptionReviewModal({
@@ -59,6 +61,21 @@ export default function AIDescriptionReviewModal({
   const [nameEdits, setNameEdits] = useState({}); // { [itemId]: string }
   const [nameActionLoading, setNameActionLoading] = useState({}); // { [itemId]: boolean }
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [stoppingJob, setStoppingJob] = useState(false);
+
+  const handleStopJob = async () => {
+    setStoppingJob(true);
+    try {
+      await stopActiveAIDescriptionJob(job?.id);
+      showToast("Generation stopped to preserve API quota/credits.");
+      await loadJobData();
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+    } catch (err) {
+      showToast(err.message || "Failed to stop generation job.");
+    } finally {
+      setStoppingJob(false);
+    }
+  };
   const [bulkApplyingNames, setBulkApplyingNames] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [imageModalItem, setImageModalItem] = useState(null);
@@ -546,6 +563,34 @@ export default function AIDescriptionReviewModal({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Stop Generation Button when active */}
+            {(job?.status === 'running' || inProgressCount > 0) && (
+              <button
+                type="button"
+                onClick={handleStopJob}
+                disabled={stoppingJob}
+                className="btn btn-secondary"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  borderRadius: 'var(--radius-pill)',
+                  padding: '8px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.25)',
+                }}
+                title="Stop background generation immediately to preserve your API credits and quota"
+              >
+                {stoppingJob ? <RefreshCw size={14} className="animate-spin" /> : <Square size={13} fill="#f87171" />}
+                <span>{stoppingJob ? 'Stopping...' : 'Stop Generation'}</span>
+              </button>
+            )}
+
             {readyNameCount > 0 && (
               <button
                 type="button"
@@ -891,6 +936,36 @@ export default function AIDescriptionReviewModal({
         {/* Main List Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
+          {/* Job status message / circuit breaker / quota exhaustion notice */}
+          {job?.status_message && (
+            <div
+              style={{
+                background: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped')
+                  ? 'rgba(245, 158, 11, 0.12)'
+                  : 'rgba(99, 102, 241, 0.12)',
+                border: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped')
+                  ? '1px solid rgba(245, 158, 11, 0.4)'
+                  : '1px solid rgba(99, 102, 241, 0.4)',
+                borderRadius: '14px',
+                padding: '12px 16px',
+                color: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped')
+                  ? '#fcd34d'
+                  : '#a5b4fc',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                fontSize: '0.82rem',
+                lineHeight: 1.5,
+              }}
+            >
+              <AlertTriangle size={18} style={{ color: '#f59e0b', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <strong style={{ display: 'block', color: '#fbbf24', marginBottom: '2px' }}>AI Batch Status</strong>
+                <span>{job.status_message}</span>
+              </div>
+            </div>
+          )}
+
           {/* Error Banner if API connection or batch job failed */}
           {errorMessage && (
             <div
