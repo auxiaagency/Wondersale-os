@@ -91,16 +91,13 @@ export default function App() {
   const [authChecking, setAuthChecking] = useState(true);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState('');
 
-  // Active View: 'launcher', 'inventory', 'staff'
-  const [activeView, setActiveView] = useState('launcher');
-
   // Stakeholders Profit-Sharing Module Active State
   const [stakeholdersActive, setStakeholdersActive] = useState(() => isStakeholdersEnabled());
 
   useEffect(() => {
     return onStakeholdersSettingChange((enabled) => {
       setStakeholdersActive(enabled);
-      if (!enabled && window.location.hash.includes('stakeholders')) {
+      if (!enabled && (window.location.hash.includes('stakeholders') || window.location.pathname.includes('stakeholders'))) {
         setActiveView('launcher');
         window.location.hash = 'launcher';
       }
@@ -112,6 +109,27 @@ export default function App() {
     'billing', 'customers', ...(stakeholdersActive ? ['stakeholders'] : []),
     'accounting', 'dashboard', 'assets', 'employee_portal',
   ];
+
+  // Helper to extract requested view from URL (pathname or hash)
+  const getRequestedViewFromLocation = useCallback(() => {
+    // 1. Check path if not root (e.g. /inventory or /ddsddsddddsd)
+    const pathPart = window.location.pathname.replace(/^\/+|\/+$/g, '').trim();
+    if (pathPart) {
+      return pathPart;
+    }
+    // 2. Fall back to hash (e.g. #inventory or #random)
+    const hashPart = window.location.hash.replace('#', '').trim();
+    if (hashPart) {
+      return hashPart;
+    }
+    return 'launcher';
+  }, []);
+
+  // Active View: initialized from URL pathname or hash
+  const [activeView, setActiveView] = useState(() => {
+    const requested = getRequestedViewFromLocation();
+    return requested || 'launcher';
+  });
 
   // Verify auth session with backend on mount
   useEffect(() => {
@@ -172,51 +190,55 @@ export default function App() {
     if (!viewId || viewId === 'launcher') {
       setActiveView('launcher');
       window.location.hash = 'launcher';
+      if (window.location.pathname !== '/' && window.location.pathname !== '') {
+        window.history.pushState(null, '', '/' + window.location.hash);
+      }
       return;
     }
     if (isModuleAccessible(currentUser, viewId)) {
       setActiveView(viewId);
       window.location.hash = viewId;
+      if (window.location.pathname !== '/' && window.location.pathname !== '') {
+        window.history.pushState(null, '', '/' + window.location.hash);
+      }
     } else {
-      // Unauthorized module: treat as non-existent, redirect directly to launcher
-      setActiveView('launcher');
-      window.location.hash = 'launcher';
+      // Unauthorized or non-existent module: display 404 page
+      setActiveView(viewId);
     }
   }, [currentUser]);
 
-  // URL Hash Listener: Even if someone manually types #accounting or #staff into the address bar,
-  // this strictly verifies their role permission. If unauthorized, silently redirect to launcher as if it does not exist!
+  // URL Path & Hash Listener: Listens for address bar navigation and sets activeView
   useEffect(() => {
     if (!currentUser) return;
 
-    const checkHashAccess = () => {
-      const raw = window.location.hash.replace('#', '').trim();
-      if (!raw || raw === 'launcher') {
+    const checkLocationAccess = () => {
+      const requested = getRequestedViewFromLocation();
+      if (!requested || requested === 'launcher') {
         setActiveView('launcher');
         return;
       }
-      if (isModuleAccessible(currentUser, raw)) {
-        setActiveView(raw);
+      if (validViews.includes(requested)) {
+        if (isModuleAccessible(currentUser, requested)) {
+          setActiveView(requested);
+        } else {
+          // Exists in system, but user does not have permission: show 404 or access denied
+          setActiveView(requested);
+        }
       } else {
-        // Module does not exist for this user - silently redirect to launcher
-        setActiveView('launcher');
-        window.location.hash = 'launcher';
+        // Unknown random URL path (e.g. /ddsddsddddsd): set as activeView so NotFoundView triggers
+        setActiveView(requested);
       }
     };
 
-    window.addEventListener('hashchange', checkHashAccess);
-    if (window.location.hash) {
-      checkHashAccess();
-    }
-    return () => window.removeEventListener('hashchange', checkHashAccess);
-  }, [currentUser]);
+    window.addEventListener('hashchange', checkLocationAccess);
+    window.addEventListener('popstate', checkLocationAccess);
+    checkLocationAccess();
 
-  // If currentUser permissions change or an unauthorized view is targeted, immediately bounce back to launcher
-  useEffect(() => {
-    if (currentUser && activeView !== 'launcher' && !isModuleAccessible(currentUser, activeView)) {
-      handleNavigate('launcher');
-    }
-  }, [currentUser, activeView, handleNavigate]);
+    return () => {
+      window.removeEventListener('hashchange', checkLocationAccess);
+      window.removeEventListener('popstate', checkLocationAccess);
+    };
+  }, [currentUser, validViews, getRequestedViewFromLocation]);
 
   const handleLoginSuccess = (staff, storeId) => {
     setCurrentUser(staff);

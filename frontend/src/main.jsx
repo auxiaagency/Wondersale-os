@@ -21,6 +21,13 @@ window.addEventListener('load', () => {
   }, 3000);
 });
 
+// Disable mouse wheel value changes on all number inputs globally
+document.addEventListener('wheel', (event) => {
+  if (document.activeElement && document.activeElement.type === 'number') {
+    event.preventDefault();
+  }
+}, { passive: false });
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />
