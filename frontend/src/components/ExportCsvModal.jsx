@@ -38,11 +38,11 @@ export default function ExportCsvModal({
   // 2. Filter States (Pre-populated from active Inventory Management table filters)
   const [selectedSubcatIds, setSelectedSubcatIds] = useState([]);
   const [stockStatus, setStockStatus] = useState('');
-  const [hasNoImage, setHasNoImage] = useState(false);
-  const [hasNoSubcategory, setHasNoSubcategory] = useState(false);
-  const [needsBarcode, setNeedsBarcode] = useState(false);
-  const [hasNoWeight, setHasNoWeight] = useState(false);
-  const [hasNoVolume, setHasNoVolume] = useState(false);
+  const [imageFilterState, setImageFilterState] = useState(''); // '' | 'has_image' | 'no_image'
+  const [subcatFilterState, setSubcatFilterState] = useState(''); // '' | 'has_subcat' | 'no_subcat'
+  const [barcodeFilterState, setBarcodeFilterState] = useState(''); // '' | 'needs_barcode' | 'barcode_printed'
+  const [weightFilterState, setWeightFilterState] = useState(''); // '' | 'has_weight' | 'no_weight'
+  const [volumeFilterState, setVolumeFilterState] = useState(''); // '' | 'has_volume' | 'no_volume'
 
   // Popover state for Subcategory Multi-Select Picker
   const [isSubcatPickerOpen, setIsSubcatPickerOpen] = useState(false);
@@ -62,11 +62,15 @@ export default function ExportCsvModal({
       setSelectedSubcatIds(initialSubcats);
 
       setStockStatus(currentFilters.selectedStockStatus || '');
-      setHasNoImage(Boolean(currentFilters.hasNoImageFilter));
-      setHasNoSubcategory(Boolean(currentFilters.hasNoSubcategoryFilter));
-      setNeedsBarcode(Boolean(currentFilters.needsBarcodeFilter));
-      setHasNoWeight(Boolean(currentFilters.hasNoWeightFilter));
-      setHasNoVolume(Boolean(currentFilters.hasNoVolumeFilter));
+      setImageFilterState(currentFilters.hasImageFilter || (currentFilters.hasNoImageFilter ? 'no_image' : ''));
+      setSubcatFilterState(currentFilters.hasSubcategoryFilterState || (currentFilters.hasNoSubcategoryFilter ? 'no_subcat' : ''));
+      setBarcodeFilterState(
+        typeof currentFilters.needsBarcodeFilter === 'boolean'
+          ? (currentFilters.needsBarcodeFilter ? 'needs_barcode' : '')
+          : (currentFilters.needsBarcodeFilter || '')
+      );
+      setWeightFilterState(currentFilters.hasWeightFilterState || (currentFilters.hasNoWeightFilter ? 'no_weight' : ''));
+      setVolumeFilterState(currentFilters.hasVolumeFilterState || (currentFilters.hasNoVolumeFilter ? 'no_volume' : ''));
       setSubcatQuery('');
       setIsSubcatPickerOpen(false);
     }
@@ -164,39 +168,55 @@ export default function ExportCsvModal({
       list = list.filter((item) => (parseInt(item.quantity, 10) || 0) > 0);
     }
 
-    // Has No Image
-    if (hasNoImage) {
+    // Image Presence
+    if (imageFilterState === 'no_image') {
       list = list.filter(
         (item) => !item.primary_image_url && (!item.images || item.images.length === 0)
       );
-    }
-
-    // Has No Subcategories
-    if (hasNoSubcategory) {
-      list = list.filter((item) => !item.subcategories || item.subcategories.length === 0);
-    }
-
-    // Needs Barcode Printed
-    if (needsBarcode) {
-      list = list.filter((item) => Boolean(item.needs_new_barcode_printed));
-    }
-
-    // Has No Weight
-    if (hasNoWeight) {
+    } else if (imageFilterState === 'has_image') {
       list = list.filter(
-        (item) => item.weight === null || item.weight === undefined || item.weight === '' || parseFloat(item.weight) <= 0 || isNaN(parseFloat(item.weight))
+        (item) => Boolean(item.primary_image_url) || (item.images && item.images.length > 0)
       );
     }
 
-    // Has No Volume
-    if (hasNoVolume) {
+    // Subcategory Presence
+    if (subcatFilterState === 'no_subcat') {
+      list = list.filter((item) => !item.subcategories || item.subcategories.length === 0);
+    } else if (subcatFilterState === 'has_subcat') {
+      list = list.filter((item) => item.subcategories && item.subcategories.length > 0);
+    }
+
+    // Barcode Printed Status
+    if (barcodeFilterState === 'needs_barcode') {
+      list = list.filter((item) => Boolean(item.needs_new_barcode_printed));
+    } else if (barcodeFilterState === 'barcode_printed') {
+      list = list.filter((item) => !item.needs_new_barcode_printed);
+    }
+
+    // Weight Presence
+    if (weightFilterState === 'no_weight') {
+      list = list.filter(
+        (item) => item.weight === null || item.weight === undefined || item.weight === '' || parseFloat(item.weight) <= 0 || isNaN(parseFloat(item.weight))
+      );
+    } else if (weightFilterState === 'has_weight') {
+      list = list.filter(
+        (item) => item.weight !== null && item.weight !== undefined && item.weight !== '' && parseFloat(item.weight) > 0
+      );
+    }
+
+    // Volume / Dimensions Presence
+    if (volumeFilterState === 'no_volume') {
       list = list.filter(
         (item) => !item.length || !item.width || !item.height || parseFloat(item.length) <= 0 || parseFloat(item.width) <= 0 || parseFloat(item.height) <= 0
+      );
+    } else if (volumeFilterState === 'has_volume') {
+      list = list.filter(
+        (item) => item.length && item.width && item.height && parseFloat(item.length) > 0 && parseFloat(item.width) > 0 && parseFloat(item.height) > 0
       );
     }
 
     return list;
-  }, [items, selectedSubcatIds, stockStatus, hasNoImage, hasNoSubcategory, needsBarcode, hasNoWeight, hasNoVolume]);
+  }, [items, selectedSubcatIds, stockStatus, imageFilterState, subcatFilterState, barcodeFilterState, weightFilterState, volumeFilterState]);
 
   // Aggregate Metrics for preview
   const totalStockUnits = useMemo(() => {
@@ -734,10 +754,13 @@ export default function ExportCsvModal({
 
             {/* Row 2: Filter Toggle Buttons (Exact same style as Main Filter Page) */}
             <div className="export-csv-toggles-grid" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-              {/* 3. Has no image Toggle Button */}
+              {/* 3. Has Image / Has No Image Tri-State Toggle Button */}
               <button
                 type="button"
-                onClick={() => setHasNoImage(!hasNoImage)}
+                onClick={() => {
+                  const next = imageFilterState === '' ? 'has_image' : (imageFilterState === 'has_image' ? 'no_image' : '');
+                  setImageFilterState(next);
+                }}
                 className="form-select export-csv-toggle-btn"
                 style={{
                   flex: '1 1 130px',
@@ -751,24 +774,52 @@ export default function ExportCsvModal({
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: 'pointer',
-                  background: hasNoImage ? 'rgba(239, 68, 68, 0.12)' : undefined,
-                  borderColor: hasNoImage ? 'var(--brand-primary)' : undefined,
-                  color: hasNoImage ? 'var(--brand-primary)' : 'var(--text-primary)',
-                  fontWeight: hasNoImage ? 700 : 500,
+                  background: imageFilterState === 'has_image'
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : imageFilterState === 'no_image'
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : undefined,
+                  borderColor: imageFilterState === 'has_image'
+                    ? '#10B981'
+                    : imageFilterState === 'no_image'
+                    ? 'var(--brand-primary)'
+                    : undefined,
+                  color: imageFilterState === 'has_image'
+                    ? '#059669'
+                    : imageFilterState === 'no_image'
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-primary)',
+                  fontWeight: imageFilterState ? 700 : 500,
                   whiteSpace: 'nowrap',
                   userSelect: 'none',
                   transition: 'all 0.15s ease',
                 }}
+                title={
+                  imageFilterState === 'has_image'
+                    ? 'Showing: Has Image (click for Has No Image)'
+                    : imageFilterState === 'no_image'
+                    ? 'Showing: Has No Image (click to clear)'
+                    : 'Filter: Click to filter by image presence'
+                }
               >
                 <ImageIcon size={14} />
-                <span>Has no image</span>
-                {hasNoImage && <Check size={12} />}
+                <span>
+                  {imageFilterState === 'has_image'
+                    ? 'Has image'
+                    : imageFilterState === 'no_image'
+                    ? 'Has no image'
+                    : 'Image (All)'}
+                </span>
+                {imageFilterState && <Check size={12} />}
               </button>
 
-              {/* 4. Has no sub category Toggle Button */}
+              {/* 4. Subcategory Presence Tri-State Toggle Button */}
               <button
                 type="button"
-                onClick={() => setHasNoSubcategory(!hasNoSubcategory)}
+                onClick={() => {
+                  const next = subcatFilterState === '' ? 'has_subcat' : (subcatFilterState === 'has_subcat' ? 'no_subcat' : '');
+                  setSubcatFilterState(next);
+                }}
                 className="form-select export-csv-toggle-btn"
                 style={{
                   flex: '1 1 155px',
@@ -782,24 +833,52 @@ export default function ExportCsvModal({
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: 'pointer',
-                  background: hasNoSubcategory ? 'rgba(239, 68, 68, 0.12)' : undefined,
-                  borderColor: hasNoSubcategory ? 'var(--brand-primary)' : undefined,
-                  color: hasNoSubcategory ? 'var(--brand-primary)' : 'var(--text-primary)',
-                  fontWeight: hasNoSubcategory ? 700 : 500,
+                  background: subcatFilterState === 'has_subcat'
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : subcatFilterState === 'no_subcat'
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : undefined,
+                  borderColor: subcatFilterState === 'has_subcat'
+                    ? '#10B981'
+                    : subcatFilterState === 'no_subcat'
+                    ? 'var(--brand-primary)'
+                    : undefined,
+                  color: subcatFilterState === 'has_subcat'
+                    ? '#059669'
+                    : subcatFilterState === 'no_subcat'
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-primary)',
+                  fontWeight: subcatFilterState ? 700 : 500,
                   whiteSpace: 'nowrap',
                   userSelect: 'none',
                   transition: 'all 0.15s ease',
                 }}
+                title={
+                  subcatFilterState === 'has_subcat'
+                    ? 'Showing: Has Subcategory (click for Has No Subcategory)'
+                    : subcatFilterState === 'no_subcat'
+                    ? 'Showing: Has No Subcategory (click to clear)'
+                    : 'Filter: Click to filter by subcategory presence'
+                }
               >
                 <Layers size={14} />
-                <span>Has no sub category</span>
-                {hasNoSubcategory && <Check size={12} />}
+                <span>
+                  {subcatFilterState === 'has_subcat'
+                    ? 'Has subcategory'
+                    : subcatFilterState === 'no_subcat'
+                    ? 'Has no sub category'
+                    : 'Subcategory (All)'}
+                </span>
+                {subcatFilterState && <Check size={12} />}
               </button>
 
-              {/* 5. Needs Barcode Printed Toggle Button */}
+              {/* 5. Barcode Status Tri-State Toggle Button */}
               <button
                 type="button"
-                onClick={() => setNeedsBarcode(!needsBarcode)}
+                onClick={() => {
+                  const next = barcodeFilterState === '' ? 'needs_barcode' : (barcodeFilterState === 'needs_barcode' ? 'barcode_printed' : '');
+                  setBarcodeFilterState(next);
+                }}
                 className="form-select export-csv-toggle-btn"
                 style={{
                   flex: '1 1 165px',
@@ -813,24 +892,52 @@ export default function ExportCsvModal({
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: 'pointer',
-                  background: needsBarcode ? 'rgba(239, 68, 68, 0.12)' : undefined,
-                  borderColor: needsBarcode ? 'var(--brand-primary)' : undefined,
-                  color: needsBarcode ? 'var(--brand-primary)' : 'var(--text-primary)',
-                  fontWeight: needsBarcode ? 700 : 500,
+                  background: barcodeFilterState === 'needs_barcode'
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : barcodeFilterState === 'barcode_printed'
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : undefined,
+                  borderColor: barcodeFilterState === 'needs_barcode'
+                    ? 'var(--brand-primary)'
+                    : barcodeFilterState === 'barcode_printed'
+                    ? '#10B981'
+                    : undefined,
+                  color: barcodeFilterState === 'needs_barcode'
+                    ? 'var(--brand-primary)'
+                    : barcodeFilterState === 'barcode_printed'
+                    ? '#059669'
+                    : 'var(--text-primary)',
+                  fontWeight: barcodeFilterState ? 700 : 500,
                   whiteSpace: 'nowrap',
                   userSelect: 'none',
                   transition: 'all 0.15s ease',
                 }}
+                title={
+                  barcodeFilterState === 'needs_barcode'
+                    ? 'Showing: Needs Barcode Printed (click for Barcode Printed)'
+                    : barcodeFilterState === 'barcode_printed'
+                    ? 'Showing: Barcode Printed (click to clear)'
+                    : 'Filter: Click to filter by barcode print status'
+                }
               >
                 <Barcode size={14} />
-                <span>Needs Barcode Printed</span>
-                {needsBarcode && <Check size={12} />}
+                <span>
+                  {barcodeFilterState === 'needs_barcode'
+                    ? 'Needs Barcode'
+                    : barcodeFilterState === 'barcode_printed'
+                    ? 'Barcode Printed'
+                    : 'Barcode (All)'}
+                </span>
+                {barcodeFilterState && <Check size={12} />}
               </button>
 
-              {/* 6. Has no weight Toggle Button */}
+              {/* 6. Weight Presence Tri-State Toggle Button */}
               <button
                 type="button"
-                onClick={() => setHasNoWeight(!hasNoWeight)}
+                onClick={() => {
+                  const next = weightFilterState === '' ? 'has_weight' : (weightFilterState === 'has_weight' ? 'no_weight' : '');
+                  setWeightFilterState(next);
+                }}
                 className="form-select export-csv-toggle-btn"
                 style={{
                   flex: '1 1 135px',
@@ -844,25 +951,52 @@ export default function ExportCsvModal({
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: 'pointer',
-                  background: hasNoWeight ? 'rgba(239, 68, 68, 0.12)' : undefined,
-                  borderColor: hasNoWeight ? 'var(--brand-primary)' : undefined,
-                  color: hasNoWeight ? 'var(--brand-primary)' : 'var(--text-primary)',
-                  fontWeight: hasNoWeight ? 700 : 500,
+                  background: weightFilterState === 'has_weight'
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : weightFilterState === 'no_weight'
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : undefined,
+                  borderColor: weightFilterState === 'has_weight'
+                    ? '#10B981'
+                    : weightFilterState === 'no_weight'
+                    ? 'var(--brand-primary)'
+                    : undefined,
+                  color: weightFilterState === 'has_weight'
+                    ? '#059669'
+                    : weightFilterState === 'no_weight'
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-primary)',
+                  fontWeight: weightFilterState ? 700 : 500,
                   whiteSpace: 'nowrap',
                   userSelect: 'none',
                   transition: 'all 0.15s ease',
                 }}
-                title="Filter items with missing or 0 weight"
+                title={
+                  weightFilterState === 'has_weight'
+                    ? 'Showing: Has Weight (click for Has No Weight)'
+                    : weightFilterState === 'no_weight'
+                    ? 'Showing: Has No Weight (click to clear)'
+                    : 'Filter: Click to filter by weight presence'
+                }
               >
                 <Scale size={14} />
-                <span>Has no weight</span>
-                {hasNoWeight && <Check size={12} />}
+                <span>
+                  {weightFilterState === 'has_weight'
+                    ? 'Has weight'
+                    : weightFilterState === 'no_weight'
+                    ? 'Has no weight'
+                    : 'Weight (All)'}
+                </span>
+                {weightFilterState && <Check size={12} />}
               </button>
 
-              {/* 7. Has no volume Toggle Button */}
+              {/* 7. Volume Presence Tri-State Toggle Button */}
               <button
                 type="button"
-                onClick={() => setHasNoVolume(!hasNoVolume)}
+                onClick={() => {
+                  const next = volumeFilterState === '' ? 'has_volume' : (volumeFilterState === 'has_volume' ? 'no_volume' : '');
+                  setVolumeFilterState(next);
+                }}
                 className="form-select export-csv-toggle-btn export-csv-toggle-btn-last"
                 style={{
                   flex: '1 1 135px',
@@ -876,19 +1010,43 @@ export default function ExportCsvModal({
                   justifyContent: 'center',
                   gap: '6px',
                   cursor: 'pointer',
-                  background: hasNoVolume ? 'rgba(239, 68, 68, 0.12)' : undefined,
-                  borderColor: hasNoVolume ? 'var(--brand-primary)' : undefined,
-                  color: hasNoVolume ? 'var(--brand-primary)' : 'var(--text-primary)',
-                  fontWeight: hasNoVolume ? 700 : 500,
+                  background: volumeFilterState === 'has_volume'
+                    ? 'rgba(16, 185, 129, 0.12)'
+                    : volumeFilterState === 'no_volume'
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : undefined,
+                  borderColor: volumeFilterState === 'has_volume'
+                    ? '#10B981'
+                    : volumeFilterState === 'no_volume'
+                    ? 'var(--brand-primary)'
+                    : undefined,
+                  color: volumeFilterState === 'has_volume'
+                    ? '#059669'
+                    : volumeFilterState === 'no_volume'
+                    ? 'var(--brand-primary)'
+                    : 'var(--text-primary)',
+                  fontWeight: volumeFilterState ? 700 : 500,
                   whiteSpace: 'nowrap',
                   userSelect: 'none',
                   transition: 'all 0.15s ease',
                 }}
-                title="Filter items with missing Length, Width, or Height dimensions"
+                title={
+                  volumeFilterState === 'has_volume'
+                    ? 'Showing: Has Volume / Dimensions (click for Has No Volume)'
+                    : volumeFilterState === 'no_volume'
+                    ? 'Showing: Has No Volume (click to clear)'
+                    : 'Filter: Click to filter by dimensions'
+                }
               >
                 <Box size={14} />
-                <span>Has no volume</span>
-                {hasNoVolume && <Check size={12} />}
+                <span>
+                  {volumeFilterState === 'has_volume'
+                    ? 'Has volume'
+                    : volumeFilterState === 'no_volume'
+                    ? 'Has no volume'
+                    : 'Volume (All)'}
+                </span>
+                {volumeFilterState && <Check size={12} />}
               </button>
             </div>
           </div>

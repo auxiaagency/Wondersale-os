@@ -35,7 +35,9 @@ import {
   createCategory,
   createSubcategory,
   singleAIGenerateDescription,
+  singleAIGenerateName,
   applyAIDescription,
+  applyAIName,
   fetchItemVariants,
   createItemVariant,
   deleteItem,
@@ -121,11 +123,13 @@ export default function ItemDetailModal({
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // AI Description Generator State
+  // AI Description & Name Generator State
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [generatingAIName, setGeneratingAIName] = useState(false);
   const [showBrokenModal, setShowBrokenModal] = useState(false);
   const [aiDraft, setAiDraft] = useState(item?.ai_description_draft || '');
   const [aiStatus, setAiStatus] = useState(item?.ai_description_status || 'none');
+  const [aiNameDraft, setAiNameDraft] = useState(item?.ai_name_draft || '');
 
   // Variants/Batches Tab State
   const [variants, setVariants] = useState(null); // null = not loaded yet
@@ -176,6 +180,7 @@ export default function ItemDetailModal({
       setDescription(item.description || '');
       setAiDraft(item.ai_description_draft || '');
       setAiStatus(item.ai_description_status || 'none');
+      setAiNameDraft(item.ai_name_draft || '');
       setSelectedSubcatIds(item.subcategories?.map((sc) => sc.id) || []);
       const itemPrimary = item.primary_subcategory?.id || item.primary_subcategory_id || (item.subcategories?.[0]?.id || null);
       setPrimarySubcatId(itemPrimary);
@@ -203,6 +208,30 @@ export default function ItemDetailModal({
         .catch((err) => console.error('Failed to pre-fetch next UID for variant', err));
     }
   }, [showCreateVariant]);
+
+  const handleGenerateAIName = async () => {
+    if (!item?.id) return;
+    const hasImage = (images && images.length > 0) || Boolean(item?.primary_image_url);
+    if (!hasImage) {
+      setErrorMsg('A product photo is required to generate an AI name. Please upload an image first in the Image Gallery tab.');
+      return;
+    }
+    setGeneratingAIName(true);
+    setErrorMsg('');
+    try {
+      const res = await singleAIGenerateName(item.id);
+      const cleanName = (res.name || '').slice(0, 150);
+      setName(cleanName);
+      setAiNameDraft(cleanName);
+      setFeedbackMsg('✨ AI product title generated successfully!');
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      if (onUpdateItem) onUpdateItem(res.item);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to generate AI product name.');
+    } finally {
+      setGeneratingAIName(false);
+    }
+  };
 
   const handleGenerateAIDescription = async () => {
     const hasImage = (images && images.length > 0) || Boolean(item?.primary_image_url);
@@ -685,10 +714,78 @@ export default function ItemDetailModal({
             {/* Product Name & Store Location */}
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '16px' }}>
               <div>
-                <label className="form-label">
-                  Product Name <span style={{ color: 'var(--color-danger)' }}>*</span>{' '}
-                  <span style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600 }}>(Required)</span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>
+                    Product Name <span style={{ color: 'var(--color-danger)' }}>*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAIName}
+                    disabled={generatingAIName}
+                    className="btn btn-sm"
+                    style={{
+                      background: 'linear-gradient(135deg, #7C3AED 0%, #6366F1 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 'var(--radius-pill)',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      padding: '3px 10px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)',
+                    }}
+                    title="Generate an attractive, SEO-friendly product title from photo using Gemini AI"
+                  >
+                    <Sparkles size={11} className={generatingAIName ? 'animate-spin' : ''} />
+                    <span>{generatingAIName ? 'Generating...' : '✨ AI Upgrade Name'}</span>
+                  </button>
+                </div>
+
+                {aiNameDraft && aiNameDraft !== name && (
+                  <div
+                    style={{
+                      marginBottom: '8px',
+                      padding: '8px 12px',
+                      background: 'rgba(124, 58, 237, 0.1)',
+                      border: '1px solid rgba(124, 58, 237, 0.3)',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '0.76rem',
+                      color: '#ddd6fe',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <Sparkles size={13} style={{ color: '#a855f7', flexShrink: 0 }} />
+                      <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        Suggested: <strong>{aiNameDraft}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setName((aiNameDraft || '').slice(0, 150))}
+                      style={{
+                        background: '#7C3AED',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 'var(--radius-pill)',
+                        padding: '3px 10px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Accept Name
+                    </button>
+                  </div>
+                )}
+
                 <input
                   type="text"
                   value={name}

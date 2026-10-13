@@ -2462,12 +2462,15 @@ export function getStoredGeminiApiKeys() {
   return [];
 }
 
-export async function bulkAIGenerateDescriptions({ item_ids, store_id, api_keys = null }) {
+export async function bulkAIGenerateDescriptions({ item_ids, generate_name_ids = [], store_id, api_keys = null }) {
   let keys = api_keys;
   if (!keys || (Array.isArray(keys) && keys.length === 0)) {
     keys = getStoredGeminiApiKeys();
   }
   const payload = { item_ids, store_id };
+  if (Array.isArray(generate_name_ids) && generate_name_ids.length > 0) {
+    payload.generate_name_ids = generate_name_ids;
+  }
   if (keys && keys.length > 0) {
     payload.api_keys = keys;
   }
@@ -2509,12 +2512,13 @@ export async function fetchAIDescriptionJobDetail(jobId) {
   return data;
 }
 
-export async function singleAIGenerateDescription(itemId, apiKeys = null) {
+export async function singleAIGenerateDescription(itemId, apiKeys = null, generateName = false) {
   let keys = apiKeys;
   if (!keys || (Array.isArray(keys) && keys.length === 0)) {
     keys = getStoredGeminiApiKeys();
   }
   const payload = {};
+  if (generateName) payload.generate_name = true;
   if (keys && keys.length > 0) payload.api_keys = keys;
   const res = await fetch(`${API_BASE}/items/${itemId}/ai-generate-description/`, {
     method: 'POST',
@@ -2524,6 +2528,27 @@ export async function singleAIGenerateDescription(itemId, apiKeys = null) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(data.error || data.detail || 'Failed to generate AI description.');
+    err.status = data.status || 'failed';
+    throw err;
+  }
+  return data;
+}
+
+export async function singleAIGenerateName(itemId, apiKeys = null) {
+  let keys = apiKeys;
+  if (!keys || (Array.isArray(keys) && keys.length === 0)) {
+    keys = getStoredGeminiApiKeys();
+  }
+  const payload = {};
+  if (keys && keys.length > 0) payload.api_keys = keys;
+  const res = await fetch(`${API_BASE}/items/${itemId}/ai-generate-name/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || data.detail || 'Failed to generate AI product name.');
     err.status = data.status || 'failed';
     throw err;
   }
@@ -2545,6 +2570,21 @@ export async function applyAIDescription(itemId, customDescription = null) {
   return data;
 }
 
+export async function applyAIName(itemId, customName = null) {
+  const payload = {};
+  if (customName !== null) payload.name = customName;
+  const res = await fetch(`${API_BASE}/items/${itemId}/apply-ai-name/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || 'Failed to apply product name.');
+  }
+  return data;
+}
+
 export async function discardAIDescription(itemId) {
   const res = await fetch(`${API_BASE}/items/${itemId}/discard-ai-description/`, {
     method: 'POST',
@@ -2553,6 +2593,18 @@ export async function discardAIDescription(itemId) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || data.detail || 'Failed to discard description.');
+  }
+  return data;
+}
+
+export async function discardAIName(itemId) {
+  const res = await fetch(`${API_BASE}/items/${itemId}/discard-ai-name/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || 'Failed to discard AI name.');
   }
   return data;
 }
@@ -2568,6 +2620,21 @@ export async function bulkApplyAIDescriptions(itemIds = null) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || data.detail || 'Failed to bulk apply descriptions.');
+  }
+  return data;
+}
+
+export async function bulkApplyAINames(itemIds = null) {
+  const payload = {};
+  if (itemIds && Array.isArray(itemIds)) payload.item_ids = itemIds;
+  const res = await fetch(`${API_BASE}/items/bulk-apply-ai-names/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.detail || 'Failed to bulk apply AI product names.');
   }
   return data;
 }

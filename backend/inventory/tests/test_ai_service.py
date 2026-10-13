@@ -511,3 +511,74 @@ class AIDescriptionServiceAndEndpointTests(TestCase):
         self.assertEqual(job.failed_items, 2)
         self.assertIn("Daily AI quota", job.status_message)
 
+    @patch('inventory.ai_service.call_gemini_api')
+    def test_generate_product_name_success(self, mock_gemini):
+        from inventory.ai_service import generate_product_name
+        mock_gemini.return_value = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Premium Stainless Steel Insulated Water Bottle (750ml)"}
+                        ]
+                    }
+                }
+            ]
+        }
+        res = generate_product_name(
+            image_bytes=b"fake_image",
+            mime_type="image/jpeg",
+            item_data={"name": "BOTTLE-750", "category_name": "Kitchenware"},
+            custom_api_keys=["custom_test_key_123"]
+        )
+        self.assertTrue(res['success'])
+        self.assertEqual(res['name'], "Premium Stainless Steel Insulated Water Bottle (750ml)")
+
+    @patch('inventory.views.generate_product_name')
+    def test_single_ai_generate_name_endpoint(self, mock_gen_name):
+        mock_gen_name.return_value = {
+            "success": True,
+            "name": "Men's Classic Slim Fit Cotton Shirt",
+            "model_used": "gemini-flash-lite-latest"
+        }
+        url = reverse('item-single-ai-generate-name', kwargs={'pk': self.item1.pk})
+        resp = self.client.post(url, {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.item1.refresh_from_db()
+        self.assertEqual(self.item1.ai_name_status, 'ready')
+        self.assertEqual(self.item1.ai_name_draft, "Men's Classic Slim Fit Cotton Shirt")
+
+    def test_apply_ai_name_endpoint(self):
+        self.item1.ai_name_draft = "Upgraded Oxford Shirt"
+        self.item1.ai_name_status = 'ready'
+        self.item1.needs_better_name = True
+        self.item1.save()
+
+        url = reverse('item-apply-ai-name', kwargs={'pk': self.item1.pk})
+        resp = self.client.post(url, {}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.item1.refresh_from_db()
+        self.assertEqual(self.item1.name, "Upgraded Oxford Shirt")
+        self.assertEqual(self.item1.ai_name_status, 'applied')
+        self.assertFalse(self.item1.needs_better_name)
+
+    def test_bulk_apply_ai_names_endpoint(self):
+        self.item1.ai_name_draft = "Upgraded Item 1"
+        self.item1.ai_name_status = 'ready'
+        self.item1.save()
+
+        self.item2.ai_name_draft = "Upgraded Item 2"
+        self.item2.ai_name_status = 'ready'
+        self.item2.save()
+
+        url = reverse('item-bulk-apply-ai-names')
+        resp = self.client.post(url, {'item_ids': [self.item1.pk, self.item2.pk]}, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['applied_count'], 2)
+
+        self.item1.refresh_from_db()
+        self.item2.refresh_from_db()
+        self.assertEqual(self.item1.name, "Upgraded Item 1")
+        self.assertEqual(self.item2.name, "Upgraded Item 2")
+
+

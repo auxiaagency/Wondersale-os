@@ -294,11 +294,11 @@ export default function App() {
   const [selectedStockStatus, setSelectedStockStatus] = useState('');
   const [minStockFilter, setMinStockFilter] = useState('');
   const [maxStockFilter, setMaxStockFilter] = useState('');
-  const [needsBarcodeFilter, setNeedsBarcodeFilter] = useState(false);
-  const [hasNoImageFilter, setHasNoImageFilter] = useState(false);
-  const [hasNoSubcategoryFilter, setHasNoSubcategoryFilter] = useState(false);
-  const [hasNoWeightFilter, setHasNoWeightFilter] = useState(false);
-  const [hasNoVolumeFilter, setHasNoVolumeFilter] = useState(false);
+  const [needsBarcodeFilter, setNeedsBarcodeFilter] = useState(''); // '' | 'needs_barcode' | 'barcode_printed'
+  const [hasImageFilter, setHasImageFilter] = useState(''); // '' | 'has_image' | 'no_image'
+  const [hasSubcategoryFilterState, setHasSubcategoryFilterState] = useState(''); // '' | 'has_subcat' | 'no_subcat'
+  const [hasWeightFilterState, setHasWeightFilterState] = useState(''); // '' | 'has_weight' | 'no_weight'
+  const [hasVolumeFilterState, setHasVolumeFilterState] = useState(''); // '' | 'has_volume' | 'no_volume'
   const [inventorySortBy, setInventorySortBy] = useState('');
   const [inventoryPage, setInventoryPage] = useState(1);
   const [inventoryPageSize, setInventoryPageSize] = useState(() => {
@@ -417,11 +417,20 @@ export default function App() {
       if (selectedStockStatus) filterParams.stock_status = selectedStockStatus;
       if (minStockFilter !== '') filterParams.min_stock = minStockFilter;
       if (maxStockFilter !== '') filterParams.max_stock = maxStockFilter;
-      if (needsBarcodeFilter) filterParams.needs_new_barcode_printed = 'true';
-      if (hasNoImageFilter) filterParams.has_no_image = 'true';
-      if (hasNoSubcategoryFilter) filterParams.has_no_subcategory = 'true';
-      if (hasNoWeightFilter) filterParams.has_no_weight = 'true';
-      if (hasNoVolumeFilter) filterParams.has_no_volume = 'true';
+      if (needsBarcodeFilter === 'needs_barcode') filterParams.needs_new_barcode_printed = 'true';
+      else if (needsBarcodeFilter === 'barcode_printed') filterParams.needs_new_barcode_printed = 'false';
+
+      if (hasImageFilter === 'no_image') filterParams.has_no_image = 'true';
+      else if (hasImageFilter === 'has_image') filterParams.has_image = 'true';
+
+      if (hasSubcategoryFilterState === 'no_subcat') filterParams.has_no_subcategory = 'true';
+      else if (hasSubcategoryFilterState === 'has_subcat') filterParams.has_subcategory = 'true';
+
+      if (hasWeightFilterState === 'no_weight') filterParams.has_no_weight = 'true';
+      else if (hasWeightFilterState === 'has_weight') filterParams.has_weight = 'true';
+
+      if (hasVolumeFilterState === 'no_volume') filterParams.has_no_volume = 'true';
+      else if (hasVolumeFilterState === 'has_volume') filterParams.has_volume = 'true';
 
       // 2. Paginated item query params
       const itemParams = {
@@ -463,12 +472,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventoryPageSize, inventorySortBy]);
+  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventoryPageSize, inventorySortBy]);
 
   // Reset to page 1 whenever any filter or search changes
   useEffect(() => {
     setInventoryPage(1);
-  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventorySortBy]);
+  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
 
   // Fetch data on search or filter change with debounce
   useEffect(() => {
@@ -478,7 +487,7 @@ export default function App() {
       loadItems(1);
     }, delay);
     return () => clearTimeout(handler);
-  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasNoImageFilter, hasNoSubcategoryFilter, hasNoWeightFilter, hasNoVolumeFilter, inventorySortBy]);
+  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
 
   // Fetch data when user navigates page
   useEffect(() => {
@@ -1168,14 +1177,14 @@ export default function App() {
                 onMaxStockFilterChange={setMaxStockFilter}
                 needsBarcodeFilter={needsBarcodeFilter}
                 onNeedsBarcodeFilterChange={setNeedsBarcodeFilter}
-                hasNoImageFilter={hasNoImageFilter}
-                onHasNoImageFilterChange={setHasNoImageFilter}
-                hasNoSubcategoryFilter={hasNoSubcategoryFilter}
-                onHasNoSubcategoryFilterChange={setHasNoSubcategoryFilter}
-                hasNoWeightFilter={hasNoWeightFilter}
-                onHasNoWeightFilterChange={setHasNoWeightFilter}
-                hasNoVolumeFilter={hasNoVolumeFilter}
-                onHasNoVolumeFilterChange={setHasNoVolumeFilter}
+                hasImageFilter={hasImageFilter}
+                onHasImageFilterChange={setHasImageFilter}
+                hasSubcategoryFilterState={hasSubcategoryFilterState}
+                onHasSubcategoryFilterStateChange={setHasSubcategoryFilterState}
+                hasWeightFilterState={hasWeightFilterState}
+                onHasWeightFilterStateChange={setHasWeightFilterState}
+                hasVolumeFilterState={hasVolumeFilterState}
+                onHasVolumeFilterStateChange={setHasVolumeFilterState}
                 onViewItem={(item) => {
                   fetchItem(item.id)
                     .then((fullItem) => {
@@ -1211,11 +1220,20 @@ export default function App() {
                     if (selectedStockStatus) exportFilterParams.stock_status = selectedStockStatus;
                     if (minStockFilter !== '') exportFilterParams.min_stock = minStockFilter;
                     if (maxStockFilter !== '') exportFilterParams.max_stock = maxStockFilter;
-                    if (needsBarcodeFilter) exportFilterParams.needs_new_barcode_printed = 'true';
-                    if (hasNoImageFilter) exportFilterParams.has_no_image = 'true';
-                    if (hasNoSubcategoryFilter) exportFilterParams.has_no_subcategory = 'true';
-                    if (hasNoWeightFilter) exportFilterParams.has_no_weight = 'true';
-                    if (hasNoVolumeFilter) exportFilterParams.has_no_volume = 'true';
+                    if (needsBarcodeFilter === 'needs_barcode') exportFilterParams.needs_new_barcode_printed = 'true';
+                    else if (needsBarcodeFilter === 'barcode_printed') exportFilterParams.needs_new_barcode_printed = 'false';
+
+                    if (hasImageFilter === 'no_image') exportFilterParams.has_no_image = 'true';
+                    else if (hasImageFilter === 'has_image') exportFilterParams.has_image = 'true';
+
+                    if (hasSubcategoryFilterState === 'no_subcat') exportFilterParams.has_no_subcategory = 'true';
+                    else if (hasSubcategoryFilterState === 'has_subcat') exportFilterParams.has_subcategory = 'true';
+
+                    if (hasWeightFilterState === 'no_weight') exportFilterParams.has_no_weight = 'true';
+                    else if (hasWeightFilterState === 'has_weight') exportFilterParams.has_weight = 'true';
+
+                    if (hasVolumeFilterState === 'no_volume') exportFilterParams.has_no_volume = 'true';
+                    else if (hasVolumeFilterState === 'has_volume') exportFilterParams.has_volume = 'true';
 
                     // Fetch unpaginated dataset (backward-compatible, no page param)
                     const fullData = await fetchItems(exportFilterParams);
@@ -1454,11 +1472,16 @@ export default function App() {
             selectedSection,
             hasNoSectionFilter,
             selectedStockStatus,
-            hasNoImageFilter,
-            hasNoSubcategoryFilter,
+            hasImageFilter,
+            hasSubcategoryFilterState,
             needsBarcodeFilter,
-            hasNoWeightFilter,
-            hasNoVolumeFilter,
+            hasWeightFilterState,
+            hasVolumeFilterState,
+            // Keep backward-compatible aliases:
+            hasNoImageFilter: hasImageFilter === 'no_image',
+            hasNoSubcategoryFilter: hasSubcategoryFilterState === 'no_subcat',
+            hasNoWeightFilter: hasWeightFilterState === 'no_weight',
+            hasNoVolumeFilter: hasVolumeFilterState === 'no_volume',
           }}
           currentStoreName={
             stores.find((s) => String(s.id) === String(selectedStore))?.name || 'Active Store'

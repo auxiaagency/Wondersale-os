@@ -30,7 +30,11 @@ import {
   discardAIDescription,
   singleAIGenerateDescription,
   retryAIDescription,
-  uploadItemImages
+  uploadItemImages,
+  singleAIGenerateName,
+  applyAIName,
+  discardAIName,
+  bulkApplyAINames,
 } from '../api';
 
 export default function AIDescriptionReviewModal({
@@ -43,7 +47,7 @@ export default function AIDescriptionReviewModal({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [filter, setFilter] = useState('all'); // 'all', 'in_progress', 'ready', 'skipped', 'failed', 'applied'
+  const [filter, setFilter] = useState('all'); // 'all', 'in_progress', 'ready', 'skipped', 'failed', 'applied', 'names'
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -52,7 +56,10 @@ export default function AIDescriptionReviewModal({
   const [activeTabMode, setActiveTabMode] = useState({}); // { [itemId]: 'edit' | 'preview' }
   const [draftEdits, setDraftEdits] = useState({}); // { [itemId]: string }
   const [actionLoading, setActionLoading] = useState({}); // { [itemId]: boolean }
+  const [nameEdits, setNameEdits] = useState({}); // { [itemId]: string }
+  const [nameActionLoading, setNameActionLoading] = useState({}); // { [itemId]: boolean }
   const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkApplyingNames, setBulkApplyingNames] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [imageModalItem, setImageModalItem] = useState(null);
 
@@ -74,13 +81,22 @@ export default function AIDescriptionReviewModal({
           const next = { ...prev };
           (data.items || []).forEach(item => {
             const currentVal = next[item.id];
-            // If the item has a newly generated draft from server, update it if not manually edited by user
             if (item.ai_description_draft) {
               if (currentVal === undefined || currentVal === '' || currentVal === item.description) {
                 next[item.id] = item.ai_description_draft;
               }
             } else if (currentVal === undefined) {
               next[item.id] = item.description || '';
+            }
+          });
+          return next;
+        });
+
+        setNameEdits(prev => {
+          const next = { ...prev };
+          (data.items || []).forEach(item => {
+            if (item.ai_name_draft && next[item.id] === undefined) {
+              next[item.id] = item.ai_name_draft;
             }
           });
           return next;
@@ -197,6 +213,80 @@ export default function AIDescriptionReviewModal({
     }
   };
 
+  const handleApplySingleName = async (item) => {
+    const customName = nameEdits[item.id] !== undefined ? nameEdits[item.id] : item.ai_name_draft;
+    setNameActionLoading(prev => ({ ...prev, [item.id]: true }));
+    try {
+      const res = await applyAIName(item.id, customName);
+      showToast(`Updated product name to "${res.item.name}"`);
+      setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, name: res.item.name, ai_name_status: 'applied' } : it));
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      if (onItemUpdated) onItemUpdated(res.item);
+    } catch (err) {
+      showToast(err.message || 'Failed to apply product name.');
+    } finally {
+      setNameActionLoading(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  const handleGenerateSingleName = async (item) => {
+    setNameActionLoading(prev => ({ ...prev, [item.id]: true }));
+    try {
+      showToast(`Generating AI product name for "${item.name}"...`);
+      const res = await singleAIGenerateName(item.id);
+      showToast(`✨ Generated AI title: "${res.name}"`);
+      setNameEdits(prev => ({ ...prev, [item.id]: res.name }));
+      setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_name_draft: res.name, ai_name_status: 'ready' } : it));
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      if (onItemUpdated) onItemUpdated(res.item);
+    } catch (err) {
+      showToast(err.message || 'Failed to generate product name.');
+    } finally {
+      setNameActionLoading(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  const handleDiscardSingleName = async (item) => {
+    setNameActionLoading(prev => ({ ...prev, [item.id]: true }));
+    try {
+      const res = await discardAIName(item.id);
+      showToast(`AI product name discarded for "${item.name}"`);
+      setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_name_draft: '', ai_name_status: 'none' } : it));
+      setNameEdits(prev => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      if (onItemUpdated) onItemUpdated(res.item);
+    } catch (err) {
+      showToast(err.message || 'Failed to discard AI name.');
+    } finally {
+      setNameActionLoading(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  const handleBulkApplyAllNames = async () => {
+    const readyItems = items.filter(it => it.ai_name_status === 'ready' || (nameEdits[it.id] && it.ai_name_status !== 'applied'));
+    if (readyItems.length === 0) {
+      showToast("No ready AI product names to apply.");
+      return;
+    }
+    setBulkApplyingNames(true);
+    try {
+      const readyIds = readyItems.map(it => it.id);
+      const res = await bulkApplyAINames(readyIds);
+      showToast(`Applied upgraded names for ${res.applied_count} products!`);
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      await loadJobData();
+      if (onItemUpdated) onItemUpdated();
+    } catch (err) {
+      showToast(err.message || 'Failed to bulk apply product names.');
+    } finally {
+      setBulkApplyingNames(false);
+    }
+  };
+
   const handleImageModalUpdated = async (updatedItem) => {
     if (!updatedItem) return;
     setItems(prev => prev.map(it => it.id === updatedItem.id ? { ...it, ...updatedItem } : it));
@@ -227,10 +317,12 @@ export default function AIDescriptionReviewModal({
 
   if (!isOpen) return null;
 
-  const inProgressCount = items.filter(it => it.ai_description_status === 'pending' || it.ai_description_status === 'generating').length;
+  const inProgressCount = items.filter(it => it.ai_description_status === 'pending' || it.ai_description_status === 'generating' || it.ai_name_status === 'pending' || it.ai_name_status === 'generating').length;
   const readyCount = items.filter(it => it.ai_description_status === 'ready').length;
+  const readyNameCount = items.filter(it => it.ai_name_status === 'ready' || (it.ai_name_draft && it.ai_name_status !== 'applied')).length;
+  const totalNamesCount = items.filter(it => it.ai_name_draft || it.ai_name_status !== 'none' || it.needs_better_name).length;
   const skippedCount = items.filter(it => it.ai_description_status === 'skipped_no_image').length;
-  const failedCount = items.filter(it => it.ai_description_status === 'failed').length;
+  const failedCount = items.filter(it => it.ai_description_status === 'failed' || it.ai_name_status === 'failed').length;
   const appliedCount = items.filter(it => it.ai_description_status === 'applied').length;
   const pendingCount = items.filter(it => it.ai_description_status !== 'applied').length;
 
@@ -264,10 +356,11 @@ export default function AIDescriptionReviewModal({
   const tabFilteredItems = useMemo(() => {
     return items.filter(it => {
       if (filter === 'all') return it.ai_description_status !== 'applied';
-      if (filter === 'in_progress') return it.ai_description_status === 'pending' || it.ai_description_status === 'generating';
+      if (filter === 'names') return Boolean(it.ai_name_draft || it.ai_name_status !== 'none' || it.needs_better_name);
+      if (filter === 'in_progress') return it.ai_description_status === 'pending' || it.ai_description_status === 'generating' || it.ai_name_status === 'pending' || it.ai_name_status === 'generating';
       if (filter === 'ready') return it.ai_description_status === 'ready';
       if (filter === 'skipped') return it.ai_description_status === 'skipped_no_image';
-      if (filter === 'failed') return it.ai_description_status === 'failed';
+      if (filter === 'failed') return it.ai_description_status === 'failed' || it.ai_name_status === 'failed';
       if (filter === 'applied') return it.ai_description_status === 'applied';
       return true;
     });
@@ -453,6 +546,31 @@ export default function AIDescriptionReviewModal({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {readyNameCount > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkApplyAllNames}
+                disabled={bulkApplyingNames}
+                className="btn btn-primary"
+                style={{
+                  background: 'linear-gradient(135deg, #7C3AED 0%, #6366F1 100%)',
+                  borderColor: '#7C3AED',
+                  borderRadius: 'var(--radius-pill)',
+                  padding: '8px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(124, 58, 237, 0.35)',
+                }}
+              >
+                {bulkApplyingNames ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                <span>Apply All Names ({readyNameCount})</span>
+              </button>
+            )}
+
             {readyCount > 0 && (
               <button
                 type="button"
@@ -515,6 +633,7 @@ export default function AIDescriptionReviewModal({
         >
           {[
             { id: 'all', label: 'All Products', count: pendingCount, color: '#6366F1' },
+            { id: 'names', label: 'AI Names', count: totalNamesCount, color: '#8B5CF6' },
             { id: 'in_progress', label: 'In Progress', count: inProgressCount, color: '#A855F7' },
             { id: 'ready', label: 'Ready for Review', count: readyCount, color: '#10B981' },
             { id: 'skipped', label: 'No Photo Uploaded', count: skippedCount, color: '#F59E0B' },
@@ -522,6 +641,7 @@ export default function AIDescriptionReviewModal({
             { id: 'applied', label: 'Applied / Done', count: appliedCount, color: '#3B82F6' },
           ].map(tab => {
             const isActive = filter === tab.id;
+            if (tab.id === 'names' && tab.count === 0 && !isActive) return null;
             if (tab.id === 'in_progress' && tab.count === 0 && !isActive) return null;
             if (tab.id === 'failed' && tab.count === 0 && !isActive) return null;
             if (tab.id === 'applied' && tab.count === 0 && !isActive) return null;
@@ -1126,12 +1246,162 @@ export default function AIDescriptionReviewModal({
                       <RefreshCw size={18} className="animate-spin" style={{ color: '#c084fc', flexShrink: 0 }} />
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#f3e8ff' }}>
-                          Generating Description in Background...
+                          Generating AI Content in Background...
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#c084fc', marginTop: '2px' }}>
-                          Gemini Vision is inspecting product image labels, packaging, and metadata. Draft will appear here automatically.
+                          Gemini Vision is inspecting product image labels, packaging, and metadata. Drafts will appear here automatically.
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* AI Product Name Studio Section */}
+                  {(item.ai_name_draft || item.ai_name_status !== 'none' || item.needs_better_name) && (
+                    <div
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%)',
+                        border: '1px solid rgba(124, 58, 237, 0.25)',
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Sparkles size={14} style={{ color: '#A855F7' }} />
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#DDD6FE' }}>
+                            AI Suggested Product Name
+                          </span>
+                          {item.ai_name_status === 'applied' && (
+                            <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#3B82F6', color: '#fff' }}>
+                              Applied
+                            </span>
+                          )}
+                          {item.ai_name_status === 'generating' && (
+                            <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <RefreshCw size={10} className="animate-spin" /> Generating...
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSingleName(item)}
+                            disabled={nameActionLoading[item.id] || !item.primary_image_url}
+                            style={{
+                              background: 'rgba(255, 255, 255, 0.06)',
+                              border: '1px solid rgba(255, 255, 255, 0.15)',
+                              borderRadius: 'var(--radius-pill)',
+                              color: '#DDD6FE',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              padding: '3px 8px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Regenerate name with Gemini Vision"
+                          >
+                            <RefreshCw size={11} className={nameActionLoading[item.id] ? 'animate-spin' : ''} />
+                            <span>Regenerate Name</span>
+                          </button>
+                          {item.ai_name_status !== 'applied' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleDiscardSingleName(item)}
+                                disabled={nameActionLoading[item.id]}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#94a3b8',
+                                  fontSize: '0.72rem',
+                                  cursor: 'pointer',
+                                  padding: '3px 6px'
+                                }}
+                              >
+                                Discard
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApplySingleName(item)}
+                                disabled={nameActionLoading[item.id] || !(nameEdits[item.id] || item.ai_name_draft)}
+                                style={{
+                                  background: 'linear-gradient(135deg, #7C3AED 0%, #6366F1 100%)',
+                                  border: 'none',
+                                  borderRadius: 'var(--radius-pill)',
+                                  color: '#ffffff',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  padding: '4px 12px',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 2px 8px rgba(124, 58, 237, 0.3)'
+                                }}
+                              >
+                                Apply Name
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Name input */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="text"
+                          value={nameEdits[item.id] !== undefined ? nameEdits[item.id] : (item.ai_name_draft || '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setNameEdits(prev => ({ ...prev, [item.id]: val }));
+                          }}
+                          placeholder="AI Product Name Draft..."
+                          style={{
+                            width: '100%',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            background: 'rgba(0, 0, 0, 0.3)',
+                            border: '1px solid rgba(124, 58, 237, 0.3)',
+                            color: '#ffffff',
+                            fontSize: '0.84rem',
+                            fontWeight: 600,
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Current Name: <em style={{ color: '#cbd5e1' }}>{item.name}</em></span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* If item does NOT have AI Name draft, provide quick action to generate one */}
+                  {!item.ai_name_draft && item.ai_name_status === 'none' && !isInProgress && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateSingleName(item)}
+                        disabled={nameActionLoading[item.id] || !item.primary_image_url}
+                        style={{
+                          background: 'rgba(124, 58, 237, 0.08)',
+                          border: '1px dashed rgba(124, 58, 237, 0.3)',
+                          borderRadius: '8px',
+                          padding: '4px 10px',
+                          color: '#A78BFA',
+                          fontSize: '0.74rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                        title="Analyze photo and generate an upgraded e-commerce product name"
+                      >
+                        <Sparkles size={12} />
+                        <span>{nameActionLoading[item.id] ? 'Generating Name...' : 'Upgrade Product Name with AI'}</span>
+                      </button>
                     </div>
                   )}
 

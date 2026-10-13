@@ -471,6 +471,11 @@ class ItemSerializer(serializers.ModelSerializer):
             'ai_description_status',
             'ai_description_error',
             'ai_description_updated_at',
+            'needs_better_name',
+            'ai_name_draft',
+            'ai_name_status',
+            'ai_name_error',
+            'ai_name_updated_at',
             'volume_cm3',
             'volumetric_weight_kg',
             'dimensions_display',
@@ -664,6 +669,20 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         allow_blank=True,
         default="none"
     )
+    needs_better_name = serializers.BooleanField(
+        required=False,
+        default=False
+    )
+    ai_name_draft = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default=""
+    )
+    ai_name_status = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="none"
+    )
 
     class Meta:
         model = Item
@@ -691,6 +710,9 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
             'description',
             'ai_description_draft',
             'ai_description_status',
+            'needs_better_name',
+            'ai_name_draft',
+            'ai_name_status',
             'source',
             'legacy_uid',
             'needs_new_barcode_printed',
@@ -2361,12 +2383,13 @@ class AIDescriptionBatchJobSerializer(serializers.ModelSerializer):
             'generating_items',
             'progress_percentage',
             'item_ids',
+            'generate_name_ids',
             'created_at',
             'updated_at',
         ]
         read_only_fields = [
             'id', 'store_name', 'status_message', 'progress_percentage',
-            'ready_items', 'applied_items', 'generating_items',
+            'ready_items', 'applied_items', 'generating_items', 'generate_name_ids',
             'created_at', 'updated_at'
         ]
 

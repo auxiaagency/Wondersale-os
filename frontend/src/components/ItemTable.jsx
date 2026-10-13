@@ -45,6 +45,7 @@ import SubcategoryPickerPopover from './SubcategoryPickerPopover';
 import SubcategoryViewerDropdown, { SubcategoriesBadgeList } from './SubcategoryViewerDropdown';
 import BrokenItemModal from './BrokenItemModal';
 import BulkEditModal, { BulkConfirmModal } from './BulkEditModal';
+import AIGenerateLaunchModal from './AIGenerateLaunchModal';
 
 // Helper to calculate volume and volumetric weight metrics
 export const calculateVolumeMetrics = (length, width, height) => {
@@ -102,8 +103,17 @@ export default function ItemTable({
   onMinStockFilterChange,
   maxStockFilter = '',
   onMaxStockFilterChange,
-  needsBarcodeFilter,
+  needsBarcodeFilter = '',
   onNeedsBarcodeFilterChange,
+  hasImageFilter = '',
+  onHasImageFilterChange,
+  hasSubcategoryFilterState = '',
+  onHasSubcategoryFilterStateChange,
+  hasWeightFilterState = '',
+  onHasWeightFilterStateChange,
+  hasVolumeFilterState = '',
+  onHasVolumeFilterStateChange,
+  // Backward compatibility fallbacks
   hasNoImageFilter = false,
   onHasNoImageFilterChange,
   hasNoSubcategoryFilter = false,
@@ -151,6 +161,8 @@ export default function ItemTable({
   const [savingEdits, setSavingEdits] = useState(false);
   const [deletingBulk, setDeletingBulk] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [isAiLaunchModalOpen, setIsAiLaunchModalOpen] = useState(false);
+  const [aiLaunchTargetItems, setAiLaunchTargetItems] = useState([]);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [bulkEditConfirmData, setBulkEditConfirmData] = useState(null); // { changes, count, targetIds }
   const [subcatPickerAnchor, setSubcatPickerAnchor] = useState(null); // { itemId, anchorRect }
@@ -532,10 +544,35 @@ export default function ItemTable({
     }
   }, [isEditMode, items]);
 
+  // Effective filter values (bridge between tri-state props and legacy boolean props)
+  const effectiveImageFilter = hasImageFilter || (hasNoImageFilter ? 'no_image' : '');
+  const effectiveSubcatFilter = hasSubcategoryFilterState || (hasNoSubcategoryFilter ? 'no_subcat' : '');
+  const effectiveWeightFilter = hasWeightFilterState || (hasNoWeightFilter ? 'no_weight' : '');
+  const effectiveVolumeFilter = hasVolumeFilterState || (hasNoVolumeFilter ? 'no_volume' : '');
+  const effectiveBarcodeFilter = typeof needsBarcodeFilter === 'boolean'
+    ? (needsBarcodeFilter ? 'needs_barcode' : '')
+    : (needsBarcodeFilter || '');
+
   // Reset to page 1 whenever search, filters, or sorting change
   useEffect(() => {
     handlePageChange(1);
-  }, [searchQuery, activeSubcatIds, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, hasNoImageFilter, hasNoSubcategoryFilter, needsBarcodeFilter, hasNoWeightFilter, hasNoVolumeFilter, sortBy]);
+  }, [
+    searchQuery,
+    activeSubcatIds,
+    selectedSupplier,
+    hasNoSupplierFilter,
+    selectedSection,
+    hasNoSectionFilter,
+    selectedStockStatus,
+    minStockFilter,
+    maxStockFilter,
+    effectiveImageFilter,
+    effectiveSubcatFilter,
+    effectiveBarcodeFilter,
+    effectiveWeightFilter,
+    effectiveVolumeFilter,
+    sortBy,
+  ]);
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
@@ -546,13 +583,27 @@ export default function ItemTable({
     if (selectedSection) count += 1;
     if (hasNoSectionFilter) count += 1;
     if (selectedStockStatus || minStockFilter !== '' || maxStockFilter !== '') count += 1;
-    if (hasNoImageFilter) count += 1;
-    if (hasNoSubcategoryFilter) count += 1;
-    if (needsBarcodeFilter) count += 1;
-    if (hasNoWeightFilter) count += 1;
-    if (hasNoVolumeFilter) count += 1;
+    if (effectiveImageFilter) count += 1;
+    if (effectiveSubcatFilter) count += 1;
+    if (effectiveBarcodeFilter) count += 1;
+    if (effectiveWeightFilter) count += 1;
+    if (effectiveVolumeFilter) count += 1;
     return count;
-  }, [activeSubcatIds, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, hasNoImageFilter, hasNoSubcategoryFilter, needsBarcodeFilter, hasNoWeightFilter, hasNoVolumeFilter]);
+  }, [
+    activeSubcatIds,
+    selectedSupplier,
+    hasNoSupplierFilter,
+    selectedSection,
+    hasNoSectionFilter,
+    selectedStockStatus,
+    minStockFilter,
+    maxStockFilter,
+    effectiveImageFilter,
+    effectiveSubcatFilter,
+    effectiveBarcodeFilter,
+    effectiveWeightFilter,
+    effectiveVolumeFilter,
+  ]);
 
   const handleResetFilters = () => {
     onSubcategoriesChange && onSubcategoriesChange([]);
@@ -566,23 +617,33 @@ export default function ItemTable({
     onStockStatusChange && onStockStatusChange('');
     onMinStockFilterChange && onMinStockFilterChange('');
     onMaxStockFilterChange && onMaxStockFilterChange('');
-    onHasNoImageFilterChange && onHasNoImageFilterChange(false);
-    onHasNoSubcategoryFilterChange && onHasNoSubcategoryFilterChange(false);
-    onNeedsBarcodeFilterChange && onNeedsBarcodeFilterChange(false);
-    onHasNoWeightFilterChange && onHasNoWeightFilterChange(false);
-    onHasNoVolumeFilterChange && onHasNoVolumeFilterChange(false);
+    if (onHasImageFilterChange) onHasImageFilterChange('');
+    if (onHasNoImageFilterChange) onHasNoImageFilterChange(false);
+    if (onHasSubcategoryFilterStateChange) onHasSubcategoryFilterStateChange('');
+    if (onHasNoSubcategoryFilterChange) onHasNoSubcategoryFilterChange(false);
+    if (onNeedsBarcodeFilterChange) onNeedsBarcodeFilterChange('');
+    if (onHasWeightFilterStateChange) onHasWeightFilterStateChange('');
+    if (onHasNoWeightFilterChange) onHasNoWeightFilterChange(false);
+    if (onHasVolumeFilterStateChange) onHasVolumeFilterStateChange('');
+    if (onHasNoVolumeFilterChange) onHasNoVolumeFilterChange(false);
   };
 
   // Sort items and apply client-side filter fallbacks
   const sortedItems = useMemo(() => {
     let list = [...items];
 
-    if (hasNoImageFilter) {
+    if (effectiveImageFilter === 'no_image') {
       list = list.filter((item) => !item.primary_image_url && (!item.images || item.images.length === 0));
+    } else if (effectiveImageFilter === 'has_image') {
+      list = list.filter((item) => Boolean(item.primary_image_url) || (item.images && item.images.length > 0));
     }
-    if (hasNoSubcategoryFilter) {
+
+    if (effectiveSubcatFilter === 'no_subcat') {
       list = list.filter((item) => !item.subcategories || item.subcategories.length === 0);
+    } else if (effectiveSubcatFilter === 'has_subcat') {
+      list = list.filter((item) => item.subcategories && item.subcategories.length > 0);
     }
+
     if (hasNoSupplierFilter) {
       list = list.filter((item) => !item.supplier && !item.supplier_name);
     }
@@ -635,19 +696,29 @@ export default function ItemTable({
       }
     }
 
-    if (needsBarcodeFilter) {
+    if (effectiveBarcodeFilter === 'needs_barcode') {
       list = list.filter((item) => Boolean(item.needs_new_barcode_printed));
+    } else if (effectiveBarcodeFilter === 'barcode_printed') {
+      list = list.filter((item) => !item.needs_new_barcode_printed);
     }
 
-    if (hasNoWeightFilter) {
+    if (effectiveWeightFilter === 'no_weight') {
       list = list.filter(
         (item) => item.weight === null || item.weight === undefined || item.weight === '' || parseFloat(item.weight) <= 0 || isNaN(parseFloat(item.weight))
       );
+    } else if (effectiveWeightFilter === 'has_weight') {
+      list = list.filter(
+        (item) => item.weight !== null && item.weight !== undefined && item.weight !== '' && parseFloat(item.weight) > 0
+      );
     }
 
-    if (hasNoVolumeFilter) {
+    if (effectiveVolumeFilter === 'no_volume') {
       list = list.filter(
         (item) => !item.length || !item.width || !item.height || parseFloat(item.length) <= 0 || parseFloat(item.width) <= 0 || parseFloat(item.height) <= 0
+      );
+    } else if (effectiveVolumeFilter === 'has_volume') {
+      list = list.filter(
+        (item) => item.length && item.width && item.height && parseFloat(item.length) > 0 && parseFloat(item.width) > 0 && parseFloat(item.height) > 0
       );
     }
 
@@ -1066,27 +1137,28 @@ export default function ItemTable({
     }
   };
 
-  // Bulk AI Product Description Generator for selected or filtered items
-  const handleGenerateAIDescriptions = async () => {
+  // Bulk AI Product Generator for selected or filtered items
+  const handleOpenAILaunchModal = () => {
     if (justDraggedRef.current) return;
-    const targetIds = selectedItemIds.length > 0 ? selectedItemIds : paginatedItems.map((it) => it.id);
-    if (!targetIds || targetIds.length === 0) {
+    const targetItems = selectedItemIds.length > 0
+      ? items.filter((it) => selectedItemIds.includes(it.id))
+      : paginatedItems;
+    if (!targetItems || targetItems.length === 0) {
       setError('No items available to generate descriptions for.');
       return;
     }
+    setAiLaunchTargetItems(targetItems);
+    setIsAiLaunchModalOpen(true);
+  };
 
-    const confirmMsg = selectedItemIds.length > 0
-      ? `Generate AI product descriptions for ${selectedItemIds.length} selected item(s) in background using Gemini Vision?`
-      : `Generate AI product descriptions for ${targetIds.length} item(s) on this page in background using Gemini Vision?`;
-
-    if (!window.confirm(confirmMsg)) return;
-
+  const handleConfirmAILaunch = async ({ item_ids, generate_name_ids }) => {
     setGeneratingAI(true);
     setError('');
     setAiErrorDialogMessage(null);
     try {
-      const res = await bulkAIGenerateDescriptions({ item_ids: targetIds });
-      showFeedback(res.message || 'Background AI description generation started!');
+      const res = await bulkAIGenerateDescriptions({ item_ids, generate_name_ids });
+      setIsAiLaunchModalOpen(false);
+      showFeedback(res.message || 'Background AI generation started!');
       if (res.job) {
         window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
         if (onStartAIDescriptionJob) {
@@ -1307,15 +1379,15 @@ export default function ItemTable({
             gap: '6px',
             fontWeight: 800,
             color: '#ffffff',
-            background: 'linear-gradient(135deg, #6366F1 0%, #A855F7 100%)',
+            background: 'var(--brand-primary)',
             border: 'none',
-            boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+            boxShadow: '0 4px 14px var(--brand-ruby-glow, rgba(197, 34, 36, 0.35))',
             cursor: 'pointer',
           }}
           title="Open AI Description Studio to review, tweak, and overwrite descriptions"
         >
           <Sparkles size={15} />
-          <span>✨ AI Studio</span>
+          <span>AI Studio</span>
         </button>
 
         {/* Export to CSV Action Button */}
@@ -1885,15 +1957,19 @@ export default function ItemTable({
               )}
           </div>
 
-          {/* 3. Has no image Toggle Button */}
+          {/* 3. Image Presence Tri-State Filter Button */}
           <button
             type="button"
-            onClick={() => onHasNoImageFilterChange && onHasNoImageFilterChange(!hasNoImageFilter)}
+            onClick={() => {
+              const next = effectiveImageFilter === '' ? 'has_image' : (effectiveImageFilter === 'has_image' ? 'no_image' : '');
+              if (onHasImageFilterChange) onHasImageFilterChange(next);
+              if (onHasNoImageFilterChange) onHasNoImageFilterChange(next === 'no_image');
+            }}
             className="form-select"
             style={{
               flex: '0 0 auto',
               width: 'auto',
-              minWidth: '105px',
+              minWidth: '115px',
               height: '36px',
               borderRadius: 'var(--radius-pill)',
               fontSize: '0.82rem',
@@ -1903,56 +1979,53 @@ export default function ItemTable({
               justifyContent: 'center',
               gap: '6px',
               cursor: 'pointer',
-              background: hasNoImageFilter ? 'rgba(239, 68, 68, 0.12)' : undefined,
-              borderColor: hasNoImageFilter ? 'var(--brand-primary)' : undefined,
-              color: hasNoImageFilter ? 'var(--brand-primary)' : 'var(--text-primary)',
-              fontWeight: hasNoImageFilter ? 700 : 500,
+              background: effectiveImageFilter === 'has_image'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : effectiveImageFilter === 'no_image'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : undefined,
+              borderColor: effectiveImageFilter === 'has_image'
+                ? '#10B981'
+                : effectiveImageFilter === 'no_image'
+                ? 'var(--brand-primary)'
+                : undefined,
+              color: effectiveImageFilter === 'has_image'
+                ? '#059669'
+                : effectiveImageFilter === 'no_image'
+                ? 'var(--brand-primary)'
+                : 'var(--text-primary)',
+              fontWeight: effectiveImageFilter ? 700 : 500,
               whiteSpace: 'nowrap',
               userSelect: 'none',
               transition: 'all 0.15s ease',
             }}
+            title={
+              effectiveImageFilter === 'has_image'
+                ? 'Showing: Has Image (click for Has No Image)'
+                : effectiveImageFilter === 'no_image'
+                ? 'Showing: Has No Image (click to clear)'
+                : 'Filter: Click to show only items with images'
+            }
           >
             <ImageIcon size={14} />
-            <span>Has no image</span>
-            {hasNoImageFilter && <Check size={12} />}
+            <span>
+              {effectiveImageFilter === 'has_image'
+                ? 'Has image'
+                : effectiveImageFilter === 'no_image'
+                ? 'Has no image'
+                : 'Image (All)'}
+            </span>
+            {effectiveImageFilter && <Check size={12} />}
           </button>
 
-          {/* 4. Has no sub category Toggle Button */}
+          {/* 4. Subcategory Presence Tri-State Filter Button */}
           <button
             type="button"
-            onClick={() => onHasNoSubcategoryFilterChange && onHasNoSubcategoryFilterChange(!hasNoSubcategoryFilter)}
-            className="form-select"
-            style={{
-              flex: '0 0 auto',
-              width: 'auto',
-              minWidth: '125px',
-              height: '36px',
-              borderRadius: 'var(--radius-pill)',
-              fontSize: '0.82rem',
-              padding: '0 12px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              background: hasNoSubcategoryFilter ? 'rgba(239, 68, 68, 0.12)' : undefined,
-              borderColor: hasNoSubcategoryFilter ? 'var(--brand-primary)' : undefined,
-              color: hasNoSubcategoryFilter ? 'var(--brand-primary)' : 'var(--text-primary)',
-              fontWeight: hasNoSubcategoryFilter ? 700 : 500,
-              whiteSpace: 'nowrap',
-              userSelect: 'none',
-              transition: 'all 0.15s ease',
+            onClick={() => {
+              const next = effectiveSubcatFilter === '' ? 'has_subcat' : (effectiveSubcatFilter === 'has_subcat' ? 'no_subcat' : '');
+              if (onHasSubcategoryFilterStateChange) onHasSubcategoryFilterStateChange(next);
+              if (onHasNoSubcategoryFilterChange) onHasNoSubcategoryFilterChange(next === 'no_subcat');
             }}
-          >
-            <Layers size={14} />
-            <span>Has no sub category</span>
-            {hasNoSubcategoryFilter && <Check size={12} />}
-          </button>
-
-          {/* 5. Needs Barcode Printed Toggle Button */}
-          <button
-            type="button"
-            onClick={() => onNeedsBarcodeFilterChange && onNeedsBarcodeFilterChange(!needsBarcodeFilter)}
             className="form-select"
             style={{
               flex: '0 0 auto',
@@ -1967,29 +2040,118 @@ export default function ItemTable({
               justifyContent: 'center',
               gap: '6px',
               cursor: 'pointer',
-              background: needsBarcodeFilter ? 'rgba(239, 68, 68, 0.12)' : undefined,
-              borderColor: needsBarcodeFilter ? 'var(--brand-primary)' : undefined,
-              color: needsBarcodeFilter ? 'var(--brand-primary)' : 'var(--text-primary)',
-              fontWeight: needsBarcodeFilter ? 700 : 500,
+              background: effectiveSubcatFilter === 'has_subcat'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : effectiveSubcatFilter === 'no_subcat'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : undefined,
+              borderColor: effectiveSubcatFilter === 'has_subcat'
+                ? '#10B981'
+                : effectiveSubcatFilter === 'no_subcat'
+                ? 'var(--brand-primary)'
+                : undefined,
+              color: effectiveSubcatFilter === 'has_subcat'
+                ? '#059669'
+                : effectiveSubcatFilter === 'no_subcat'
+                ? 'var(--brand-primary)'
+                : 'var(--text-primary)',
+              fontWeight: effectiveSubcatFilter ? 700 : 500,
               whiteSpace: 'nowrap',
               userSelect: 'none',
               transition: 'all 0.15s ease',
             }}
+            title={
+              effectiveSubcatFilter === 'has_subcat'
+                ? 'Showing: Has Subcategory (click for Has No Subcategory)'
+                : effectiveSubcatFilter === 'no_subcat'
+                ? 'Showing: Has No Subcategory (click to clear)'
+                : 'Filter: Click to show only items with subcategories'
+            }
+          >
+            <Layers size={14} />
+            <span>
+              {effectiveSubcatFilter === 'has_subcat'
+                ? 'Has subcategory'
+                : effectiveSubcatFilter === 'no_subcat'
+                ? 'Has no sub category'
+                : 'Subcategory (All)'}
+            </span>
+            {effectiveSubcatFilter && <Check size={12} />}
+          </button>
+
+          {/* 5. Barcode Status Tri-State Filter Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = effectiveBarcodeFilter === '' ? 'needs_barcode' : (effectiveBarcodeFilter === 'needs_barcode' ? 'barcode_printed' : '');
+              if (onNeedsBarcodeFilterChange) onNeedsBarcodeFilterChange(next);
+            }}
+            className="form-select"
+            style={{
+              flex: '0 0 auto',
+              width: 'auto',
+              minWidth: '145px',
+              height: '36px',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: '0.82rem',
+              padding: '0 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              background: effectiveBarcodeFilter === 'needs_barcode'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : effectiveBarcodeFilter === 'barcode_printed'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : undefined,
+              borderColor: effectiveBarcodeFilter === 'needs_barcode'
+                ? 'var(--brand-primary)'
+                : effectiveBarcodeFilter === 'barcode_printed'
+                ? '#10B981'
+                : undefined,
+              color: effectiveBarcodeFilter === 'needs_barcode'
+                ? 'var(--brand-primary)'
+                : effectiveBarcodeFilter === 'barcode_printed'
+                ? '#059669'
+                : 'var(--text-primary)',
+              fontWeight: effectiveBarcodeFilter ? 700 : 500,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              transition: 'all 0.15s ease',
+            }}
+            title={
+              effectiveBarcodeFilter === 'needs_barcode'
+                ? 'Showing: Needs Barcode Printed (click for Barcode Already Printed)'
+                : effectiveBarcodeFilter === 'barcode_printed'
+                ? 'Showing: Barcode Already Printed (click to clear)'
+                : 'Filter: Click to filter by barcode print status'
+            }
           >
             <Barcode size={14} />
-            <span>Needs Barcode Printed</span>
-            {needsBarcodeFilter && <Check size={12} />}
+            <span>
+              {effectiveBarcodeFilter === 'needs_barcode'
+                ? 'Needs Barcode'
+                : effectiveBarcodeFilter === 'barcode_printed'
+                ? 'Barcode Printed'
+                : 'Barcode (All)'}
+            </span>
+            {effectiveBarcodeFilter && <Check size={12} />}
           </button>
 
-          {/* 6. Has no weight Toggle Button */}
+          {/* 6. Weight Presence Tri-State Filter Button */}
           <button
             type="button"
-            onClick={() => onHasNoWeightFilterChange && onHasNoWeightFilterChange(!hasNoWeightFilter)}
+            onClick={() => {
+              const next = effectiveWeightFilter === '' ? 'has_weight' : (effectiveWeightFilter === 'has_weight' ? 'no_weight' : '');
+              if (onHasWeightFilterStateChange) onHasWeightFilterStateChange(next);
+              if (onHasNoWeightFilterChange) onHasNoWeightFilterChange(next === 'no_weight');
+            }}
             className="form-select"
             style={{
               flex: '0 0 auto',
               width: 'auto',
-              minWidth: '105px',
+              minWidth: '115px',
               height: '36px',
               borderRadius: 'var(--radius-pill)',
               fontSize: '0.82rem',
@@ -1999,30 +2161,58 @@ export default function ItemTable({
               justifyContent: 'center',
               gap: '6px',
               cursor: 'pointer',
-              background: hasNoWeightFilter ? 'rgba(239, 68, 68, 0.12)' : undefined,
-              borderColor: hasNoWeightFilter ? 'var(--brand-primary)' : undefined,
-              color: hasNoWeightFilter ? 'var(--brand-primary)' : 'var(--text-primary)',
-              fontWeight: hasNoWeightFilter ? 700 : 500,
+              background: effectiveWeightFilter === 'has_weight'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : effectiveWeightFilter === 'no_weight'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : undefined,
+              borderColor: effectiveWeightFilter === 'has_weight'
+                ? '#10B981'
+                : effectiveWeightFilter === 'no_weight'
+                ? 'var(--brand-primary)'
+                : undefined,
+              color: effectiveWeightFilter === 'has_weight'
+                ? '#059669'
+                : effectiveWeightFilter === 'no_weight'
+                ? 'var(--brand-primary)'
+                : 'var(--text-primary)',
+              fontWeight: effectiveWeightFilter ? 700 : 500,
               whiteSpace: 'nowrap',
               userSelect: 'none',
               transition: 'all 0.15s ease',
             }}
-            title="Filter items with missing or 0 weight"
+            title={
+              effectiveWeightFilter === 'has_weight'
+                ? 'Showing: Has Weight (click for Has No Weight)'
+                : effectiveWeightFilter === 'no_weight'
+                ? 'Showing: Has No Weight (click to clear)'
+                : 'Filter: Click to show only items with weight'
+            }
           >
             <Scale size={14} />
-            <span>Has no weight</span>
-            {hasNoWeightFilter && <Check size={12} />}
+            <span>
+              {effectiveWeightFilter === 'has_weight'
+                ? 'Has weight'
+                : effectiveWeightFilter === 'no_weight'
+                ? 'Has no weight'
+                : 'Weight (All)'}
+            </span>
+            {effectiveWeightFilter && <Check size={12} />}
           </button>
 
-          {/* 7. Has no volume Toggle Button */}
+          {/* 7. Volume / Dimensions Presence Tri-State Filter Button */}
           <button
             type="button"
-            onClick={() => onHasNoVolumeFilterChange && onHasNoVolumeFilterChange(!hasNoVolumeFilter)}
+            onClick={() => {
+              const next = effectiveVolumeFilter === '' ? 'has_volume' : (effectiveVolumeFilter === 'has_volume' ? 'no_volume' : '');
+              if (onHasVolumeFilterStateChange) onHasVolumeFilterStateChange(next);
+              if (onHasNoVolumeFilterChange) onHasNoVolumeFilterChange(next === 'no_volume');
+            }}
             className="form-select"
             style={{
               flex: '0 0 auto',
               width: 'auto',
-              minWidth: '105px',
+              minWidth: '115px',
               height: '36px',
               borderRadius: 'var(--radius-pill)',
               fontSize: '0.82rem',
@@ -2032,19 +2222,43 @@ export default function ItemTable({
               justifyContent: 'center',
               gap: '6px',
               cursor: 'pointer',
-              background: hasNoVolumeFilter ? 'rgba(239, 68, 68, 0.12)' : undefined,
-              borderColor: hasNoVolumeFilter ? 'var(--brand-primary)' : undefined,
-              color: hasNoVolumeFilter ? 'var(--brand-primary)' : 'var(--text-primary)',
-              fontWeight: hasNoVolumeFilter ? 700 : 500,
+              background: effectiveVolumeFilter === 'has_volume'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : effectiveVolumeFilter === 'no_volume'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : undefined,
+              borderColor: effectiveVolumeFilter === 'has_volume'
+                ? '#10B981'
+                : effectiveVolumeFilter === 'no_volume'
+                ? 'var(--brand-primary)'
+                : undefined,
+              color: effectiveVolumeFilter === 'has_volume'
+                ? '#059669'
+                : effectiveVolumeFilter === 'no_volume'
+                ? 'var(--brand-primary)'
+                : 'var(--text-primary)',
+              fontWeight: effectiveVolumeFilter ? 700 : 500,
               whiteSpace: 'nowrap',
               userSelect: 'none',
               transition: 'all 0.15s ease',
             }}
-            title="Filter items with missing Length, Width, or Height dimensions"
+            title={
+              effectiveVolumeFilter === 'has_volume'
+                ? 'Showing: Has Volume / Dimensions (click for Has No Volume)'
+                : effectiveVolumeFilter === 'no_volume'
+                ? 'Showing: Has No Volume (click to clear)'
+                : 'Filter: Click to show items with dimensions'
+            }
           >
             <Box size={14} />
-            <span>Has no volume</span>
-            {hasNoVolumeFilter && <Check size={12} />}
+            <span>
+              {effectiveVolumeFilter === 'has_volume'
+                ? 'Has volume'
+                : effectiveVolumeFilter === 'no_volume'
+                ? 'Has no volume'
+                : 'Volume (All)'}
+            </span>
+            {effectiveVolumeFilter && <Check size={12} />}
           </button>
 
           {/* Right Actions: Reset & Close */}
@@ -3958,19 +4172,19 @@ export default function ItemTable({
           </button>
         )}
 
-        {/* AI Product Description Generator Button when in Edit Mode */}
+        {/* AI Product Generator Button when in Edit Mode */}
         {isEditMode && (
           <button
             type="button"
-            onClick={handleGenerateAIDescriptions}
+            onClick={handleOpenAILaunchModal}
             disabled={generatingAI}
             className="btn inv-floating-btn"
             style={{
-              background: 'linear-gradient(135deg, #6366F1 0%, #A855F7 100%)',
+              background: 'var(--brand-primary)',
               color: '#ffffff',
               border: 'none',
               borderRadius: 'var(--radius-pill)',
-              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.45)',
+              boxShadow: '0 8px 24px var(--brand-ruby-glow, rgba(197, 34, 36, 0.45))',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -3980,15 +4194,15 @@ export default function ItemTable({
               cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
               whiteSpace: 'nowrap',
             }}
-            title="Generate AI product descriptions using Gemini Vision in the background"
+            title="Launch AI Studio to generate names and descriptions using Gemini Vision"
           >
             <Sparkles size={16} className={`inv-float-icon ${generatingAI ? 'animate-spin' : ''}`} />
             <span className="inv-btn-text-full">
               {generatingAI
                 ? 'Starting AI...'
                 : selectedItemIds.length > 0
-                ? `AI Descriptions (${selectedItemIds.length})`
-                : 'AI Descriptions'}
+                ? `AI Studio (${selectedItemIds.length})`
+                : 'AI Studio'}
             </span>
             <span className="inv-btn-text-mobile">
               {generatingAI
@@ -4384,6 +4598,15 @@ export default function ItemTable({
         onConfirm={(changes) => {
           handleApplyBulkChangesToInventory(changes);
         }}
+      />
+
+      {/* AI CATALOG STUDIO LAUNCH MODAL */}
+      <AIGenerateLaunchModal
+        isOpen={isAiLaunchModalOpen}
+        onClose={() => setIsAiLaunchModalOpen(false)}
+        items={aiLaunchTargetItems}
+        onConfirm={handleConfirmAILaunch}
+        loading={generatingAI}
       />
     </div>
   );

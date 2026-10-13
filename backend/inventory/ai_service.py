@@ -877,6 +877,194 @@ def generate_product_description(
     raise ValueError(f"Generation stopped after {attempts} attempt(s): {reason}")
 
 
+# ============================================================================
+# AI PRODUCT NAME GENERATION ENGINE (E-COMMERCE / WEBSITE READY)
+# ============================================================================
+
+PRODUCT_NAME_SYSTEM_PROMPT = """
+You are an expert e-commerce catalog specialist and brand merchandising editor.
+
+TASK:
+Analyze the provided product image and existing catalog details (such as current internal name, description notes, category, specifications) to generate an attractive, high-converting, professional, and SEO-optimized e-commerce Product Title for an online storefront.
+
+NAMING CONVENTIONS & GUIDELINES:
+1. Product Title Formula:
+   [Brand / Brand Style if evident] + [Core Product Identity] + [Key Defining Features / Materials / Color / Variant] + [Pack / Size / Net Qty if applicable]
+   - Example (messy name "BLU DEN JKT" or "jacket 42"): "Men's Classic Slim-Fit Denim Jacket with Washed Finish"
+   - Example (messy name "BOTTLE-750"): "Stainless Steel Double-Wall Vacuum Insulated Water Bottle (750ml)"
+   - Example (messy name "CUSH CV 2P"): "Boho Tufted Cotton Decorative Cushion Covers (Pack of 2)"
+   - Example (messy name "KIDS TOY CAR"): "Die-Cast Pull-Back Racing Toy Car with Light & Sound Effects"
+
+2. Upgrading Weak Names:
+   - Expand shorthand abbreviations, vendor catalog codes, smudged OCR artifacts, or vague 1-word names.
+   - Look at the actual photo: verify visible color, pattern, material (wood, ceramic, cotton, leather, steel), utility, and silhouette.
+   - If existing description notes or category provide helpful context, utilize them.
+
+3. Conciseness & Clarity:
+   - Target length: 4 to 12 words (approx. 35 to 80 characters, strictly maximum 120 characters).
+   - Natural, clean title case (e.g. "Wireless Bluetooth Over-Ear Headphones with Deep Bass").
+   - Do NOT include promotional gimmicks (no "HOT DEAL", "CHEAP", "BEST PRICE", "100% ORIGINAL").
+   - Output ONLY the single final product title as plain text. No quotes, no markdown headers, no preamble, no bullets.
+"""
+
+
+def generate_product_name(
+    image_bytes: bytes,
+    mime_type: str,
+    item_data: Dict[str, Any],
+    custom_api_keys: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Generates an SEO-optimized, attractive e-commerce product name from an image and item metadata.
+    Supports multi-API-key rotation across rate limits and model fallbacks.
+    Strictly enforces concise output under 150 characters.
+    """
+    key_pool = []
+    if custom_api_keys:
+        for k in custom_api_keys:
+            if isinstance(k, str) and k.strip() and k.strip() not in key_pool:
+                key_pool.append(k.strip())
+
+    for k in get_configured_gemini_api_keys():
+        if k not in key_pool:
+            key_pool.append(k)
+
+    if not key_pool:
+        raise ValueError(
+            "No Gemini API keys configured. Please add an active Gemini API key in Settings -> Gemini AI tab or configure GEMINI_API_KEYS in backend/.env."
+        )
+
+    opt_bytes, opt_mime = optimize_image_for_ai(image_bytes)
+    b64_image = base64.b64encode(opt_bytes).decode('utf-8')
+
+    current_name = str(item_data.get('name', '')).strip()
+    category_name = str(item_data.get('category_name', '')).strip()
+    subcategory_name = str(item_data.get('subcategory_name', '')).strip()
+    existing_desc = str(item_data.get('description', '')).strip()
+    price = item_data.get('selling_price', '')
+    mrp = item_data.get('mrp', '')
+
+    meta_text = ""
+    if current_name:
+        meta_text += f"Current / Internal Name: {current_name}\n"
+    if category_name:
+        meta_text += f"Category: {category_name}\n"
+    if subcategory_name:
+        meta_text += f"Subcategory: {subcategory_name}\n"
+    if existing_desc:
+        meta_text += f"Existing Description / Notes: {existing_desc[:300]}\n"
+    if price:
+        meta_text += f"Selling Price: ₹{price}\n"
+    if mrp:
+        meta_text += f"MRP: ₹{mrp}\n"
+
+    parts = [
+        {
+            "inline_data": {
+                "mime_type": opt_mime,
+                "data": b64_image
+            }
+        },
+        {
+            "text": f"{PRODUCT_NAME_SYSTEM_PROMPT}\n\nPRODUCT DETAILS:\n{meta_text}\n\nGenerate the single polished e-commerce product title now (plain text only, strictly under 100 characters):"
+        }
+    ]
+
+    MAX_ATTEMPTS = 3
+    attempts = 0
+    last_error = None
+    has_daily_quota_error = False
+
+    for key_idx, current_key in enumerate(key_pool):
+        if attempts >= MAX_ATTEMPTS:
+            break
+        for model_name in GEMINI_MODELS:
+            if attempts >= MAX_ATTEMPTS:
+                break
+            try:
+                logger.info(f"Generating product name with key [{key_idx + 1}/{len(key_pool)}] model {model_name} (Attempt {attempts + 1}/{MAX_ATTEMPTS})")
+                res_json = call_gemini_api(
+                    api_key=current_key,
+                    parts=parts,
+                    model=model_name,
+                    timeout=20,
+                    response_mime_type=None,
+                    temperature=0.2,
+                    max_output_tokens=100
+                )
+
+                candidates = res_json.get('candidates', [])
+                if candidates and candidates[0].get('content', {}).get('parts'):
+                    generated_name = candidates[0]['content']['parts'][0].get('text', '').strip()
+                    for wrapper in ['```markdown', '```', '"', "'", '**', '#']:
+                        generated_name = generated_name.replace(wrapper, '').strip()
+                    lines = [ln.strip() for ln in generated_name.split('\n') if ln.strip()]
+                    if lines:
+                        generated_name = lines[0]
+                    generated_name = re.sub(r'^(Product Title|Title|Name|Product Name)\s*:\s*', '', generated_name, flags=re.IGNORECASE).strip()
+
+                    if not generated_name:
+                        attempts += 1
+                        continue
+
+                    if len(generated_name) > 150:
+                        generated_name = generated_name[:147] + '...'
+
+                    return {
+                        "success": True,
+                        "name": generated_name,
+                        "model_used": model_name,
+                        "key_index": key_idx + 1
+                    }
+
+            except urllib.error.HTTPError as http_err:
+                last_error = http_err
+                err_detail = ""
+                try:
+                    err_detail = http_err.read().decode('utf-8')
+                except Exception:
+                    pass
+
+                if http_err.code in (429, 403):
+                    attempts += 1
+                    err_str_lower = (err_detail or http_err.reason or "").lower()
+                    is_daily = any(phrase in err_str_lower for phrase in [
+                        'day', 'daily', 'quota exceeded', 'free_tier_requests_per_day', 'rpd'
+                    ])
+                    if is_daily:
+                        has_daily_quota_error = True
+                        break
+                    else:
+                        continue
+                elif http_err.code == 400:
+                    attempts += 1
+                    continue
+                else:
+                    attempts += 1
+                    continue
+
+            except Exception as e:
+                last_error = e
+                attempts += 1
+                continue
+
+    if has_daily_quota_error:
+        raise GeminiRateLimitError(
+            "Daily AI generation quota exhausted across all configured Gemini API keys. Please try again tomorrow or add a new free API key in Settings.",
+            is_daily=True,
+            raw_error=str(last_error)
+        )
+
+    err_msg = str(last_error) if last_error else ""
+    if "429" in err_msg or "Quota" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+        raise GeminiRateLimitError(
+            "Gemini API rate limit or quota exceeded on available keys.",
+            is_daily=False,
+            raw_error=err_msg
+        )
+    raise ValueError(f"Name generation stopped after {attempts} attempt(s): {err_msg or 'Could not generate product name.'}")
+
+
 
 def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List[str]] = None) -> None:
     """
@@ -899,6 +1087,7 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
     job.save(update_fields=['status', 'status_message', 'updated_at'])
 
     item_pks = job.item_ids or []
+    gen_name_pks = set(job.generate_name_ids or [])
     idx = 0
 
     while idx < len(item_pks):
@@ -921,7 +1110,12 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
             if not primary_img or not primary_img.image:
                 item.ai_description_status = 'skipped_no_image'
                 item.ai_description_error = 'No product image uploaded'
-                item.save(update_fields=['ai_description_status', 'ai_description_error'])
+                if pk in gen_name_pks or item.needs_better_name:
+                    item.ai_name_status = 'skipped_no_image'
+                    item.ai_name_error = 'No product image uploaded'
+                    item.save(update_fields=['ai_description_status', 'ai_description_error', 'ai_name_status', 'ai_name_error'])
+                else:
+                    item.save(update_fields=['ai_description_status', 'ai_description_error'])
                 job.skipped_items += 1
                 job.save(update_fields=['skipped_items', 'updated_at'])
                 idx += 1
@@ -935,7 +1129,12 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
             except Exception as file_err:
                 item.ai_description_status = 'failed'
                 item.ai_description_error = f"Failed to read image file: {str(file_err)}"
-                item.save(update_fields=['ai_description_status', 'ai_description_error'])
+                if pk in gen_name_pks or item.needs_better_name:
+                    item.ai_name_status = 'failed'
+                    item.ai_name_error = f"Failed to read image file: {str(file_err)}"
+                    item.save(update_fields=['ai_description_status', 'ai_description_error', 'ai_name_status', 'ai_name_error'])
+                else:
+                    item.save(update_fields=['ai_description_status', 'ai_description_error'])
                 job.failed_items += 1
                 job.save(update_fields=['failed_items', 'updated_at'])
                 idx += 1
@@ -949,11 +1148,39 @@ def process_ai_description_batch_job(job_id: str, custom_api_keys: Optional[List
                 'name': item.name,
                 'category_name': cat_name,
                 'subcategory_name': subcat_name,
+                'description': item.description,
                 'selling_price': str(item.selling_price),
                 'mrp': str(item.mrp) if item.mrp else ''
             }
 
-            # Mark item as actively generating in progress
+            # If product is flagged for an upgraded name, generate name first!
+            should_generate_name = (pk in gen_name_pks) or item.needs_better_name
+            if should_generate_name:
+                item.ai_name_status = 'generating'
+                item.save(update_fields=['ai_name_status'])
+                try:
+                    name_res = generate_product_name(
+                        image_bytes=img_bytes,
+                        mime_type='image/jpeg',
+                        item_data=item_data,
+                        custom_api_keys=custom_api_keys
+                    )
+                    if name_res.get('success') and name_res.get('name'):
+                        clean_name = name_res['name'].strip()
+                        item.ai_name_draft = clean_name
+                        item.ai_name_status = 'ready'
+                        item.ai_name_error = ''
+                        item.ai_name_updated_at = timezone.now()
+                        item.save(update_fields=['ai_name_draft', 'ai_name_status', 'ai_name_error', 'ai_name_updated_at'])
+                        # Use the new generated name for generating the description!
+                        item_data['name'] = clean_name
+                except Exception as name_err:
+                    logger.warning(f"AI Name generation failed for item {pk}: {name_err}")
+                    item.ai_name_status = 'failed'
+                    item.ai_name_error = str(name_err)
+                    item.save(update_fields=['ai_name_status', 'ai_name_error'])
+
+            # Mark item as actively generating description in progress
             item.ai_description_status = 'generating'
             item.save(update_fields=['ai_description_status'])
 

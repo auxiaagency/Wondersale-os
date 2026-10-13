@@ -94,6 +94,7 @@ from .ai_service import (
     extract_products_from_bill,
     test_gemini_api_key,
     generate_product_description,
+    generate_product_name,
     start_background_batch_description_job,
     get_configured_gemini_api_keys,
     GeminiRateLimitError,
@@ -527,38 +528,65 @@ class ItemViewSet(viewsets.ModelViewSet):
             except (ValueError, TypeError):
                 pass
 
-        # Filter by has_no_image
+        # Filter by image presence
         has_no_image = self.request.query_params.get('has_no_image')
+        has_image = self.request.query_params.get('has_image')
         if has_no_image is not None and has_no_image.lower() in ('true', '1'):
             qs = qs.filter(images__isnull=True)
+        elif has_image is not None and has_image.lower() in ('true', '1'):
+            qs = qs.filter(images__isnull=False).distinct()
 
-        # Filter by has_no_subcategory
+        # Filter by subcategory presence
         has_no_subcategory = self.request.query_params.get('has_no_subcategory')
+        has_subcategory = self.request.query_params.get('has_subcategory')
         if has_no_subcategory is not None and has_no_subcategory.lower() in ('true', '1'):
             qs = qs.filter(subcategories__isnull=True)
+        elif has_subcategory is not None and has_subcategory.lower() in ('true', '1'):
+            qs = qs.filter(subcategories__isnull=False).distinct()
 
         # Filter by supplier
         supplier_id = self.request.query_params.get('supplier')
         if supplier_id:
             qs = qs.filter(supplier_id=supplier_id)
 
-        # Filter by has_no_supplier
+        # Filter by supplier presence
         has_no_supplier = self.request.query_params.get('has_no_supplier')
+        has_supplier = self.request.query_params.get('has_supplier')
         if has_no_supplier is not None and has_no_supplier.lower() in ('true', '1'):
             qs = qs.filter(supplier__isnull=True)
+        elif has_supplier is not None and has_supplier.lower() in ('true', '1'):
+            qs = qs.filter(supplier__isnull=False)
 
-        # Filter by has_no_weight
+        # Filter by section presence
+        has_no_section = self.request.query_params.get('has_no_section')
+        has_section = self.request.query_params.get('has_section')
+        if has_no_section is not None and has_no_section.lower() in ('true', '1'):
+            qs = qs.filter(section__isnull=True)
+        elif has_section is not None and has_section.lower() in ('true', '1'):
+            qs = qs.filter(section__isnull=False)
+
+        # Filter by weight presence
         has_no_weight = self.request.query_params.get('has_no_weight')
+        has_weight = self.request.query_params.get('has_weight')
         if has_no_weight is not None and has_no_weight.lower() in ('true', '1'):
             qs = qs.filter(Q(weight__isnull=True) | Q(weight__lte=0))
+        elif has_weight is not None and has_weight.lower() in ('true', '1'):
+            qs = qs.filter(weight__isnull=False, weight__gt=0)
 
-        # Filter by has_no_volume
+        # Filter by volume / dimensions presence
         has_no_volume = self.request.query_params.get('has_no_volume')
+        has_volume = self.request.query_params.get('has_volume')
         if has_no_volume is not None and has_no_volume.lower() in ('true', '1'):
             qs = qs.filter(
                 Q(length__isnull=True) | Q(length__lte=0) |
                 Q(width__isnull=True) | Q(width__lte=0) |
                 Q(height__isnull=True) | Q(height__lte=0)
+            )
+        elif has_volume is not None and has_volume.lower() in ('true', '1'):
+            qs = qs.filter(
+                length__isnull=False, length__gt=0,
+                width__isnull=False, width__gt=0,
+                height__isnull=False, height__gt=0
             )
 
         # Sorting parameter (matches frontend sortBy options)
@@ -1251,6 +1279,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         descriptions for selected or all eligible items using Gemini Vision.
         """
         item_ids = request.data.get('item_ids', [])
+        generate_name_ids = request.data.get('generate_name_ids', [])
         store_id = request.data.get('store_id')
 
         member = get_current_staff(request)
@@ -1276,11 +1305,23 @@ class ItemViewSet(viewsets.ModelViewSet):
         if not target_ids:
             return Response({'error': 'No eligible products found for description generation.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Resolve which items require AI name generation first
+        if isinstance(generate_name_ids, list) and len(generate_name_ids) > 0:
+            valid_gen_name_ids = [gid for gid in generate_name_ids if gid in target_ids]
+        else:
+            # Auto-include items marked with needs_better_name
+            valid_gen_name_ids = list(target_items.filter(needs_better_name=True).values_list('id', flat=True))
+
         # Mark target items as pending
         Item.objects.filter(id__in=target_ids).update(
             ai_description_status='pending',
             ai_description_error=''
         )
+        if valid_gen_name_ids:
+            Item.objects.filter(id__in=valid_gen_name_ids).update(
+                ai_name_status='pending',
+                ai_name_error=''
+            )
 
         # Create batch job record
         job = AIDescriptionBatchJob.objects.create(
@@ -1290,7 +1331,8 @@ class ItemViewSet(viewsets.ModelViewSet):
             completed_items=0,
             failed_items=0,
             skipped_items=0,
-            item_ids=target_ids
+            item_ids=target_ids,
+            generate_name_ids=valid_gen_name_ids
         )
 
         # Parse optional custom API keys passed by client
@@ -1498,6 +1540,7 @@ class ItemViewSet(viewsets.ModelViewSet):
             'name': item.name,
             'category_name': cat_name,
             'subcategory_name': subcat_name,
+            'description': item.description,
             'selling_price': str(item.selling_price),
             'mrp': str(item.mrp) if item.mrp else ''
         }
@@ -1508,6 +1551,32 @@ class ItemViewSet(viewsets.ModelViewSet):
             custom_keys = [k.strip() for k in custom_keys.split(',') if k.strip()]
 
         try:
+            should_generate_name = bool(request.data.get('generate_name', False)) or item.needs_better_name
+            generated_name = None
+            if should_generate_name:
+                try:
+                    item.ai_name_status = 'generating'
+                    item.save(update_fields=['ai_name_status'])
+                    name_res = generate_product_name(
+                        image_bytes=img_bytes,
+                        mime_type='image/jpeg',
+                        item_data=item_data,
+                        custom_api_keys=custom_keys
+                    )
+                    if name_res.get('success') and name_res.get('name'):
+                        generated_name = name_res['name'].strip()
+                        item.ai_name_draft = generated_name
+                        item.ai_name_status = 'ready'
+                        item.ai_name_error = ''
+                        item.ai_name_updated_at = timezone.now()
+                        item.save(update_fields=['ai_name_draft', 'ai_name_status', 'ai_name_error', 'ai_name_updated_at'])
+                        item_data['name'] = generated_name
+                except Exception as name_err:
+                    logger.warning(f"Single AI name generation error for item {item.id}: {name_err}")
+                    item.ai_name_status = 'failed'
+                    item.ai_name_error = str(name_err)
+                    item.save(update_fields=['ai_name_status', 'ai_name_error'])
+
             item.ai_description_status = 'generating'
             item.save(update_fields=['ai_description_status'])
             _sync_item_to_job(item)
@@ -1675,6 +1744,186 @@ class ItemViewSet(viewsets.ModelViewSet):
         Retries AI description generation for a failed or skipped item.
         """
         return self.single_ai_generate_description(request, pk=pk)
+
+    @action(detail=True, methods=['post'], url_path='ai-generate-name')
+    def single_ai_generate_name(self, request, pk=None):
+        """
+        Generates an AI product name draft for a single item immediately using Gemini Vision.
+        """
+        item = self.get_object()
+        primary_img = item.primary_image
+
+        if not primary_img or not primary_img.image:
+            item.ai_name_status = 'skipped_no_image'
+            item.ai_name_error = 'No product image uploaded. Please upload a photo first.'
+            item.save(update_fields=['ai_name_status', 'ai_name_error'])
+            return Response({
+                'error': 'This item has no product image. Please upload a product image first to generate an AI name.',
+                'status': 'skipped_no_image',
+                'item': ItemSerializer(item, context={'request': request}).data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            img_file = primary_img.image.open('rb')
+            img_bytes = img_file.read()
+            img_file.close()
+        except Exception as file_err:
+            item.ai_name_status = 'failed'
+            item.ai_name_error = f"Failed to read image file: {str(file_err)}"
+            item.save(update_fields=['ai_name_status', 'ai_name_error'])
+            return Response({
+                'error': f"Failed to read product image: {str(file_err)}",
+                'item': ItemSerializer(item, context={'request': request}).data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        cat_name = item.effective_primary_category.name if item.effective_primary_category else ''
+        subcat_name = item.effective_primary_subcategory.name if item.effective_primary_subcategory else ''
+
+        item_data = {
+            'name': item.name,
+            'category_name': cat_name,
+            'subcategory_name': subcat_name,
+            'description': item.description,
+            'selling_price': str(item.selling_price),
+            'mrp': str(item.mrp) if item.mrp else ''
+        }
+
+        custom_keys = request.data.get('api_keys')
+        if isinstance(custom_keys, str):
+            custom_keys = [k.strip() for k in custom_keys.split(',') if k.strip()]
+
+        try:
+            item.ai_name_status = 'generating'
+            item.save(update_fields=['ai_name_status'])
+
+            gen_res = generate_product_name(
+                image_bytes=img_bytes,
+                mime_type='image/jpeg',
+                item_data=item_data,
+                custom_api_keys=custom_keys
+            )
+
+            name_val = gen_res.get('name', '')
+            if name_val:
+                clean_name = str(name_val).strip()[:150]
+                item.ai_name_draft = clean_name
+                item.ai_name_status = 'ready'
+                item.ai_name_error = ''
+                item.ai_name_updated_at = timezone.now()
+                item.save(update_fields=[
+                    'ai_name_draft',
+                    'ai_name_status',
+                    'ai_name_error',
+                    'ai_name_updated_at'
+                ])
+                return Response({
+                    'success': True,
+                    'name': clean_name,
+                    'model_used': gen_res.get('model_used'),
+                    'item': ItemSerializer(item, context={'request': request}).data,
+                })
+            else:
+                item.ai_name_status = 'failed'
+                item.ai_name_error = 'Gemini returned an empty product name.'
+                item.save(update_fields=['ai_name_status', 'ai_name_error'])
+                return Response({
+                    'error': 'AI returned an empty product name.',
+                    'item': ItemSerializer(item, context={'request': request}).data
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except GeminiRateLimitError as rate_err:
+            item.ai_name_status = 'failed'
+            item.ai_name_error = rate_err.message
+            item.save(update_fields=['ai_name_status', 'ai_name_error'])
+            return Response({
+                'error': rate_err.message,
+                'is_daily': rate_err.is_daily,
+                'item': ItemSerializer(item, context={'request': request}).data
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        except Exception as ex:
+            item.ai_name_status = 'failed'
+            item.ai_name_error = str(ex)
+            item.save(update_fields=['ai_name_status', 'ai_name_error'])
+            return Response({
+                'error': str(ex),
+                'item': ItemSerializer(item, context={'request': request}).data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='apply-ai-name')
+    def apply_ai_name(self, request, pk=None):
+        """
+        Commits the generated or edited AI draft name to the live item.name field.
+        """
+        item = self.get_object()
+        custom_text = request.data.get('name')
+        name_to_apply = custom_text if (custom_text is not None and str(custom_text).strip()) else item.ai_name_draft
+
+        if not name_to_apply or not str(name_to_apply).strip():
+            return Response({'error': 'No product name provided to apply.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        clean_name = str(name_to_apply).strip()[:150]
+        item.name = clean_name
+        item.ai_name_draft = clean_name
+        item.ai_name_status = 'applied'
+        item.ai_name_error = ''
+        item.needs_better_name = False
+        item.save(update_fields=['name', 'ai_name_draft', 'ai_name_status', 'ai_name_error', 'needs_better_name', 'updated_at'])
+
+        return Response({
+            'success': True,
+            'message': 'Product name updated successfully.',
+            'item': ItemSerializer(item, context={'request': request}).data
+        })
+
+    @action(detail=True, methods=['post'], url_path='discard-ai-name')
+    def discard_ai_name(self, request, pk=None):
+        """
+        Discards the AI generated draft name for an item.
+        """
+        item = self.get_object()
+        item.ai_name_status = 'none'
+        item.ai_name_draft = ''
+        item.ai_name_error = ''
+        item.save(update_fields=['ai_name_status', 'ai_name_draft', 'ai_name_error', 'updated_at'])
+        return Response({
+            'success': True,
+            'message': 'AI name draft discarded.',
+            'item': ItemSerializer(item, context={'request': request}).data
+        })
+
+    @action(detail=False, methods=['post'], url_path='bulk-apply-ai-names')
+    def bulk_apply_ai_names(self, request):
+        """
+        Bulk commits all approved/ready AI draft names to their live item.name fields.
+        """
+        item_ids = request.data.get('item_ids', [])
+        member = get_current_staff(request)
+        store = member.store if member and member.store else None
+
+        if item_ids and isinstance(item_ids, list) and len(item_ids) > 0:
+            qs = Item.objects.filter(id__in=item_ids).exclude(ai_name_draft='')
+        else:
+            qs = Item.objects.filter(ai_name_status='ready').exclude(ai_name_draft='')
+            if store:
+                qs = qs.filter(store=store)
+
+        applied_count = 0
+        for item in qs:
+            if item.ai_name_draft and str(item.ai_name_draft).strip():
+                clean_name = str(item.ai_name_draft).strip()[:150]
+                item.name = clean_name
+                item.ai_name_draft = clean_name
+                item.ai_name_status = 'applied'
+                item.ai_name_error = ''
+                item.needs_better_name = False
+                item.save(update_fields=['name', 'ai_name_draft', 'ai_name_status', 'ai_name_error', 'needs_better_name', 'updated_at'])
+                applied_count += 1
+
+        return Response({
+            'success': True,
+            'applied_count': applied_count,
+            'message': f"Successfully applied AI product names to {applied_count} products."
+        })
 
     # ─── Variant & Batch Management Actions ──────────────────────────────────
 

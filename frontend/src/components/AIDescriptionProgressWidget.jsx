@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, CheckCircle2, AlertTriangle, RefreshCw, X, ChevronRight, Minimize2, Maximize2, Move } from 'lucide-react';
+import { Sparkles, CheckCircle2, AlertTriangle, RefreshCw, X, ChevronRight, Minimize2, Maximize2 } from 'lucide-react';
 import { fetchActiveAIDescriptionJob } from '../api';
 
 export default function AIDescriptionProgressWidget({
@@ -8,12 +8,24 @@ export default function AIDescriptionProgressWidget({
   onJobStatusChange
 }) {
   const [job, setJob] = useState(null);
-  const [isMinimized, setIsMinimized] = useState(false);
+  // Default to minimized form on initial startup or page reload
+  const [isMinimized, setIsMinimized] = useState(() => {
+    const saved = localStorage.getItem('ai_widget_minimized');
+    return saved !== null ? saved === 'true' : true;
+  });
   const [isVisible, setIsVisible] = useState(true);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [networkError, setNetworkError] = useState(null);
   const dragStartRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0 });
+
+  const toggleMinimized = (val) => {
+    setIsMinimized(prev => {
+      const next = typeof val === 'boolean' ? val : !prev;
+      localStorage.setItem('ai_widget_minimized', String(next));
+      return next;
+    });
+  };
 
   const pollJob = async () => {
     try {
@@ -49,14 +61,14 @@ export default function AIDescriptionProgressWidget({
       if (e.detail) {
         setJob(e.detail);
         setIsVisible(true);
-        setIsMinimized(false);
+        // Keep in minimized form as requested
+        toggleMinimized(true);
         setNetworkError(null);
       }
     };
 
     const handleOpenStudio = (e) => {
       setIsVisible(true);
-      setIsMinimized(false);
       if (onOpenReview) {
         onOpenReview(e.detail?.jobId || job?.id || 'active');
       }
@@ -145,17 +157,17 @@ export default function AIDescriptionProgressWidget({
       <div
         className="ai-progress-widget-card"
         style={{
-          width: isMinimized ? '280px' : '360px',
-          backgroundColor: 'var(--bg-surface-solid, var(--bg-surface, #141829))',
+          width: isMinimized ? '300px' : '360px',
+          backgroundColor: 'var(--bg-surface-solid)',
           backdropFilter: 'blur(16px)',
-          border: '1px solid var(--border-strong, rgba(99, 102, 241, 0.35))',
-          borderRadius: '18px',
-          boxShadow: 'var(--shadow-lg, 0 20px 48px rgba(0, 0, 0, 0.4)), 0 0 24px rgba(99, 102, 241, 0.15)',
-          color: 'var(--text-primary, #ffffff)',
-          padding: '14px 16px',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-lg, 18px)',
+          boxShadow: 'var(--shadow-lg, 0 20px 48px rgba(0, 0, 0, 0.4))',
+          color: 'var(--text-primary)',
+          padding: isMinimized ? '10px 14px' : '14px 16px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
+          gap: isMinimized ? '0' : '12px',
           transition: 'width 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease',
           fontFamily: 'var(--font-sans, system-ui, sans-serif)',
         }}
@@ -169,67 +181,86 @@ export default function AIDescriptionProgressWidget({
             alignItems: 'center',
             justifyContent: 'space-between',
             cursor: 'grab',
-            borderBottom: isMinimized ? 'none' : '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            borderBottom: isMinimized ? 'none' : '1px solid var(--border-subtle)',
             paddingBottom: isMinimized ? '0' : '10px',
           }}
         >
-          <div className="ai-progress-header-left" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div
+            className="ai-progress-header-left"
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, cursor: isMinimized ? 'pointer' : 'grab' }}
+            onClick={() => {
+              if (isMinimized) toggleMinimized(false);
+            }}
+          >
             <div
               className="ai-progress-icon-box"
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '10px',
-                background: isRunning ? 'rgba(99, 102, 241, 0.18)' : (hasPendingReview ? 'rgba(16, 185, 129, 0.18)' : 'rgba(99, 102, 241, 0.12)'),
-                border: isRunning ? '1px solid rgba(99, 102, 241, 0.45)' : (hasPendingReview ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid var(--border-subtle)'),
-                color: isRunning ? '#6366F1' : (hasPendingReview ? '#10B981' : 'var(--text-secondary)'),
+                width: isMinimized ? '28px' : '32px',
+                height: isMinimized ? '28px' : '32px',
+                borderRadius: 'var(--radius-sm, 8px)',
+                background: isRunning
+                  ? 'var(--brand-ruby-glow, rgba(197, 34, 36, 0.15))'
+                  : hasPendingReview
+                  ? 'var(--color-success-bg, rgba(16, 185, 129, 0.15))'
+                  : 'var(--bg-surface-hover)',
+                border: isRunning
+                  ? '1px solid rgba(197, 34, 36, 0.35)'
+                  : hasPendingReview
+                  ? '1px solid rgba(16, 185, 129, 0.35)'
+                  : '1px solid var(--border-subtle)',
+                color: isRunning
+                  ? 'var(--brand-primary)'
+                  : hasPendingReview
+                  ? 'var(--color-success)'
+                  : 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <Sparkles size={16} />
+              <Sparkles size={isMinimized ? 14 : 16} />
             </div>
 
-            <div className="ai-progress-title-wrap" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="ai-progress-title-wrap" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="ai-progress-title" style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text-primary, #ffffff)' }}>
-                  AI Description Studio
+                <span className="ai-progress-title" style={{ fontSize: isMinimized ? '0.82rem' : '0.86rem', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                  AI Studio
                 </span>
                 {isRunning && (
                   <span
                     style={{
-                      width: '8px',
-                      height: '8px',
+                      width: '7px',
+                      height: '7px',
                       borderRadius: '50%',
-                      background: '#6366F1',
-                      boxShadow: '0 0 10px #6366F1',
+                      background: 'var(--brand-primary)',
+                      boxShadow: '0 0 8px var(--brand-primary)',
                       display: 'inline-block',
                       animation: 'pulse 1.5s infinite',
+                      flexShrink: 0,
                     }}
                   />
                 )}
               </div>
-              <span className="ai-progress-subtitle" style={{ fontSize: '0.72rem', color: 'var(--text-secondary, #94a3b8)' }}>
+              <span className="ai-progress-subtitle" style={{ fontSize: '0.70rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {isRunning
-                  ? `Generating in background (${processed}/${total})`
+                  ? `Running (${processed}/${total})`
                   : hasPendingReview
-                  ? `${readyCount} draft${readyCount > 1 ? 's' : ''} ready for review`
-                  : 'No job in progress'}
+                  ? `${readyCount} ready`
+                  : 'Idle'}
               </span>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="ai-progress-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div className="ai-progress-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
             <button
               type="button"
-              onClick={() => setIsMinimized(!isMinimized)}
+              onClick={() => toggleMinimized()}
               style={{
-                background: 'var(--bg-surface-hover, rgba(255, 255, 255, 0.08))',
-                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
-                color: 'var(--text-secondary, #cbd5e1)',
+                background: 'var(--bg-surface-hover)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
                 width: '26px',
                 height: '26px',
                 borderRadius: '6px',
@@ -237,9 +268,9 @@ export default function AIDescriptionProgressWidget({
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                transition: 'background-color 0.15s ease, color 0.15s ease',
+                transition: 'var(--transition-smooth)',
               }}
-              title={isMinimized ? "Expand" : "Minimize"}
+              title={isMinimized ? "Expand AI Studio" : "Minimize"}
             >
               {isMinimized ? <Maximize2 size={13} /> : <Minimize2 size={13} />}
             </button>
@@ -247,9 +278,9 @@ export default function AIDescriptionProgressWidget({
               type="button"
               onClick={() => setIsVisible(false)}
               style={{
-                background: 'var(--bg-surface-hover, rgba(255, 255, 255, 0.08))',
-                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
-                color: 'var(--text-secondary, #cbd5e1)',
+                background: 'var(--bg-surface-hover)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
                 width: '26px',
                 height: '26px',
                 borderRadius: '6px',
@@ -257,7 +288,7 @@ export default function AIDescriptionProgressWidget({
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                transition: 'background-color 0.15s ease, color 0.15s ease',
+                transition: 'var(--transition-smooth)',
               }}
               title="Close widget"
             >
@@ -273,7 +304,7 @@ export default function AIDescriptionProgressWidget({
             {networkError && (
               <div
                 style={{
-                  background: 'rgba(239, 68, 68, 0.12)',
+                  background: 'var(--color-danger-bg, rgba(239, 68, 68, 0.12))',
                   border: '1px solid rgba(239, 68, 68, 0.35)',
                   borderRadius: '10px',
                   padding: '8px 10px',
@@ -316,18 +347,18 @@ export default function AIDescriptionProgressWidget({
               <div
                 style={{
                   background: job.status_message.toLowerCase().includes('daily')
-                    ? 'rgba(245, 158, 11, 0.12)'
-                    : 'rgba(99, 102, 241, 0.14)',
+                    ? 'var(--color-warning-bg, rgba(245, 158, 11, 0.12))'
+                    : 'var(--brand-ruby-glow, rgba(197, 34, 36, 0.12))',
                   border: job.status_message.toLowerCase().includes('daily')
                     ? '1px solid rgba(245, 158, 11, 0.35)'
-                    : '1px solid rgba(99, 102, 241, 0.4)',
+                    : '1px solid rgba(197, 34, 36, 0.3)',
                   borderRadius: '10px',
                   padding: '7px 10px',
                   fontSize: '0.72rem',
                   lineHeight: '1.4',
                   color: job.status_message.toLowerCase().includes('daily')
-                    ? '#f59e0b'
-                    : '#818cf8',
+                    ? 'var(--color-warning, #f59e0b)'
+                    : 'var(--brand-primary)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
@@ -342,15 +373,15 @@ export default function AIDescriptionProgressWidget({
             {isRunning ? (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 600, marginBottom: '4px' }}>
-                  <span style={{ color: 'var(--text-secondary, #94a3b8)' }}>{percentage}% Completed</span>
-                  <span style={{ color: '#6366F1' }}>{processed} of {total} Products</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{percentage}% Completed</span>
+                  <span style={{ color: 'var(--brand-primary)' }}>{processed} of {total} Products</span>
                 </div>
-                <div style={{ width: '100%', height: '7px', background: 'var(--bg-card-hover, rgba(125, 125, 125, 0.15))', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: '7px', background: 'var(--bg-surface-hover)', borderRadius: '10px', overflow: 'hidden' }}>
                   <div
                     style={{
                       height: '100%',
                       width: `${percentage}%`,
-                      background: 'linear-gradient(90deg, #6366F1 0%, #A855F7 50%, #10B981 100%)',
+                      background: 'linear-gradient(90deg, var(--brand-primary) 0%, #10B981 100%)',
                       borderRadius: '10px',
                       transition: 'width 0.4s ease',
                     }}
@@ -360,7 +391,7 @@ export default function AIDescriptionProgressWidget({
             ) : hasPendingReview ? (
               <div
                 style={{
-                  background: 'rgba(16, 185, 129, 0.08)',
+                  background: 'var(--color-success-bg, rgba(16, 185, 129, 0.08))',
                   border: '1px solid rgba(16, 185, 129, 0.25)',
                   borderRadius: '10px',
                   padding: '7px 10px',
@@ -368,7 +399,7 @@ export default function AIDescriptionProgressWidget({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  color: 'var(--text-primary, #ffffff)',
+                  color: 'var(--text-primary)',
                 }}
               >
                 <CheckCircle2 size={15} style={{ color: '#10B981', flexShrink: 0 }} />
@@ -379,15 +410,15 @@ export default function AIDescriptionProgressWidget({
             ) : (
               <div
                 style={{
-                  background: 'var(--bg-surface-hover, rgba(125, 125, 125, 0.08))',
-                  border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+                  background: 'var(--bg-surface-hover)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '10px',
                   padding: '7px 10px',
                   fontSize: '0.74rem',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  color: 'var(--text-secondary, #94a3b8)',
+                  color: 'var(--text-secondary)',
                 }}
               >
                 <CheckCircle2 size={15} style={{ color: '#10B981', flexShrink: 0 }} />
@@ -406,22 +437,22 @@ export default function AIDescriptionProgressWidget({
               }}
             >
               {isRunning && (
-                <div style={{ background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
-                  <span className="ai-badge-num" style={{ display: 'block', fontSize: '1rem', fontWeight: 800, color: '#a855f7', lineHeight: 1.1 }}>{inProgressCount}</span>
-                  <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase' }}>In Progress</span>
+                <div style={{ background: 'var(--brand-ruby-glow, rgba(197, 34, 36, 0.1))', border: '1px solid rgba(197, 34, 36, 0.25)', borderRadius: '10px', padding: '6px 2px' }}>
+                  <span className="ai-badge-num" style={{ display: 'block', fontSize: '1rem', fontWeight: 800, color: 'var(--brand-primary)', lineHeight: 1.1 }}>{inProgressCount}</span>
+                  <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>In Progress</span>
                 </div>
               )}
-              <div style={{ background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
+              <div style={{ background: 'var(--color-success-bg, rgba(16, 185, 129, 0.12))', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
                 <span className="ai-badge-num" style={{ display: 'block', fontSize: '1rem', fontWeight: 800, color: '#10b981', lineHeight: 1.1 }}>{readyCount}</span>
-                <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase' }}>Ready</span>
+                <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Ready</span>
               </div>
-              <div style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
+              <div style={{ background: 'var(--color-warning-bg, rgba(245, 158, 11, 0.12))', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
                 <span className="ai-badge-num" style={{ display: 'block', fontSize: '1rem', fontWeight: 800, color: '#f59e0b', lineHeight: 1.1 }}>{skippedCount}</span>
-                <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase' }}>No Photo</span>
+                <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>No Photo</span>
               </div>
-              <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
+              <div style={{ background: 'var(--color-danger-bg, rgba(239, 68, 68, 0.12))', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '6px 2px' }}>
                 <span className="ai-badge-num" style={{ display: 'block', fontSize: '1rem', fontWeight: 800, color: '#ef4444', lineHeight: 1.1 }}>{failedCount}</span>
-                <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary, #94a3b8)', textTransform: 'uppercase' }}>Failed</span>
+                <span className="ai-badge-lbl" style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Failed</span>
               </div>
             </div>
 
@@ -432,7 +463,7 @@ export default function AIDescriptionProgressWidget({
               onClick={() => onOpenReview(job.id)}
               style={{
                 width: '100%',
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                background: 'var(--brand-primary)',
                 border: 'none',
                 color: '#ffffff',
                 borderRadius: '12px',
@@ -444,8 +475,8 @@ export default function AIDescriptionProgressWidget({
                 justifyContent: 'center',
                 gap: '6px',
                 cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(99, 102, 241, 0.35)',
-                transition: 'transform 0.15s ease, filter 0.15s ease',
+                boxShadow: '0 4px 16px var(--brand-ruby-glow, rgba(197, 34, 36, 0.35))',
+                transition: 'var(--transition-smooth)',
               }}
               onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.1)')}
               onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(1.0)')}
