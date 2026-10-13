@@ -64,15 +64,17 @@ def get_configured_gemini_api_keys() -> List[str]:
 
 
 # Models to attempt in priority order:
-# We pin directly to production versions ('gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', etc.)
-# and avoid alias endpoints like 'gemini-flash-latest' which Google aliases to preview models (with 20 RPD limits) or slower reasoning pipelines.
+# Google has migrated newly issued API keys to the 3.x series, deprecating older 1.5/2.0 endpoints with HTTP 404.
+# Models are attempted in order: flash-lite for speed and higher throughput, followed by standard flash models.
 GEMINI_MODELS = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash-8b',
-    'gemini-1.5-pro',
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
 ]
 
 EXTRACTION_SYSTEM_PROMPT = """
