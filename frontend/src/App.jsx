@@ -448,7 +448,6 @@ export default function App() {
       const [data, statsData] = await Promise.all([
         fetchItems(itemParams, fetchOpts),
         fetchInventoryStats(filterParams, fetchOpts).catch((err) => {
-          // Swallow abort errors silently; re-throw real errors
           if (err?.name === 'AbortError') return null;
           return null;
         }),
@@ -484,25 +483,39 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventoryPage, inventoryPageSize, inventorySortBy]);
+  // NOTE: intentionally omitting inventoryPage — callers always pass targetPage explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventoryPageSize, inventorySortBy]);
 
-  // Unified effect: when search/filters change, reset to page 1 and fetch in one shot.
-  // AbortController cancels any in-flight request so stale responses can never overwrite fresh ones.
+  // filterResetInProgressRef: set to true whenever a search/filter change resets the page to 1.
+  // The page-navigation effect checks this flag so it doesn't fire a duplicate fetch for that reset.
+  // The flag is cleared inside the setTimeout callback (after the microtask queue drains) so that
+  // genuine user page-clicks that happen afterwards are never accidentally blocked.
+  const filterResetInProgressRef = useRef(false);
+
+  // Unified filter+search effect (replaces old separate reset-page + debounced-fetch effects).
+  // A single AbortController ensures only the latest request ever resolves into state.
   useEffect(() => {
     if (!currentUser) return;
-    // Cancel any previous in-flight request immediately
+    // Abort any previous in-flight request immediately
     if (inventoryFetchAbortRef.current) {
       inventoryFetchAbortRef.current.abort();
     }
     const controller = new AbortController();
     inventoryFetchAbortRef.current = controller;
 
-    // Reset page state so pagination UI reflects page 1
+    // Mark that the upcoming inventoryPage reset to 1 is from a filter change,
+    // NOT a user clicking a page button — so the page-nav effect below skips it.
+    filterResetInProgressRef.current = true;
     setInventoryPage(1);
 
-    // Debounce: 300ms for non-empty queries (lets user finish typing); 0ms to clear
+    // Debounce: 300ms for non-empty queries (lets the user finish typing);
+    // 0ms to instantly restore the full list when the search is cleared.
     const delay = searchQuery.trim() ? 300 : 0;
     const handler = setTimeout(() => {
+      // Clear the flag before fetching so that any page click that arrives
+      // after this point is treated as genuine navigation.
+      filterResetInProgressRef.current = false;
       loadItems(1, controller.signal);
     }, delay);
     return () => {
@@ -512,20 +525,15 @@ export default function App() {
     };
   }, [currentUser, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
 
-  // Page-navigation effect: fires ONLY when the user explicitly clicks a page button.
-  // Guard: skip if inventoryPage is 1 and it was just reset by the unified effect above
-  // (avoids double-fetch on filter/search changes that also reset to page 1).
-  const prevInventoryPageRef = useRef(null);
+  // Page-navigation effect: fires when the user explicitly clicks a pagination button.
+  // The filterResetInProgressRef guard prevents a duplicate fetch when the unified
+  // effect above resets inventoryPage to 1 as a side-effect of a filter/search change.
   useEffect(() => {
     if (!currentUser) return;
-    // Skip the very first render (initial load is handled by the unified effect above)
-    if (prevInventoryPageRef.current === null) {
-      prevInventoryPageRef.current = inventoryPage;
+    if (filterResetInProgressRef.current) {
+      // This page change came from a filter reset, not the user — skip the fetch.
       return;
     }
-    // Only fetch if this is a genuine user-driven page change (not a filter-reset side-effect)
-    if (prevInventoryPageRef.current === inventoryPage) return;
-    prevInventoryPageRef.current = inventoryPage;
     loadItems(inventoryPage);
   }, [inventoryPage, inventoryPageSize]);
 
