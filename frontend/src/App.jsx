@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import Navbar from './components/Navbar';
 import AppLauncher, { isModuleAccessible } from './components/AppLauncher';
 import LoginView from './components/LoginView';
