@@ -263,7 +263,7 @@ export default function ItemTable({
         }
         barcodeScanBufferRef.current = '';
       } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        if (diff > 120) {
+        if (diff > 200) {
           barcodeScanBufferRef.current = e.key;
         } else {
           barcodeScanBufferRef.current += e.key;

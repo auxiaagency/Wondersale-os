@@ -393,7 +393,11 @@ export default function App() {
   const [inventoryStats, setInventoryStats] = useState(null);
 
   // Fetch items with true server-side pagination & lazy loading
-  const loadItems = useCallback(async (targetPage = null) => {
+  // Ref to hold the AbortController for the current in-flight inventory fetch.
+  // Cancelled whenever a new fetch starts so stale responses never overwrite fresh results.
+  const inventoryFetchAbortRef = useRef(null);
+
+  const loadItems = useCallback(async (targetPage = null, signal = null) => {
     if (!currentUser || !isModuleAccessible(currentUser, 'inventory')) return;
     setLoading(true);
     try {
@@ -440,9 +444,14 @@ export default function App() {
       };
       if (inventorySortBy) itemParams.sort = inventorySortBy;
 
+      const fetchOpts = signal ? { signal } : {};
       const [data, statsData] = await Promise.all([
-        fetchItems(itemParams),
-        fetchInventoryStats(filterParams).catch(() => null),
+        fetchItems(itemParams, fetchOpts),
+        fetchInventoryStats(filterParams, fetchOpts).catch((err) => {
+          // Swallow abort errors silently; re-throw real errors
+          if (err?.name === 'AbortError') return null;
+          return null;
+        }),
       ]);
 
       if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.results)) {
@@ -468,30 +477,55 @@ export default function App() {
         setInventoryStats(statsData);
       }
     } catch (err) {
-      console.error('Error fetching inventory items', err);
+      // Swallow AbortErrors — they mean a newer request superseded this one
+      if (err?.name !== 'AbortError') {
+        console.error('Error fetching inventory items', err);
+      }
     } finally {
       setLoading(false);
     }
-  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventoryPageSize, inventorySortBy]);
+  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventoryPage, inventoryPageSize, inventorySortBy]);
 
-  // Reset to page 1 whenever any filter or search changes
+  // Unified effect: when search/filters change, reset to page 1 and fetch in one shot.
+  // AbortController cancels any in-flight request so stale responses can never overwrite fresh ones.
   useEffect(() => {
+    if (!currentUser) return;
+    // Cancel any previous in-flight request immediately
+    if (inventoryFetchAbortRef.current) {
+      inventoryFetchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    inventoryFetchAbortRef.current = controller;
+
+    // Reset page state so pagination UI reflects page 1
     setInventoryPage(1);
-  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
 
-  // Fetch data on search or filter change with debounce
-  useEffect(() => {
-    if (!currentUser) return;
-    const delay = searchQuery ? 150 : 0;
+    // Debounce: 300ms for non-empty queries (lets user finish typing); 0ms to clear
+    const delay = searchQuery.trim() ? 300 : 0;
     const handler = setTimeout(() => {
-      loadItems(1);
+      loadItems(1, controller.signal);
     }, delay);
-    return () => clearTimeout(handler);
-  }, [searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
+    return () => {
+      clearTimeout(handler);
+      controller.abort();
+      inventoryFetchAbortRef.current = null;
+    };
+  }, [currentUser, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
 
-  // Fetch data when user navigates page
+  // Page-navigation effect: fires ONLY when the user explicitly clicks a page button.
+  // Guard: skip if inventoryPage is 1 and it was just reset by the unified effect above
+  // (avoids double-fetch on filter/search changes that also reset to page 1).
+  const prevInventoryPageRef = useRef(null);
   useEffect(() => {
     if (!currentUser) return;
+    // Skip the very first render (initial load is handled by the unified effect above)
+    if (prevInventoryPageRef.current === null) {
+      prevInventoryPageRef.current = inventoryPage;
+      return;
+    }
+    // Only fetch if this is a genuine user-driven page change (not a filter-reset side-effect)
+    if (prevInventoryPageRef.current === inventoryPage) return;
+    prevInventoryPageRef.current = inventoryPage;
     loadItems(inventoryPage);
   }, [inventoryPage, inventoryPageSize]);
 

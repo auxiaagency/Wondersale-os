@@ -589,7 +589,7 @@ export async function deleteSection(id) {
   return true;
 }
 
-export async function fetchItems(params = {}) {
+export async function fetchItems(params = {}, { signal } = {}) {
   const url = new URL(`${window.location.origin}${API_BASE}/items/`);
   Object.entries(params).forEach(([key, val]) => {
     if (val !== undefined && val !== null && val !== '') {
@@ -599,6 +599,7 @@ export async function fetchItems(params = {}) {
 
   const res = await fetch(url.toString(), {
     headers: getAuthHeaders(),
+    ...(signal ? { signal } : {}),
   });
   if (!res.ok) throw new Error('Failed to fetch items');
   return res.json();
@@ -606,7 +607,7 @@ export async function fetchItems(params = {}) {
 
 export const getItems = fetchItems;
 
-export async function fetchInventoryStats(params = {}) {
+export async function fetchInventoryStats(params = {}, { signal } = {}) {
   const url = new URL(`${window.location.origin}${API_BASE}/items/stats/`);
   Object.entries(params).forEach(([key, val]) => {
     if (val !== undefined && val !== null && val !== '') {
@@ -616,6 +617,7 @@ export async function fetchInventoryStats(params = {}) {
 
   const res = await fetch(url.toString(), {
     headers: getAuthHeaders(),
+    ...(signal ? { signal } : {}),
   });
   if (!res.ok) throw new Error('Failed to fetch inventory stats');
   return res.json();
