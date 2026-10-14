@@ -3064,6 +3064,13 @@ export async function markBrokenItemNoFine(reportId) {
 // ----------------- One-Time Historical Inward & Past Bills Migration -----------------
 
 export async function parseHistoricalSheet(formData) {
+  if (formData instanceof FormData && !formData.has('api_keys')) {
+    const keys = getStoredGeminiApiKeys();
+    if (keys && keys.length > 0) {
+      formData.append('api_keys', JSON.stringify(keys));
+    }
+  }
+
   const res = await fetch(`${API_BASE}/sales/parse-historical-sheet/`, {
     method: 'POST',
     headers: getAuthHeaders(),

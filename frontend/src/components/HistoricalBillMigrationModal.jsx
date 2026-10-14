@@ -24,6 +24,9 @@ import {
   QrCode,
   Banknote,
   PenTool,
+  Combine,
+  CheckSquare,
+  Clipboard,
 } from 'lucide-react';
 import { parseHistoricalSheet, commitHistoricalBatch } from '../api';
 
@@ -49,15 +52,14 @@ export default function HistoricalBillMigrationModal({
   const deductStock = true; // Billing always deducts stock from inventory
   const [sheetReference, setSheetReference] = useState('10/10/26 Kitchen Utility');
 
-  // Custom AI Guidance / Prompt
+  // Custom AI Guidance / Prompt (Default instructions stay in background, input field is solely for user's additional context)
   const [showPromptBox, setShowPromptBox] = useState(false);
-  const [customPrompt, setCustomPrompt] = useState(
-    'Daily multi-bill tally sheet. Horizontal dividing lines separate individual customer bills. Column 1 is barcode / UID, Column 2 has quantity formulas like 5x39, Column 3 is line amount, Column 5 is customer mobile number. Payment method is indicated in Cash/UPI/Card column.'
-  );
+  const [customPrompt, setCustomPrompt] = useState('');
 
-  // File & Camera Upload State
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [filePreview, setFilePreview] = useState(null);
+  // File & Camera Upload State - Supports single and multiple files (bulk upload)
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filePreviews, setFilePreviews] = useState([]);
+  const [dragActive, setDragActive] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const videoRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -69,10 +71,16 @@ export default function HistoricalBillMigrationModal({
   const [parseError, setParseError] = useState('');
   const [commitMessage, setCommitMessage] = useState(null);
 
+  // Pre-OCR Multi-Page Split Bill Selection State (Uploaded files that form a single continuous bill)
+  const [selectedFileIndices, setSelectedFileIndices] = useState([]);
+
   // Queues
   const [validBills, setValidBills] = useState([]);
   const [rejectedBills, setRejectedBills] = useState([]);
   const [usedModel, setUsedModel] = useState('');
+
+  // Post-OCR Multi-Page Split Bill Merge Selection State
+  const [selectedBillIndices, setSelectedBillIndices] = useState([]);
 
   // Interactive Anomaly Inspector Modal State
   const [inspectingBill, setInspectingBill] = useState(null);
@@ -98,6 +106,61 @@ export default function HistoricalBillMigrationModal({
       }
     };
   }, []);
+
+  // Listen for Clipboard Paste (Ctrl+V / Command+V) when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePaste = (e) => {
+      // Don't intercept paste if user is typing into text inputs, textareas, etc.
+      const target = e.target;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        // If it's a file input, allow default
+        if (target.type !== 'file') {
+          // If clipboard actually has image files, we still want to grab them if text field is empty or user is pasting an image
+          const clipboardItems = e.clipboardData?.items;
+          const hasImage = clipboardItems && Array.from(clipboardItems).some((it) => it.type.startsWith('image/'));
+          if (!hasImage) return;
+        }
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items || items.length === 0) return;
+
+      const pastedImageFiles = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          if (blob) {
+            const ext = blob.type.split('/')[1] || 'png';
+            const file = new File(
+              [blob],
+              `clipboard_sheet_${Date.now()}_${i + 1}.${ext}`,
+              { type: blob.type }
+            );
+            pastedImageFiles.push(file);
+          }
+        }
+      }
+
+      if (pastedImageFiles.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleFilesSelected(pastedImageFiles);
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -136,24 +199,105 @@ export default function HistoricalBillMigrationModal({
     ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
     canvas.toBlob((blob) => {
       const file = new File([blob], `sheet_snapshot_${Date.now()}.jpg`, { type: 'image/jpeg' });
-      handleFileSelected(file);
+      handleFilesSelected([file]);
       stopCamera();
     }, 'image/jpeg', 0.95);
   };
 
-  const handleFileSelected = (file) => {
-    if (!file) return;
-    setSelectedFile(file);
-    const reader = new FileReader();
-    reader.onload = (e) => setFilePreview(e.target.result);
-    reader.readAsDataURL(file);
+  const handleFilesSelected = (incomingFiles) => {
+    if (!incomingFiles || incomingFiles.length === 0) return;
+    const filesArray = Array.from(incomingFiles);
+
+    const validNewFiles = [];
+    filesArray.forEach((file) => {
+      const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+      const isImg = file.type?.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(file.name || '');
+      if (isPdf || isImg) {
+        validNewFiles.push(file);
+      }
+    });
+
+    if (validNewFiles.length === 0) {
+      setParseError('Please upload valid sheet image files (JPG, PNG, WebP) or PDF documents.');
+      return;
+    }
+
+    // Read previews for newly added files
+    validNewFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFilePreviews((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: file.size,
+            dataUrl: e.target.result,
+            isPdf: file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf'),
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    setSelectedFiles((prev) => [...prev, ...validNewFiles]);
     setParseError('');
+  };
+
+  const handleRemoveFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== index));
+    setFilePreviews((prev) => prev.filter((_, idx) => idx !== index));
+    setSelectedFileIndices((prev) =>
+      prev
+        .filter((idx) => idx !== index)
+        .map((idx) => (idx > index ? idx - 1 : idx))
+    );
+  };
+
+  const handleClearAllFiles = () => {
+    setSelectedFiles([]);
+    setFilePreviews([]);
+    setSelectedFileIndices([]);
+    setParseError('');
+  };
+
+  const handleToggleSelectFile = (index) => {
+    setSelectedFileIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  };
+
+  const handleSelectAllFiles = () => {
+    if (selectedFileIndices.length === selectedFiles.length) {
+      setSelectedFileIndices([]);
+    } else {
+      setSelectedFileIndices(selectedFiles.map((_, i) => i));
+    }
+  };
+
+  // Drag and Drop handlers
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      handleFilesSelected(e.dataTransfer.files);
+    }
   };
 
   // Run AI Sheet Parsing
   const handleParseSheet = async () => {
-    if (!selectedFile) {
-      setParseError('Please upload or snap a photo of the register sheet first.');
+    if (!selectedFiles || selectedFiles.length === 0) {
+      setParseError('Please upload, drop, or snap a photo of the register sheet(s) first.');
       return;
     }
 
@@ -163,9 +307,26 @@ export default function HistoricalBillMigrationModal({
 
     try {
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      selectedFiles.forEach((f) => {
+        formData.append('files', f);
+      });
+      // Also append first file as 'file' for backward-compatible fallback
+      if (selectedFiles[0]) {
+        formData.append('file', selectedFiles[0]);
+      }
       if (store?.id) formData.append('store_id', store.id);
-      if (customPrompt) formData.append('custom_prompt', customPrompt);
+
+      // Construct effective custom prompt including multi-page split bill instructions if selected
+      let effectiveCustomPrompt = (customPrompt || '').trim();
+      if (selectedFileIndices.length >= 2) {
+        const pageNames = selectedFileIndices.map((i) => `Page #${i + 1} (${selectedFiles[i]?.name || `File ${i + 1}`})`).join(' and ');
+        const mergeDirectives = `[IMPORTANT MULTI-PAGE SPLIT BILL]: The attached files ${pageNames} are consecutive pages of ONE SINGLE customer bill that was split across multiple sheets/pages. Treat all items on these pages as ONE single continuous bill: concatenate all line items together into one single bill entry, do not split them into multiple bills, and calculate the overall total for the combined bill.`;
+        effectiveCustomPrompt = effectiveCustomPrompt
+          ? `${mergeDirectives}\n\nAdditional Operator Context: ${effectiveCustomPrompt}`
+          : mergeDirectives;
+      }
+
+      if (effectiveCustomPrompt) formData.append('custom_prompt', effectiveCustomPrompt);
 
       const result = await parseHistoricalSheet(formData);
 
@@ -353,9 +514,86 @@ export default function HistoricalBillMigrationModal({
   const handleDiscardRejectedBill = (billIndex) => {
     if (!window.confirm(`Discard Bill #${billIndex}? It will not be imported.`)) return;
     setRejectedBills((prev) => prev.filter((b) => b.bill_index !== billIndex));
+    setSelectedBillIndices((prev) => prev.filter((idx) => idx !== billIndex));
     if (inspectingBill && inspectingBill.bill_index === billIndex) {
       setInspectingBill(null);
     }
+  };
+
+  // Split-Bill Merge Selection Handlers
+  const handleToggleSelectBill = (billIndex) => {
+    setSelectedBillIndices((prev) =>
+      prev.includes(billIndex) ? prev.filter((idx) => idx !== billIndex) : [...prev, billIndex]
+    );
+  };
+
+  const handleSelectAllInTab = () => {
+    const currentList = activeTab === 'ready' ? validBills : activeTab === 'rejected' ? rejectedBills : [];
+    if (selectedBillIndices.length === currentList.length) {
+      setSelectedBillIndices([]);
+    } else {
+      setSelectedBillIndices(currentList.map((b) => b.bill_index));
+    }
+  };
+
+  const handleMergeSelectedBills = () => {
+    if (selectedBillIndices.length < 2) {
+      alert('Please select at least 2 pages/bills to merge into a single continuous customer bill.');
+      return;
+    }
+
+    const currentList = activeTab === 'ready' ? validBills : rejectedBills;
+    const targetsToMerge = currentList.filter((b) => selectedBillIndices.includes(b.bill_index));
+
+    if (targetsToMerge.length < 2) {
+      alert('Selected bills could not be found in the current queue.');
+      return;
+    }
+
+    const firstBill = targetsToMerge[0];
+    const customerPhone = targetsToMerge.find((b) => b.customer_phone && b.customer_phone !== 'Walk-in')?.customer_phone || firstBill.customer_phone || 'Walk-in';
+    const paymentMethod = targetsToMerge.find((b) => b.payment_method && b.payment_method !== 'cash')?.payment_method || firstBill.payment_method || 'cash';
+
+    // Combine all line items
+    const combinedItems = [];
+    targetsToMerge.forEach((b) => {
+      if (Array.isArray(b.items)) {
+        combinedItems.push(...b.items);
+      }
+    });
+
+    const combinedTotal = combinedItems.reduce((acc, it) => acc + (Number(it.total_price) || (Number(it.unit_price || 0) * Number(it.quantity || 1))), 0);
+    const combinedRejectionReasons = Array.from(new Set(targetsToMerge.flatMap((b) => b.rejection_reasons || [])));
+    const allItemsValid = combinedItems.length > 0 && combinedItems.every((it) => it.is_valid && it.item_id);
+
+    const mergedBill = {
+      ...firstBill,
+      bill_index: firstBill.bill_index,
+      customer_phone: customerPhone,
+      payment_method: paymentMethod,
+      items: combinedItems,
+      total_amount: Math.round(combinedTotal * 100) / 100,
+      is_valid: allItemsValid,
+      status: allItemsValid ? 'valid' : 'rejected',
+      rejection_reasons: allItemsValid ? [] : combinedRejectionReasons,
+      anomalous_indices: allItemsValid ? [] : combinedItems.map((it, idx) => (!it.is_valid ? idx : null)).filter((idx) => idx !== null),
+      notes: `Merged from ${targetsToMerge.length} split bill pages (Bills #${targetsToMerge.map((b) => b.bill_index).join(', #')})`,
+    };
+
+    if (activeTab === 'ready') {
+      setValidBills((prev) => [
+        ...prev.filter((b) => !selectedBillIndices.includes(b.bill_index)),
+        mergedBill,
+      ]);
+    } else {
+      setRejectedBills((prev) => [
+        ...prev.filter((b) => !selectedBillIndices.includes(b.bill_index)),
+        mergedBill,
+      ]);
+    }
+
+    setSelectedBillIndices([]);
+    alert(`Successfully merged ${targetsToMerge.length} pages into single Bill #${mergedBill.bill_index} with ${combinedItems.length} items (Total: ₹${mergedBill.total_amount.toLocaleString('en-IN')})!`);
   };
 
   // Filter items for remap autocomplete
@@ -703,32 +941,18 @@ export default function HistoricalBillMigrationModal({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#FBBF24' }}>
-                    Special Instructions for Gemini OCR:
+                    Additional OCR Context (Standard extraction rules run in the background):
                   </span>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  {customPrompt && (
                     <button
                       type="button"
-                      onClick={() =>
-                        setCustomPrompt(
-                          'Multi-bill tally sheet. Horizontal dividing lines separate customer bills. Column 1 is barcode/UID, Column 2 has quantity (e.g. 5x39), Column 3 is amount, Column 5 is mobile number. Payment method in Cash/UPI/Card column.'
-                        )
-                      }
+                      onClick={() => setCustomPrompt('')}
                       className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px' }}
+                      style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px', color: 'var(--text-muted)' }}
                     >
-                      📋 Multi-Bill Sheet
+                      Clear
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCustomPrompt('Single customer purchase slip. Extract items, quantities, rates, and customer mobile number.')
-                      }
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.72rem', padding: '3px 8px', borderRadius: '6px' }}
-                    >
-                      🧾 Single Memo
-                    </button>
-                  </div>
+                  )}
                 </div>
                 <textarea
                   value={customPrompt}
@@ -744,7 +968,7 @@ export default function HistoricalBillMigrationModal({
                     color: 'var(--text-primary)',
                     fontFamily: 'inherit',
                   }}
-                  placeholder="Provide any context about columns, shorthand notations, or handwriting..."
+                  placeholder="Optional: Enter any extra hints, notes on messy handwriting, custom columns or notations..."
                 />
               </div>
             )}
@@ -760,9 +984,17 @@ export default function HistoricalBillMigrationModal({
               {/* Dropzone / Camera Feed */}
               {!isCameraActive ? (
                 <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
                   onClick={() => fileInputRef.current?.click()}
                   style={{
-                    border: '2px dashed rgba(245, 158, 11, 0.35)',
+                    border: dragActive
+                      ? '2px dashed #F59E0B'
+                      : selectedFiles.length > 0
+                      ? '2px solid rgba(16, 185, 129, 0.45)'
+                      : '2px dashed rgba(245, 158, 11, 0.35)',
                     borderRadius: 'var(--radius-lg, 12px)',
                     padding: '24px 16px',
                     display: 'flex',
@@ -770,70 +1002,133 @@ export default function HistoricalBillMigrationModal({
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    background: 'rgba(0, 0, 0, 0.15)',
+                    background: dragActive
+                      ? 'rgba(245, 158, 11, 0.12)'
+                      : selectedFiles.length > 0
+                      ? 'rgba(16, 185, 129, 0.05)'
+                      : 'rgba(0, 0, 0, 0.15)',
                     textAlign: 'center',
                     transition: 'all 0.2s ease',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#F59E0B';
-                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.04)';
+                    if (!dragActive) {
+                      e.currentTarget.style.borderColor = '#F59E0B';
+                      e.currentTarget.style.background = 'rgba(245, 158, 11, 0.04)';
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.35)';
-                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.15)';
+                    if (!dragActive) {
+                      e.currentTarget.style.borderColor = selectedFiles.length > 0 ? 'rgba(16, 185, 129, 0.45)' : 'rgba(245, 158, 11, 0.35)';
+                      e.currentTarget.style.background = selectedFiles.length > 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(0, 0, 0, 0.15)';
+                    }
                   }}
                 >
                   <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     accept="image/*,.pdf"
                     style={{ display: 'none' }}
-                    onChange={(e) => handleFileSelected(e.target.files?.[0])}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleFilesSelected(e.target.files);
+                      }
+                    }}
                   />
                   <div
                     style={{
                       width: '46px',
                       height: '46px',
                       borderRadius: '12px',
-                      background: 'rgba(245, 158, 11, 0.12)',
-                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                      background: selectedFiles.length > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.12)',
+                      border: selectedFiles.length > 0 ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.25)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: '#F59E0B',
+                      color: selectedFiles.length > 0 ? '#10B981' : '#F59E0B',
                       marginBottom: '10px',
                     }}
                   >
-                    <Upload size={22} />
+                    {selectedFiles.length > 0 ? <CheckCircle2 size={24} /> : <Upload size={22} />}
                   </div>
                   <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Click to browse or drop tally sheet photo
+                    {selectedFiles.length > 0
+                      ? `${selectedFiles.length} Sheet${selectedFiles.length > 1 ? 's' : ''} Loaded — Click or drop to add more`
+                      : 'Click to browse or drop tally sheet photo(s)'}
                   </p>
-                  <p style={{ margin: '4px 0 12px 0', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    Supports JPG, PNG, WebP or PDF
+                  <p style={{ margin: '4px 0 10px 0', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    Drop, browse, or press <kbd style={{ padding: '2px 5px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.1)', color: '#FBBF24', fontSize: '0.72rem', border: '1px solid rgba(255, 255, 255, 0.2)' }}>Ctrl + V</kbd> to paste from clipboard
                   </p>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startCamera();
-                    }}
-                    className="btn btn-secondary btn-sm"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '6px 14px',
-                      borderRadius: 'var(--radius-pill)',
-                      fontWeight: 700,
-                      fontSize: '0.78rem',
-                      borderColor: 'rgba(245, 158, 11, 0.4)',
-                      color: '#FBBF24',
-                    }}
-                  >
-                    <Camera size={14} />
-                    <span>Take Live Photo</span>
-                  </button>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          if (navigator.clipboard && navigator.clipboard.read) {
+                            const clipboardItems = await navigator.clipboard.read();
+                            const files = [];
+                            for (const item of clipboardItems) {
+                              const imageType = item.types.find((t) => t.startsWith('image/'));
+                              if (imageType) {
+                                const blob = await item.getType(imageType);
+                                const ext = imageType.split('/')[1] || 'png';
+                                files.push(new File([blob], `clipboard_sheet_${Date.now()}.${ext}`, { type: imageType }));
+                              }
+                            }
+                            if (files.length > 0) {
+                              handleFilesSelected(files);
+                              return;
+                            }
+                          }
+                          setParseError('No image found in clipboard. Copy an image screenshot first, then paste.');
+                        } catch (err) {
+                          console.warn('Clipboard read error:', err);
+                          setParseError('Please press Ctrl+V to paste your clipboard image directly into this window.');
+                        }
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        borderRadius: 'var(--radius-pill)',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        borderColor: 'rgba(56, 189, 248, 0.4)',
+                        color: '#38BDF8',
+                        background: 'rgba(56, 189, 248, 0.08)',
+                      }}
+                    >
+                      <Clipboard size={14} />
+                      <span>Paste Image (Ctrl+V)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startCamera();
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        borderRadius: 'var(--radius-pill)',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        borderColor: 'rgba(245, 158, 11, 0.4)',
+                        color: '#FBBF24',
+                      }}
+                    >
+                      <Camera size={14} />
+                      <span>Take Live Photo</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div
@@ -887,61 +1182,196 @@ export default function HistoricalBillMigrationModal({
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  padding: '16px',
+                  padding: '14px 16px',
                   borderRadius: 'var(--radius-lg, 12px)',
                   background: 'var(--bg-input, #0F1322)',
                   border: '1px solid var(--border-subtle)',
                 }}
               >
-                {filePreview ? (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                    <img
-                      src={filePreview}
-                      alt="Sheet Preview"
-                      style={{
-                        width: '84px',
-                        height: '84px',
-                        objectFit: 'cover',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(255, 255, 255, 0.15)',
-                      }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: '0.82rem',
-                          fontWeight: 700,
-                          color: 'var(--text-primary)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {selectedFile?.name}
-                      </p>
-                      <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                        Size: {Math.round((selectedFile?.size || 0) / 1024)} KB
-                      </p>
+                {selectedFiles.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                          Selected Sheets ({selectedFiles.length})
+                        </span>
+                        {selectedFiles.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={handleSelectAllFiles}
+                            className="btn btn-secondary btn-sm"
+                            style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '4px' }}
+                          >
+                            {selectedFileIndices.length === selectedFiles.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        )}
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedFile(null);
-                          setFilePreview(null);
-                        }}
+                        onClick={handleClearAllFiles}
                         style={{
                           background: 'none',
                           border: 'none',
                           color: '#EF4444',
-                          padding: '4px 0 0 0',
                           fontSize: '0.72rem',
                           cursor: 'pointer',
-                          textAlign: 'left',
-                          fontWeight: 600,
+                          fontWeight: 700,
+                          padding: 0,
                         }}
                       >
-                        Remove photo
+                        Clear All
                       </button>
+                    </div>
+
+                    {/* Pre-OCR Split Bill Merge Notice */}
+                    {selectedFiles.length > 1 && (
+                      <div
+                        style={{
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          background: selectedFileIndices.length >= 2 ? 'rgba(56, 189, 248, 0.14)' : 'rgba(255, 255, 255, 0.03)',
+                          border: selectedFileIndices.length >= 2 ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid var(--border-subtle)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.72rem',
+                          color: selectedFileIndices.length >= 2 ? '#38BDF8' : 'var(--text-secondary)',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Combine size={13} style={{ color: selectedFileIndices.length >= 2 ? '#38BDF8' : 'var(--text-muted)' }} />
+                        <span>
+                          {selectedFileIndices.length >= 2 ? (
+                            <strong>
+                              {selectedFileIndices.length} pages ticked: OCR will identify &amp; inward them as ONE continuous bill.
+                            </strong>
+                          ) : (
+                            'Split Bill? Tick the checkboxes on pages that belong to the same multi-page bill.'
+                          )}
+                        </span>
+                      </div>
+                    )}
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+                        gap: '8px',
+                        maxHeight: '140px',
+                        overflowY: 'auto',
+                        paddingRight: '4px',
+                      }}
+                    >
+                      {selectedFiles.map((file, idx) => {
+                        const preview = filePreviews[idx];
+                        const isChecked = selectedFileIndices.includes(idx);
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => handleToggleSelectFile(idx)}
+                            style={{
+                              position: 'relative',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              border: isChecked ? '2px solid #38BDF8' : '1px solid var(--border-subtle)',
+                              background: isChecked ? 'rgba(56, 189, 248, 0.1)' : 'rgba(255, 255, 255, 0.04)',
+                              height: '70px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '4px',
+                              cursor: 'pointer',
+                              boxShadow: isChecked ? '0 0 10px rgba(56, 189, 248, 0.3)' : 'none',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            {/* Checkbox for identifying split bill pages before OCR */}
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleSelectFile(idx);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: '3px',
+                                left: '3px',
+                                zIndex: 2,
+                                background: 'rgba(15, 23, 42, 0.85)',
+                                borderRadius: '4px',
+                                padding: '1px 3px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '2px',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSelectFile(idx);
+                                }}
+                                style={{
+                                  width: '13px',
+                                  height: '13px',
+                                  accentColor: '#38BDF8',
+                                  cursor: 'pointer',
+                                }}
+                              />
+                              <span style={{ fontSize: '0.62rem', fontWeight: 800, color: isChecked ? '#38BDF8' : '#CBD5E1' }}>
+                                P{idx + 1}
+                              </span>
+                            </div>
+
+                            {preview?.isPdf ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', marginTop: '10px' }}>
+                                <FileText size={18} style={{ color: '#EF4444' }} />
+                                <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {file.name}
+                                </span>
+                              </div>
+                            ) : preview?.dataUrl ? (
+                              <img
+                                src={preview.dataUrl}
+                                alt={file.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }}
+                              />
+                            ) : (
+                              <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{file.name}</div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveFile(idx);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: '2px',
+                                right: '2px',
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: 'rgba(0, 0, 0, 0.75)',
+                                color: '#EF4444',
+                                border: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                padding: 0,
+                                zIndex: 2,
+                              }}
+                              title="Remove file"
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ) : (
@@ -951,26 +1381,32 @@ export default function HistoricalBillMigrationModal({
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      height: '90px',
+                      height: '110px',
                       color: 'var(--text-muted)',
                       fontSize: '0.8rem',
+                      gap: '4px',
                     }}
                   >
                     <span>No sheet photo loaded yet.</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', opacity: 0.8 }}>
+                      Drop or select one or multiple photos
+                    </span>
                   </div>
                 )}
 
                 <button
                   type="button"
-                  disabled={!selectedFile || isParsing}
+                  disabled={selectedFiles.length === 0 || isParsing}
                   onClick={handleParseSheet}
                   className="btn"
                   style={{
                     width: '100%',
-                    marginTop: '12px',
+                    marginTop: '10px',
                     padding: '10px 16px',
-                    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
-                    color: '#0F172A',
+                    background: selectedFileIndices.length >= 2
+                      ? 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)'
+                      : 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                    color: selectedFileIndices.length >= 2 ? '#FFFFFF' : '#0F172A',
                     fontWeight: 800,
                     fontSize: '0.82rem',
                     borderRadius: 'var(--radius-md, 10px)',
@@ -978,20 +1414,27 @@ export default function HistoricalBillMigrationModal({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 14px rgba(245, 158, 11, 0.25)',
-                    opacity: !selectedFile || isParsing ? 0.6 : 1,
-                    cursor: !selectedFile || isParsing ? 'not-allowed' : 'pointer',
+                    boxShadow: selectedFileIndices.length >= 2
+                      ? '0 4px 14px rgba(2, 132, 199, 0.35)'
+                      : '0 4px 14px rgba(245, 158, 11, 0.25)',
+                    opacity: selectedFiles.length === 0 || isParsing ? 0.6 : 1,
+                    cursor: selectedFiles.length === 0 || isParsing ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
                   }}
                 >
                   {isParsing ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      <span>Analyzing Sheet with Gemini Vision...</span>
+                      <span>Analyzing Sheet{selectedFiles.length > 1 ? 's' : ''} with Gemini Vision...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles size={16} />
-                      <span>Extract & Verify Bills from Sheet</span>
+                      {selectedFileIndices.length >= 2 ? <Combine size={16} /> : <Sparkles size={16} />}
+                      <span>
+                        {selectedFileIndices.length >= 2
+                          ? `Merge & Parse Split Bill (${selectedFileIndices.length} Pages)`
+                          : `Extract & Verify Bills from Sheet${selectedFiles.length > 1 ? `s (${selectedFiles.length})` : ''}`}
+                      </span>
                     </>
                   )}
                 </button>
@@ -1148,6 +1591,68 @@ export default function HistoricalBillMigrationModal({
             {/* TAB 1: READY TO PUSH BILLS */}
             {activeTab === 'ready' && (
               <div>
+                {/* Multi-Page Split Bill Merge Action Bar */}
+                {validBills.length > 1 && (
+                  <div
+                    style={{
+                      marginBottom: '12px',
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-md, 10px)',
+                      background: selectedBillIndices.length > 0 ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                      border: selectedBillIndices.length > 0 ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '10px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllInTab}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '6px' }}
+                      >
+                        {selectedBillIndices.length === validBills.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {selectedBillIndices.length > 0 ? (
+                          <strong style={{ color: '#38BDF8' }}>
+                            {selectedBillIndices.length} page(s)/bill(s) selected
+                          </strong>
+                        ) : (
+                          'Tip: Tick 2 or more pages of a split customer bill to merge them into one.'
+                        )}
+                      </span>
+                    </div>
+
+                    {selectedBillIndices.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={handleMergeSelectedBills}
+                        className="btn btn-sm"
+                        style={{
+                          background: 'linear-gradient(135deg, #38BDF8 0%, #0284C7 100%)',
+                          color: '#0F172A',
+                          fontWeight: 800,
+                          fontSize: '0.78rem',
+                          padding: '6px 14px',
+                          borderRadius: 'var(--radius-pill)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(56, 189, 248, 0.3)',
+                        }}
+                      >
+                        <Combine size={14} />
+                        <span>Merge Selected ({selectedBillIndices.length} Pages) into 1 Bill</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {validBills.length === 0 ? (
                   <div
                     style={{
@@ -1170,39 +1675,61 @@ export default function HistoricalBillMigrationModal({
                       gap: '14px',
                     }}
                   >
-                    {validBills.map((b, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          padding: '14px 16px',
-                          borderRadius: 'var(--radius-lg, 12px)',
-                          background: 'var(--bg-surface, #141829)',
-                          border: '1px solid rgba(16, 185, 129, 0.35)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '10px',
-                          boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                            Bill #{b.bill_index}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.7rem',
-                              fontWeight: 800,
-                              textTransform: 'uppercase',
-                              padding: '2px 8px',
-                              borderRadius: 'var(--radius-pill)',
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              color: '#34D399',
-                              border: '1px solid rgba(16, 185, 129, 0.3)',
-                            }}
-                          >
-                            {b.payment_method}
-                          </span>
-                        </div>
+                    {validBills.map((b, i) => {
+                      const isSelected = selectedBillIndices.includes(b.bill_index);
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => handleToggleSelectBill(b.bill_index)}
+                          style={{
+                            padding: '14px 16px',
+                            borderRadius: 'var(--radius-lg, 12px)',
+                            background: isSelected ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg-surface, #141829)',
+                            border: isSelected ? '2px solid #38BDF8' : '1px solid rgba(16, 185, 129, 0.35)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            boxShadow: isSelected ? '0 0 16px rgba(56, 189, 248, 0.2)' : '0 4px 14px rgba(0, 0, 0, 0.25)',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSelectBill(b.bill_index);
+                                }}
+                                style={{
+                                  width: '16px',
+                                  height: '16px',
+                                  accentColor: '#38BDF8',
+                                  cursor: 'pointer',
+                                }}
+                              />
+                              <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                Bill #{b.bill_index}
+                              </span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                textTransform: 'uppercase',
+                                padding: '2px 8px',
+                                borderRadius: 'var(--radius-pill)',
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#34D399',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                              }}
+                            >
+                              {b.payment_method}
+                            </span>
+                          </div>
 
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <p style={{ margin: 0 }}>
@@ -1247,8 +1774,9 @@ export default function HistoricalBillMigrationModal({
                           ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
+                </div>
                 )}
               </div>
             )}
@@ -1256,6 +1784,68 @@ export default function HistoricalBillMigrationModal({
             {/* TAB 2: REJECTED / DISCREPANCY QUEUE */}
             {activeTab === 'rejected' && (
               <div>
+                {/* Multi-Page Split Bill Merge Action Bar */}
+                {rejectedBills.length > 1 && (
+                  <div
+                    style={{
+                      marginBottom: '12px',
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-md, 10px)',
+                      background: selectedBillIndices.length > 0 ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                      border: selectedBillIndices.length > 0 ? '1px solid rgba(56, 189, 248, 0.35)' : '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '10px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllInTab}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '0.74rem', padding: '4px 10px', borderRadius: '6px' }}
+                      >
+                        {selectedBillIndices.length === rejectedBills.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {selectedBillIndices.length > 0 ? (
+                          <strong style={{ color: '#38BDF8' }}>
+                            {selectedBillIndices.length} page(s)/bill(s) selected
+                          </strong>
+                        ) : (
+                          'Tip: Tick 2 or more split pages to combine them into one continuous bill.'
+                        )}
+                      </span>
+                    </div>
+
+                    {selectedBillIndices.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={handleMergeSelectedBills}
+                        className="btn btn-sm"
+                        style={{
+                          background: 'linear-gradient(135deg, #38BDF8 0%, #0284C7 100%)',
+                          color: '#0F172A',
+                          fontWeight: 800,
+                          fontSize: '0.78rem',
+                          padding: '6px 14px',
+                          borderRadius: 'var(--radius-pill)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 4px 12px rgba(56, 189, 248, 0.3)',
+                        }}
+                      >
+                        <Combine size={14} />
+                        <span>Merge Selected ({selectedBillIndices.length} Pages) into 1 Bill</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {rejectedBills.length === 0 ? (
                   <div
                     style={{
@@ -1305,48 +1895,70 @@ export default function HistoricalBillMigrationModal({
                         gap: '14px',
                       }}
                     >
-                      {rejectedBills.map((b, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            padding: '14px 16px',
-                            borderRadius: 'var(--radius-lg, 12px)',
-                            background: 'var(--bg-surface, #141829)',
-                            border: '1px solid rgba(239, 68, 68, 0.45)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '10px',
-                            boxShadow: '0 4px 14px rgba(239, 68, 68, 0.12)',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span
-                              style={{
-                                fontSize: '0.86rem',
-                                fontWeight: 800,
-                                color: '#EF4444',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                              }}
-                            >
-                              <AlertTriangle size={15} />
-                              <span>Bill #{b.bill_index} (REJECTED)</span>
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '0.7rem',
-                                fontWeight: 800,
-                                padding: '2px 8px',
-                                borderRadius: 'var(--radius-pill)',
-                                background: 'rgba(239, 68, 68, 0.18)',
-                                color: '#F87171',
-                                border: '1px solid rgba(239, 68, 68, 0.3)',
-                              }}
-                            >
-                              {b.anomalous_indices?.length || 1} Anomalies
-                            </span>
-                          </div>
+                      {rejectedBills.map((b, i) => {
+                        const isSelected = selectedBillIndices.includes(b.bill_index);
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => handleToggleSelectBill(b.bill_index)}
+                            style={{
+                              padding: '14px 16px',
+                              borderRadius: 'var(--radius-lg, 12px)',
+                              background: isSelected ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg-surface, #141829)',
+                              border: isSelected ? '2px solid #38BDF8' : '1px solid rgba(239, 68, 68, 0.45)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '10px',
+                              boxShadow: isSelected ? '0 0 16px rgba(56, 189, 248, 0.2)' : '0 4px 14px rgba(239, 68, 68, 0.12)',
+                              position: 'relative',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleSelectBill(b.bill_index);
+                                  }}
+                                  style={{
+                                    width: '16px',
+                                    height: '16px',
+                                    accentColor: '#38BDF8',
+                                    cursor: 'pointer',
+                                  }}
+                                />
+                                <span
+                                  style={{
+                                    fontSize: '0.86rem',
+                                    fontWeight: 800,
+                                    color: '#EF4444',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                  }}
+                                >
+                                  <AlertTriangle size={15} />
+                                  <span>Bill #{b.bill_index} (REJECTED)</span>
+                                </span>
+                              </div>
+                              <span
+                                style={{
+                                  fontSize: '0.7rem',
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: 'var(--radius-pill)',
+                                  background: 'rgba(239, 68, 68, 0.18)',
+                                  color: '#F87171',
+                                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                                }}
+                              >
+                                {b.anomalous_indices?.length || 1} Anomalies
+                              </span>
+                            </div>
 
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                             <p style={{ margin: 0 }}>
@@ -1414,8 +2026,9 @@ export default function HistoricalBillMigrationModal({
                             </button>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
+                  </div>
                   </div>
                 )}
               </div>

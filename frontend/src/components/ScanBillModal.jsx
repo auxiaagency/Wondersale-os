@@ -18,6 +18,8 @@ import {
   Wand2,
   Truck,
   ChevronDown,
+  Check,
+  Combine,
 } from 'lucide-react';
 import { extractProductsFromBill } from '../api';
 
@@ -39,6 +41,7 @@ export default function ScanBillModal({
   const [keysTriedCount, setKeysTriedCount] = useState(0);
   const [customRequest, setCustomRequest] = useState('');
   const [selectedSupplierId, setSelectedSupplierId] = useState('');
+  const [selectedPageIndices, setSelectedPageIndices] = useState([]);
 
   // Camera Capture state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -181,6 +184,11 @@ export default function ScanBillModal({
       if (target?.url) URL.revokeObjectURL(target.url);
       return prev.filter((_, i) => i !== index);
     });
+    setSelectedPageIndices((prev) =>
+      prev
+        .filter((i) => i !== index)
+        .map((i) => (i > index ? i - 1 : i))
+    );
   };
 
   const handleClearAll = () => {
@@ -189,8 +197,23 @@ export default function ScanBillModal({
     });
     setSelectedFiles([]);
     setFilePreviews([]);
+    setSelectedPageIndices([]);
     setError('');
     setQuotaExhausted(false);
+  };
+
+  const handleToggleSelectPage = (index) => {
+    setSelectedPageIndices((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    );
+  };
+
+  const handleSelectAllPages = () => {
+    if (selectedPageIndices.length === selectedFiles.length) {
+      setSelectedPageIndices([]);
+    } else {
+      setSelectedPageIndices(selectedFiles.map((_, i) => i));
+    }
   };
 
   const handleProcessBill = async () => {
@@ -212,8 +235,17 @@ export default function ScanBillModal({
       if (effectiveStoreId) {
         formData.append('store', effectiveStoreId);
       }
-      if (customRequest && customRequest.trim()) {
-        formData.append('custom_request', customRequest.trim());
+      let effectiveCustomRequest = (customRequest || '').trim();
+      if (selectedPageIndices.length >= 2) {
+        const pageListStr = selectedPageIndices.map((i) => `Page/Image #${i + 1}`).join(' and ');
+        const mergeInstruction = `[IMPORTANT MULTI-PAGE SPLIT BILL]: The attached files ${pageListStr} are parts of ONE SINGLE continuous bill split across multiple pages. Treat them as ONE invoice: concatenate all product line items into a single list, do not repeat header items, and sum line items into one single grand total.`;
+        effectiveCustomRequest = effectiveCustomRequest
+          ? `${mergeInstruction}\n\nAdditional Operator Instructions: ${effectiveCustomRequest}`
+          : mergeInstruction;
+      }
+
+      if (effectiveCustomRequest) {
+        formData.append('custom_request', effectiveCustomRequest);
       }
 
       const response = await extractProductsFromBill(formData);
@@ -601,21 +633,35 @@ export default function ScanBillModal({
             </div>
           )}
 
-          {/* Selected Files Thumbnails Strip */}
+          {/* Selected Files Thumbnails Strip with Multi-Page Split Bill Checkbox Support */}
           {filePreviews.length > 0 && (
-            <div className="scan-bill-previews-section">
+            <div className="scan-bill-previews-section" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div
                 className="scan-bill-previews-header"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: '8px',
+                  flexWrap: 'wrap',
+                  gap: '8px',
                 }}
               >
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Attached Documents ({filePreviews.length})
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                    Attached Documents ({filePreviews.length})
+                  </span>
+                  {filePreviews.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleSelectAllPages}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px' }}
+                    >
+                      {selectedPageIndices.length === filePreviews.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={handleClearAll}
@@ -632,6 +678,52 @@ export default function ScanBillModal({
                 </button>
               </div>
 
+              {/* Multi-Page Split Bill Selection Banner */}
+              {filePreviews.length > 1 && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: selectedPageIndices.length >= 2 ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                    border: selectedPageIndices.length >= 2 ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                    fontSize: '0.76rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Combine size={14} style={{ color: selectedPageIndices.length >= 2 ? '#38BDF8' : 'var(--text-muted)' }} />
+                    <span style={{ color: selectedPageIndices.length >= 2 ? '#38BDF8' : 'var(--text-secondary)' }}>
+                      {selectedPageIndices.length >= 2 ? (
+                        <strong>
+                          {selectedPageIndices.length} pages selected: will be parsed and merged as 1 continuous bill.
+                        </strong>
+                      ) : (
+                        'Split Bill? Tick the checkboxes on pages that belong to the same multi-page bill.'
+                      )}
+                    </span>
+                  </div>
+
+                  {selectedPageIndices.length >= 2 && (
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-pill)',
+                        background: '#38BDF8',
+                        color: '#0F172A',
+                        fontWeight: 800,
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      Merge Active ({selectedPageIndices.length} Pages)
+                    </span>
+                  )}
+                </div>
+              )}
+
               <div
                 className="scan-bill-previews-grid"
                 style={{
@@ -640,64 +732,113 @@ export default function ScanBillModal({
                   gap: '10px',
                 }}
               >
-                {filePreviews.map((p, idx) => (
-                  <div
-                    key={idx}
-                    className="scan-bill-preview-item"
-                    style={{
-                      position: 'relative',
-                      borderRadius: 'var(--radius-md)',
-                      overflow: 'hidden',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'var(--bg-surface)',
-                      height: '90px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '6px',
-                    }}
-                  >
-                    {p.isPdf ? (
-                      <div style={{ textAlign: 'center', padding: '4px' }}>
-                        <FileText size={28} style={{ color: '#F59E0B', margin: '0 auto 4px' }} />
-                        <div style={{ fontSize: '0.68rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
-                          {p.name}
-                        </div>
-                        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>PDF Doc</span>
-                      </div>
-                    ) : (
-                      <img
-                        src={p.url}
-                        alt={p.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFile(idx)}
+                {filePreviews.map((p, idx) => {
+                  const isChecked = selectedPageIndices.includes(idx);
+                  return (
+                    <div
+                      key={idx}
+                      className="scan-bill-preview-item"
+                      onClick={() => handleToggleSelectPage(idx)}
                       style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px',
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        background: 'rgba(0, 0, 0, 0.75)',
-                        color: '#ffffff',
-                        border: 'none',
-                        cursor: 'pointer',
+                        position: 'relative',
+                        borderRadius: 'var(--radius-md)',
+                        overflow: 'hidden',
+                        border: isChecked ? '2px solid #38BDF8' : '1px solid var(--border-subtle)',
+                        background: isChecked ? 'rgba(56, 189, 248, 0.1)' : 'var(--bg-surface)',
+                        height: '96px',
                         display: 'flex',
+                        flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        padding: '6px',
+                        cursor: 'pointer',
+                        boxShadow: isChecked ? '0 0 12px rgba(56, 189, 248, 0.3)' : 'none',
+                        transition: 'all 0.15s ease',
                       }}
-                      title="Remove file"
                     >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+                      {/* Checkbox for selecting multi-page split bills */}
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleSelectPage(idx);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '5px',
+                          left: '5px',
+                          zIndex: 2,
+                          background: 'rgba(15, 23, 42, 0.85)',
+                          borderRadius: '4px',
+                          padding: '2px 4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleSelectPage(idx);
+                          }}
+                          style={{
+                            width: '14px',
+                            height: '14px',
+                            accentColor: '#38BDF8',
+                            cursor: 'pointer',
+                          }}
+                        />
+                        <span style={{ fontSize: '0.64rem', fontWeight: 800, color: isChecked ? '#38BDF8' : '#CBD5E1' }}>
+                          P{idx + 1}
+                        </span>
+                      </div>
+
+                      {p.isPdf ? (
+                        <div style={{ textAlign: 'center', padding: '4px', marginTop: '10px' }}>
+                          <FileText size={28} style={{ color: '#F59E0B', margin: '0 auto 4px' }} />
+                          <div style={{ fontSize: '0.68rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '110px' }}>
+                            {p.name}
+                          </div>
+                          <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>PDF Doc</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={p.url}
+                          alt={p.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveFile(idx);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          background: 'rgba(0, 0, 0, 0.75)',
+                          color: '#ffffff',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 2,
+                        }}
+                        title="Remove file"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1036,7 +1177,11 @@ export default function ScanBillModal({
             ) : (
               <>
                 <Sparkles size={16} />
-                <span>Extract Products ({selectedFiles.length})</span>
+                <span>
+                  {selectedPageIndices.length >= 2
+                    ? `Merge & Extract Split Bill (${selectedPageIndices.length} Pages)`
+                    : `Extract Products (${selectedFiles.length})`}
+                </span>
               </>
             )}
           </button>
