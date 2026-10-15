@@ -1486,63 +1486,104 @@ def extract_historical_sheet_bills(
             col_map['name'] = col_map['code']
 
         # Group data rows into bills
-        # Grouping strategy: If 'bill_id' is present, group by bill_id.
-        # Otherwise, treat each non-empty row as its own bill OR group consecutive rows until an empty separator.
-        bills_map = {}
-        current_implicit_bill = 1
+        # Grouping strategy:
+        # 1. If explicit 'bill_id' column is present, group by bill_id value.
+        # 2. If 'phone' or 'payment' column is present, each new non-empty phone or payment starts a new bill.
+        # 3. Empty rows or 'Total' summary rows demarcate bill boundaries.
+        bills_list = []
+        curr_bill = None
 
         for r in data_rows:
             if not any(c.strip() for c in r):
                 # Empty row acts as a bill boundary
-                current_implicit_bill += 1
+                curr_bill = None
                 continue
 
-            bill_key = None
-            if 'bill_id' in col_map and col_map['bill_id'] < len(r):
-                val = r[col_map['bill_id']].strip()
-                if val:
-                    bill_key = val
-
-            if not bill_key:
-                bill_key = f"bill_{current_implicit_bill}"
-
-            if bill_key not in bills_map:
-                bills_map[bill_key] = {
-                    'bill_index': len(bills_map) + 1,
-                    'customer_phone': '',
-                    'payment_method': 'cash',
-                    'subtotal_written': None,
-                    'items': []
-                }
-
-            # Extract phone
-            if 'phone' in col_map and col_map['phone'] < len(r):
-                raw_ph = r[col_map['phone']].strip()
-                clean_ph = re.sub(r'\D', '', raw_ph)
-                if len(clean_ph) == 10:
-                    bills_map[bill_key]['customer_phone'] = clean_ph
-
-            # Extract payment method
-            if 'payment' in col_map and col_map['payment'] < len(r):
-                raw_pm = r[col_map['payment']].strip().lower()
-                if any(m in raw_pm for m in ['upi', 'gpay', 'phonepe', 'paytm']):
-                    bills_map[bill_key]['payment_method'] = 'upi'
-                elif any(m in raw_pm for m in ['card', 'debit', 'credit', 'pos']):
-                    bills_map[bill_key]['payment_method'] = 'card'
-                elif any(m in raw_pm for m in ['split', 'partial']):
-                    bills_map[bill_key]['payment_method'] = 'split'
-                elif 'cash' in raw_pm:
-                    bills_map[bill_key]['payment_method'] = 'cash'
-
-            # Extract item details
             raw_code = ''
             if 'code' in col_map and col_map['code'] < len(r):
                 raw_code = r[col_map['code']].strip()
             elif 'name' in col_map and col_map['name'] < len(r):
                 raw_code = r[col_map['name']].strip()
 
+            raw_total_cell = ''
+            if 'total_price' in col_map and col_map['total_price'] < len(r):
+                raw_total_cell = r[col_map['total_price']].strip()
+            elif 'unit_price' in col_map and col_map['unit_price'] < len(r):
+                raw_total_cell = r[col_map['unit_price']].strip()
+
+            # Check if this row is a summary / subtotal row (e.g., Code is 'Total' or 'Subtotal')
+            is_summary_row = raw_code.lower() in ['total', 'subtotal', 'grand total', 'sub total', 'total amount']
+            if is_summary_row:
+                if curr_bill and raw_total_cell:
+                    try:
+                        clean_tot = re.sub(r'[^\d.]', '', raw_total_cell)
+                        if clean_tot:
+                            curr_bill['subtotal_written'] = clean_tot
+                    except Exception:
+                        pass
+                # Total row concludes the current bill boundary
+                curr_bill = None
+                continue
+
             if not raw_code:
                 continue
+
+            # Check for bill-level identifiers on this row
+            row_bill_id = ''
+            if 'bill_id' in col_map and col_map['bill_id'] < len(r):
+                row_bill_id = r[col_map['bill_id']].strip()
+
+            row_phone = ''
+            if 'phone' in col_map and col_map['phone'] < len(r):
+                raw_ph = r[col_map['phone']].strip()
+                clean_ph = re.sub(r'\D', '', raw_ph)
+                if len(clean_ph) == 10:
+                    row_phone = clean_ph
+
+            row_payment = ''
+            if 'payment' in col_map and col_map['payment'] < len(r):
+                raw_pm = r[col_map['payment']].strip().lower()
+                if any(m in raw_pm for m in ['upi', 'gpay', 'phonepe', 'paytm']):
+                    row_payment = 'upi'
+                elif any(m in raw_pm for m in ['card', 'debit', 'credit', 'pos']):
+                    row_payment = 'card'
+                elif any(m in raw_pm for m in ['split', 'partial']):
+                    row_payment = 'split'
+                elif 'cash' in raw_pm:
+                    row_payment = 'cash'
+
+            # Decide whether to start a new bill or attach to curr_bill
+            start_new = False
+            if curr_bill is None:
+                start_new = True
+            elif row_bill_id:
+                # If explicit bill ID provided and differs from current
+                if curr_bill.get('_bill_id') != row_bill_id:
+                    start_new = True
+            elif 'bill_id' not in col_map:
+                # When no bill_id column exists: a row having a customer phone or payment method starts a new bill
+                if row_phone and curr_bill.get('customer_phone') and row_phone != curr_bill.get('customer_phone'):
+                    start_new = True
+                elif row_phone and len(curr_bill['items']) > 0:
+                    start_new = True
+                elif row_payment and len(curr_bill['items']) > 0:
+                    start_new = True
+
+            if start_new:
+                curr_bill = {
+                    '_bill_id': row_bill_id or f"bill_{len(bills_list) + 1}",
+                    'bill_index': len(bills_list) + 1,
+                    'customer_phone': row_phone,
+                    'payment_method': row_payment or 'cash',
+                    'subtotal_written': None,
+                    'items': []
+                }
+                bills_list.append(curr_bill)
+            else:
+                if row_phone and not curr_bill['customer_phone']:
+                    curr_bill['customer_phone'] = row_phone
+                if row_payment and curr_bill['payment_method'] == 'cash':
+                    curr_bill['payment_method'] = row_payment
 
             raw_qty = 1
             if 'qty' in col_map and col_map['qty'] < len(r):
@@ -1553,7 +1594,7 @@ def extract_historical_sheet_bills(
                 except Exception:
                     raw_qty = 1
 
-            raw_unit_p = '0.00'
+            raw_unit_p = ''
             if 'unit_price' in col_map and col_map['unit_price'] < len(r):
                 try:
                     up_val = re.sub(r'[^\d.]', '', r[col_map['unit_price']].strip())
@@ -1562,7 +1603,7 @@ def extract_historical_sheet_bills(
                 except Exception:
                     pass
 
-            raw_total_p = '0.00'
+            raw_total_p = ''
             if 'total_price' in col_map and col_map['total_price'] < len(r):
                 try:
                     tp_val = re.sub(r'[^\d.]', '', r[col_map['total_price']].strip())
@@ -1571,19 +1612,32 @@ def extract_historical_sheet_bills(
                 except Exception:
                     pass
 
-            bills_map[bill_key]['items'].append({
+            # If only unit price is present, compute total_price = unit_p * qty
+            if raw_unit_p and not raw_total_p:
+                try:
+                    raw_total_p = str((Decimal(raw_unit_p) * raw_qty).quantize(Decimal('0.01')))
+                except Exception:
+                    raw_total_p = raw_unit_p
+            # If only total price is present, compute unit_price = total_p / qty
+            elif raw_total_p and not raw_unit_p:
+                try:
+                    raw_unit_p = str((Decimal(raw_total_p) / raw_qty).quantize(Decimal('0.01')))
+                except Exception:
+                    raw_unit_p = raw_total_p
+
+            curr_bill['items'].append({
                 'barcode_or_code': raw_code,
                 'raw_qnt_text': str(raw_qty),
                 'quantity': raw_qty,
-                'unit_price': raw_unit_p,
-                'total_price': raw_total_p
+                'unit_price': raw_unit_p or '0.00',
+                'total_price': raw_total_p or '0.00'
             })
 
-        # Filter out empty bills
-        parsed_bills = [b for b in bills_map.values() if len(b['items']) > 0]
-        # Re-index
+        # Filter out empty bills & re-index
+        parsed_bills = [b for b in bills_list if len(b['items']) > 0]
         for idx, b in enumerate(parsed_bills):
             b['bill_index'] = idx + 1
+            b.pop('_bill_id', None)
         return parsed_bills
 
     # If CSV files are provided, try direct deterministic CSV parsing first
@@ -1692,7 +1746,10 @@ OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
     # 5. Catalog Verification Gate
     item_qs = Item.objects.all()
     if store_id:
-        item_qs = item_qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
+        scoped_qs = item_qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
+        # If the scoped query has catalog items, use it as primary, but keep all items for fallback
+        if scoped_qs.exists():
+            item_qs = scoped_qs
 
     items_list = list(item_qs.only('id', 'uid', 'legacy_uid', 'name', 'selling_price', 'mrp', 'quantity'))
     uid_map: Dict[str, Any] = {}
@@ -1706,6 +1763,13 @@ OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
             legacy_map[it.legacy_uid.strip().lower()] = it
         if it.name:
             name_map[it.name.strip().lower()] = it
+
+    # Global fallback catalog map in case store has separate inventory but past bill references master catalog
+    global_uid_map: Dict[str, Any] = {}
+    if store_id and Item.objects.exclude(store_id=store_id).exists():
+        for git in Item.objects.all().only('id', 'uid', 'legacy_uid', 'name', 'selling_price', 'mrp'):
+            if git.uid and git.uid.strip().lower() not in uid_map:
+                global_uid_map[git.uid.strip().lower()] = git
 
     def find_catalog_item(raw_code: str):
         c = str(raw_code or '').strip().lower()
@@ -1725,6 +1789,11 @@ OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
         for n, it_obj in name_map.items():
             if len(c) >= 4 and (c in n or n in c):
                 return it_obj
+        # Global fallback
+        if c in global_uid_map:
+            return global_uid_map[c]
+        if clean and clean in global_uid_map:
+            return global_uid_map[clean]
         return None
 
     valid_bills = []
@@ -1756,21 +1825,31 @@ OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
                 unit_p = Decimal('0.00')
 
             try:
-                line_p = Decimal(str(it_data.get('total_price') or (unit_p * qty))).quantize(Decimal('0.01'))
+                raw_tp = Decimal(str(it_data.get('total_price') or '0.00')).quantize(Decimal('0.01'))
             except Exception:
-                line_p = (unit_p * qty).quantize(Decimal('0.01'))
+                raw_tp = Decimal('0.00')
 
-            calc_total += line_p
+            # Correct total line price computation
+            if raw_tp > Decimal('0.00'):
+                line_p = raw_tp
+            elif unit_p > Decimal('0.00'):
+                line_p = (unit_p * qty).quantize(Decimal('0.01'))
+            else:
+                line_p = Decimal('0.00')
 
             cat_item = find_catalog_item(raw_code)
             if cat_item:
+                final_unit_p = float(unit_p if unit_p > Decimal('0.00') else cat_item.selling_price)
+                final_line_p = float(line_p if line_p > Decimal('0.00') else (cat_item.selling_price * qty))
+                calc_total += Decimal(str(final_line_p))
+
                 verified_items.append({
                     "item_id": cat_item.id,
                     "item_uid": cat_item.uid,
                     "item_name": cat_item.name,
                     "quantity": qty,
-                    "unit_price": float(unit_p if unit_p > Decimal('0.00') else cat_item.selling_price),
-                    "total_price": float(line_p if line_p > Decimal('0.00') else (cat_item.selling_price * qty)),
+                    "unit_price": final_unit_p,
+                    "total_price": final_line_p,
                     "catalog_selling_price": float(cat_item.selling_price),
                     "catalog_mrp": float(cat_item.effective_mrp),
                     "raw_code": raw_code,
@@ -1778,6 +1857,7 @@ OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
                     "error": None
                 })
             else:
+                calc_total += line_p
                 anomalies.append(f"Barcode/Item '{raw_code}' not found in inventory catalog.")
                 anomalous_indices.append(item_idx)
                 verified_items.append({
