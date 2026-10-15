@@ -89,8 +89,56 @@ export default function ProductPriceHistoryChart({
 
   // Sliced & filtered points based on TimelineRangeSelector
   const plotPoints = useMemo(() => {
-    return filterTimelineSeries(dailyRecords, rangeConfig);
-  }, [dailyRecords, rangeConfig]);
+    const rawFiltered = filterTimelineSeries(dailyRecords, rangeConfig);
+
+    // If priceHistory contains recorded price adjustments (e.g. initial cataloging + subsequent adjustment)
+    // and rawFiltered collapsed them into <= 1 point (or fewer points than price adjustments),
+    // build price milestone plot points from priceHistory so the graph starts when the product was cataloged
+    // with its initial price and clearly traces the trajectory to the adjusted price.
+    if (priceHistory && priceHistory.length > 1 && rawFiltered.length <= 1) {
+      // Sort priceHistory chronologically
+      const sortedHistory = [...priceHistory].sort((a, b) => {
+        const tA = new Date(a.timestamp || `${a.date}T${a.time || '00:00:00'}`).getTime();
+        const tB = new Date(b.timestamp || `${b.date}T${b.time || '00:00:00'}`).getTime();
+        return tA - tB;
+      });
+
+      return sortedHistory.map((rec, idx) => {
+        const dt = rec.timestamp ? new Date(rec.timestamp) : new Date(`${rec.date}T${rec.time || '00:00:00'}`);
+        const isValidDate = !isNaN(dt.getTime());
+        const timePart = rec.time || (isValidDate ? dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '');
+        const datePart = isValidDate
+          ? dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : (rec.date || 'Event');
+        const yearPart = isValidDate ? dt.getFullYear() : '';
+        const reasonPart = rec.reason ? ` (${rec.reason})` : '';
+
+        return {
+          pointKey: `ph-${rec.id || idx}`,
+          date: rec.date || (isValidDate ? dt.toISOString().split('T')[0] : ''),
+          time: rec.time || '',
+          timestamp: rec.timestamp,
+          plotLabel: timePart ? `${datePart}, ${timePart}` : datePart,
+          subLabel: rec.reason || (idx === 0 ? 'Initial Price' : 'Adjustment'),
+          full_date: isValidDate
+            ? `${dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at ${timePart}${reasonPart}`
+            : `${rec.date} ${timePart}${reasonPart}`,
+          cost_price: Number(rec.cost_price) || 0,
+          selling_price: Number(rec.selling_price) || 0,
+          mrp: rec.mrp !== undefined && rec.mrp !== null ? Number(rec.mrp) : Number(rec.selling_price) || 0,
+          margin: Number(rec.margin) || (Number(rec.selling_price || 0) - Number(rec.cost_price || 0)),
+          margin_pct: Number(rec.margin_pct) || 0,
+          units_sold: 0,
+          revenue: 0,
+          reason: rec.reason,
+          note: rec.note,
+          performed_by_name: rec.performed_by_name,
+        };
+      });
+    }
+
+    return rawFiltered;
+  }, [dailyRecords, rangeConfig, priceHistory]);
 
   // Max and Min values for Y-axis scaling
   const { maxY, minY, priceChangesCount } = useMemo(() => {
@@ -107,6 +155,18 @@ export default function ProductPriceHistoryChart({
       if (sp > 0 && sp < min) min = sp;
       if (cp > 0 && cp < min) min = cp;
     });
+
+    // Also factor in priceHistory records to ensure appropriate Y-axis scale headroom
+    if (priceHistory && priceHistory.length > 0) {
+      priceHistory.forEach((ph) => {
+        const sp = Number(ph.selling_price) || 0;
+        const cp = Number(ph.cost_price) || 0;
+        if (sp > max) max = sp;
+        if (cp > max) max = cp;
+        if (sp > 0 && sp < min) min = sp;
+        if (cp > 0 && cp < min) min = cp;
+      });
+    }
 
     if (min === Infinity) min = 0;
     if (max <= 0) max = 100;
