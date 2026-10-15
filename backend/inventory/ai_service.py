@@ -1410,28 +1410,223 @@ def extract_historical_sheet_bills(
     if not key_pool:
         raise GeminiRateLimitError("No Gemini API keys configured.", raw_error="Missing API keys.")
 
-    # 2. Encode image parts
-    parts = []
+    # 2. Check for CSV files vs Image/PDF files
+    csv_files = []
+    media_files = []
     for f in files_data:
-        raw_bytes = f.get('bytes')
-        mime_type = f.get('mime_type', 'image/jpeg')
-        if not raw_bytes:
-            continue
-        parts.append({
-            "inline_data": {
-                "mime_type": mime_type,
-                "data": base64.b64encode(raw_bytes).decode('utf-8')
-            }
-        })
+        fname = (f.get('name') or '').lower()
+        fmime = (f.get('mime_type') or '').lower()
+        if fname.endswith('.csv') or 'csv' in fmime:
+            csv_files.append(f)
+        else:
+            media_files.append(f)
 
-    if not parts:
-        raise ValueError("Could not read valid image bytes from uploaded files.")
+    successful_response = None
+    used_model = ""
 
-    # 3. Construct prompt with user's custom context
-    prompt_text = HISTORICAL_SHEET_SYSTEM_PROMPT
-    if custom_prompt and str(custom_prompt).strip():
-        user_context = str(custom_prompt).strip()
-        prompt_text += f"""
+    # Helper: parse raw CSV text rows into structured bills format
+    def parse_csv_to_raw_bills(raw_csv_bytes: bytes, user_prompt: Optional[str] = None) -> List[Dict[str, Any]]:
+        import io
+        import csv
+        text_content = ""
+        for encoding in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
+            try:
+                text_content = raw_csv_bytes.decode(encoding)
+                break
+            except Exception:
+                continue
+        if not text_content:
+            return []
+
+        # Use csv reader
+        reader = csv.reader(io.StringIO(text_content))
+        rows = [r for r in reader if any(cell.strip() for cell in r)]
+        if not rows:
+            return []
+
+        # Find header index row
+        header_row_idx = 0
+        best_match_count = 0
+        known_kw = ['bill', 'invoice', 'barcode', 'code', 'item', 'name', 'qty', 'quantity', 'price', 'rate', 'amount', 'total', 'phone', 'mobile', 'payment']
+        for r_idx, row in enumerate(rows[:5]):
+            row_lower = [str(c).strip().lower() for c in row]
+            match_count = sum(1 for kw in known_kw if any(kw in c for c in row_lower))
+            if match_count > best_match_count:
+                best_match_count = match_count
+                header_row_idx = r_idx
+
+        raw_headers = [str(c).strip().lower() for c in rows[header_row_idx]]
+        data_rows = rows[header_row_idx + 1:]
+
+        # Map header columns
+        col_map = {}
+        for idx, h in enumerate(raw_headers):
+            clean_h = re.sub(r'[^a-z0-9]', '', h)
+            if any(k in clean_h for k in ['billno', 'billid', 'billnum', 'bill', 'invoiceno', 'invoiceid', 'invoicenum', 'invoicenumber', 'receipt']):
+                if 'bill_id' not in col_map: col_map['bill_id'] = idx
+            elif any(k in clean_h for k in ['barcode', 'code', 'uid', 'sku', 'itemcode', 'productcode']):
+                if 'code' not in col_map: col_map['code'] = idx
+            elif any(k in clean_h for k in ['itemname', 'productname', 'item', 'product', 'title', 'description', 'name']):
+                if 'name' not in col_map: col_map['name'] = idx
+            elif any(k in clean_h for k in ['qty', 'quantity', 'qnt', 'count']):
+                if 'qty' not in col_map: col_map['qty'] = idx
+            elif any(k in clean_h for k in ['unitprice', 'sellingprice', 'rate', 'price', 'mrp']):
+                if 'unit_price' not in col_map: col_map['unit_price'] = idx
+            elif any(k in clean_h for k in ['totalprice', 'totalamount', 'total', 'amt', 'amount', 'linetotal', 'subtotal']):
+                if 'total_price' not in col_map: col_map['total_price'] = idx
+            elif any(k in clean_h for k in ['phone', 'mobile', 'customerphone', 'customermobile', 'contact']):
+                if 'phone' not in col_map: col_map['phone'] = idx
+            elif any(k in clean_h for k in ['paymentmethod', 'paymentmode', 'payment', 'mode', 'paymethod', 'type']):
+                if 'payment' not in col_map: col_map['payment'] = idx
+
+        # If code not mapped but name is mapped, use name as code fallback and vice versa
+        if 'code' not in col_map and 'name' in col_map:
+            col_map['code'] = col_map['name']
+        elif 'code' in col_map and 'name' not in col_map:
+            col_map['name'] = col_map['code']
+
+        # Group data rows into bills
+        # Grouping strategy: If 'bill_id' is present, group by bill_id.
+        # Otherwise, treat each non-empty row as its own bill OR group consecutive rows until an empty separator.
+        bills_map = {}
+        current_implicit_bill = 1
+
+        for r in data_rows:
+            if not any(c.strip() for c in r):
+                # Empty row acts as a bill boundary
+                current_implicit_bill += 1
+                continue
+
+            bill_key = None
+            if 'bill_id' in col_map and col_map['bill_id'] < len(r):
+                val = r[col_map['bill_id']].strip()
+                if val:
+                    bill_key = val
+
+            if not bill_key:
+                bill_key = f"bill_{current_implicit_bill}"
+
+            if bill_key not in bills_map:
+                bills_map[bill_key] = {
+                    'bill_index': len(bills_map) + 1,
+                    'customer_phone': '',
+                    'payment_method': 'cash',
+                    'subtotal_written': None,
+                    'items': []
+                }
+
+            # Extract phone
+            if 'phone' in col_map and col_map['phone'] < len(r):
+                raw_ph = r[col_map['phone']].strip()
+                clean_ph = re.sub(r'\D', '', raw_ph)
+                if len(clean_ph) == 10:
+                    bills_map[bill_key]['customer_phone'] = clean_ph
+
+            # Extract payment method
+            if 'payment' in col_map and col_map['payment'] < len(r):
+                raw_pm = r[col_map['payment']].strip().lower()
+                if any(m in raw_pm for m in ['upi', 'gpay', 'phonepe', 'paytm']):
+                    bills_map[bill_key]['payment_method'] = 'upi'
+                elif any(m in raw_pm for m in ['card', 'debit', 'credit', 'pos']):
+                    bills_map[bill_key]['payment_method'] = 'card'
+                elif any(m in raw_pm for m in ['split', 'partial']):
+                    bills_map[bill_key]['payment_method'] = 'split'
+                elif 'cash' in raw_pm:
+                    bills_map[bill_key]['payment_method'] = 'cash'
+
+            # Extract item details
+            raw_code = ''
+            if 'code' in col_map and col_map['code'] < len(r):
+                raw_code = r[col_map['code']].strip()
+            elif 'name' in col_map and col_map['name'] < len(r):
+                raw_code = r[col_map['name']].strip()
+
+            if not raw_code:
+                continue
+
+            raw_qty = 1
+            if 'qty' in col_map and col_map['qty'] < len(r):
+                try:
+                    q_val = re.sub(r'[^\d.]', '', r[col_map['qty']].strip())
+                    if q_val:
+                        raw_qty = max(1, int(float(q_val)))
+                except Exception:
+                    raw_qty = 1
+
+            raw_unit_p = '0.00'
+            if 'unit_price' in col_map and col_map['unit_price'] < len(r):
+                try:
+                    up_val = re.sub(r'[^\d.]', '', r[col_map['unit_price']].strip())
+                    if up_val:
+                        raw_unit_p = str(Decimal(up_val).quantize(Decimal('0.01')))
+                except Exception:
+                    pass
+
+            raw_total_p = '0.00'
+            if 'total_price' in col_map and col_map['total_price'] < len(r):
+                try:
+                    tp_val = re.sub(r'[^\d.]', '', r[col_map['total_price']].strip())
+                    if tp_val:
+                        raw_total_p = str(Decimal(tp_val).quantize(Decimal('0.01')))
+                except Exception:
+                    pass
+
+            bills_map[bill_key]['items'].append({
+                'barcode_or_code': raw_code,
+                'raw_qnt_text': str(raw_qty),
+                'quantity': raw_qty,
+                'unit_price': raw_unit_p,
+                'total_price': raw_total_p
+            })
+
+        # Filter out empty bills
+        parsed_bills = [b for b in bills_map.values() if len(b['items']) > 0]
+        # Re-index
+        for idx, b in enumerate(parsed_bills):
+            b['bill_index'] = idx + 1
+        return parsed_bills
+
+    # If CSV files are provided, try direct deterministic CSV parsing first
+    csv_raw_bills = []
+    if csv_files:
+        for cf in csv_files:
+            c_bytes = cf.get('bytes') or b''
+            parsed = parse_csv_to_raw_bills(c_bytes, custom_prompt)
+            csv_raw_bills.extend(parsed)
+
+    # If media files are present OR direct CSV parsing produced nothing (e.g. unformatted text CSV), use Gemini
+    if media_files or (csv_files and not csv_raw_bills):
+        parts = []
+        for f in media_files:
+            raw_bytes = f.get('bytes')
+            mime_type = f.get('mime_type', 'image/jpeg')
+            if not raw_bytes:
+                continue
+            parts.append({
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": base64.b64encode(raw_bytes).decode('utf-8')
+                }
+            })
+
+        # Also append CSV text content into prompt if Gemini is invoked
+        csv_text_snippets = []
+        if csv_files:
+            for cf in csv_files:
+                try:
+                    txt = (cf.get('bytes') or b'').decode('utf-8-sig', errors='replace')
+                    csv_text_snippets.append(f"--- CSV FILE: {cf.get('name', 'sheet.csv')} ---\n{txt}")
+                except Exception:
+                    pass
+
+        # 3. Construct prompt with user's custom context
+        prompt_text = HISTORICAL_SHEET_SYSTEM_PROMPT
+        if csv_text_snippets:
+            prompt_text += "\n\nCSV DATA SHEETS TO PARSE:\n" + "\n\n".join(csv_text_snippets)
+
+        if custom_prompt and str(custom_prompt).strip():
+            user_context = str(custom_prompt).strip()
+            prompt_text += f"""
 
 ======================================================================
 OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
@@ -1440,41 +1635,55 @@ OPERATOR'S SPECIAL CONTEXT & GUIDANCE (HIGHEST PRIORITY):
 ======================================================================
 """
 
-    parts.append({"text": prompt_text})
+        parts.append({"text": prompt_text})
 
-    # 4. Call Gemini with multi-key and multi-model rotation
-    MAX_ATTEMPTS = 3
-    attempts = 0
-    successful_response = None
-    used_model = ""
+        # 4. Call Gemini with multi-key and multi-model rotation
+        MAX_ATTEMPTS = 3
+        attempts = 0
 
-    for idx, key in enumerate(key_pool):
-        if attempts >= MAX_ATTEMPTS or successful_response is not None:
-            break
-        for model in GEMINI_MODELS:
+        for idx, key in enumerate(key_pool):
             if attempts >= MAX_ATTEMPTS or successful_response is not None:
                 break
-            try:
-                raw_resp = call_gemini_api(key, parts, model=model)
-                candidates = raw_resp.get('candidates', [])
-                if candidates and candidates[0].get('content', {}).get('parts'):
-                    raw_text = candidates[0]['content']['parts'][0].get('text', '{}').strip()
-                    if raw_text.startswith('```json'):
-                        raw_text = raw_text[7:]
-                    if raw_text.startswith('```'):
-                        raw_text = raw_text[3:]
-                    if raw_text.endswith('```'):
-                        raw_text = raw_text[:-3]
-
-                    successful_response = json.loads(raw_text.strip())
-                    used_model = model
+            for model in GEMINI_MODELS:
+                if attempts >= MAX_ATTEMPTS or successful_response is not None:
                     break
-            except Exception as e:
-                logger.warning(f"Gemini attempt failed on model {model}: {e}")
-                continue
+                try:
+                    raw_resp = call_gemini_api(key, parts, model=model)
+                    candidates = raw_resp.get('candidates', [])
+                    if candidates and candidates[0].get('content', {}).get('parts'):
+                        raw_text = candidates[0]['content']['parts'][0].get('text', '{}').strip()
+                        if raw_text.startswith('```json'):
+                            raw_text = raw_text[7:]
+                        if raw_text.startswith('```'):
+                            raw_text = raw_text[3:]
+                        if raw_text.endswith('```'):
+                            raw_text = raw_text[:-3]
+
+                        successful_response = json.loads(raw_text.strip())
+                        used_model = model
+                        break
+                except Exception as e:
+                    logger.warning(f"Gemini attempt failed on model {model}: {e}")
+                    continue
+
+    if csv_raw_bills and not successful_response:
+        successful_response = {
+            'bills': csv_raw_bills,
+            'sheet_date': None,
+            'sheet_section': 'CSV Import'
+        }
+        used_model = "CSV Direct Parser"
+    elif csv_raw_bills and successful_response:
+        # Merge CSV bills with OCR bills if both media and CSV were uploaded together
+        existing_bills = successful_response.get('bills', [])
+        offset = len(existing_bills)
+        for b in csv_raw_bills:
+            b['bill_index'] = offset + b['bill_index']
+            existing_bills.append(b)
+        successful_response['bills'] = existing_bills
 
     if not successful_response or not isinstance(successful_response, dict):
-        raise ValueError("Failed to extract structured bills from sheet image. Please verify image clarity and API keys.")
+        raise ValueError("Failed to extract structured bills from uploaded file(s). Please verify file contents and clarity.")
 
     raw_bills = successful_response.get('bills', [])
     sheet_date = successful_response.get('sheet_date') or ''

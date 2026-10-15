@@ -27,6 +27,7 @@ import {
   Combine,
   CheckSquare,
   Clipboard,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { parseHistoricalSheet, commitHistoricalBatch } from '../api';
 
@@ -211,32 +212,50 @@ export default function HistoricalBillMigrationModal({
     const validNewFiles = [];
     filesArray.forEach((file) => {
       const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+      const isCsv = file.type === 'text/csv' || file.name?.toLowerCase().endsWith('.csv');
       const isImg = file.type?.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(file.name || '');
-      if (isPdf || isImg) {
+      if (isPdf || isImg || isCsv) {
         validNewFiles.push(file);
       }
     });
 
     if (validNewFiles.length === 0) {
-      setParseError('Please upload valid sheet image files (JPG, PNG, WebP) or PDF documents.');
+      setParseError('Please upload valid sheet image files (JPG, PNG, WebP), PDF documents, or CSV files.');
       return;
     }
 
     // Read previews for newly added files
     validNewFiles.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
+      const isCsv = file.type === 'text/csv' || file.name?.toLowerCase().endsWith('.csv');
+      const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+
+      if (isCsv) {
         setFilePreviews((prev) => [
           ...prev,
           {
             name: file.name,
             size: file.size,
-            dataUrl: e.target.result,
-            isPdf: file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf'),
+            dataUrl: null,
+            isPdf: false,
+            isCsv: true,
           },
         ]);
-      };
-      reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setFilePreviews((prev) => [
+            ...prev,
+            {
+              name: file.name,
+              size: file.size,
+              dataUrl: e.target.result,
+              isPdf: isPdf,
+              isCsv: false,
+            },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
 
     setSelectedFiles((prev) => [...prev, ...validNewFiles]);
@@ -901,7 +920,7 @@ export default function HistoricalBillMigrationModal({
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={16} style={{ color: '#F59E0B' }} />
                 <span style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                  Step 1: Upload or Snap Handwritten Tally Sheet
+                  Step 1: Upload Sheet Photo, PDF, or CSV File
                 </span>
               </div>
               <button
@@ -921,7 +940,7 @@ export default function HistoricalBillMigrationModal({
                   borderRadius: '6px',
                 }}
               >
-                <span>{showPromptBox ? 'Hide Custom Prompt' : 'Custom AI Guidance Prompt'}</span>
+                <span>{showPromptBox ? 'Hide Custom Prompt' : 'Custom Guidance & Context Prompt'}</span>
                 {showPromptBox ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
             </div>
@@ -941,7 +960,7 @@ export default function HistoricalBillMigrationModal({
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#FBBF24' }}>
-                    Additional OCR Context (Standard extraction rules run in the background):
+                    Additional Context (Applies to both photos &amp; CSV files):
                   </span>
                   {customPrompt && (
                     <button
@@ -1027,7 +1046,7 @@ export default function HistoricalBillMigrationModal({
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept="image/*,.pdf"
+                    accept="image/*,.pdf,.csv,text/csv"
                     style={{ display: 'none' }}
                     onChange={(e) => {
                       if (e.target.files && e.target.files.length > 0) {
@@ -1053,8 +1072,8 @@ export default function HistoricalBillMigrationModal({
                   </div>
                   <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                     {selectedFiles.length > 0
-                      ? `${selectedFiles.length} Sheet${selectedFiles.length > 1 ? 's' : ''} Loaded — Click or drop to add more`
-                      : 'Click to browse or drop tally sheet photo(s)'}
+                      ? `${selectedFiles.length} File${selectedFiles.length > 1 ? 's' : ''} Loaded — Click or drop to add more`
+                      : 'Click to browse or drop sheet photo(s), PDF, or CSV file(s)'}
                   </p>
                   <p style={{ margin: '4px 0 10px 0', fontSize: '0.74rem', color: 'var(--text-muted)' }}>
                     Drop, browse, or press <kbd style={{ padding: '2px 5px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.1)', color: '#FBBF24', fontSize: '0.72rem', border: '1px solid rgba(255, 255, 255, 0.2)' }}>Ctrl + V</kbd> to paste from clipboard
@@ -1325,7 +1344,14 @@ export default function HistoricalBillMigrationModal({
                               </span>
                             </div>
 
-                            {preview?.isPdf ? (
+                            {preview?.isCsv ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', marginTop: '10px' }}>
+                                <FileSpreadsheet size={18} style={{ color: '#10B981' }} />
+                                <span style={{ fontSize: '0.62rem', color: '#10B981', fontWeight: 700, maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {file.name}
+                                </span>
+                              </div>
+                            ) : preview?.isPdf ? (
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', marginTop: '10px' }}>
                                 <FileText size={18} style={{ color: '#EF4444' }} />
                                 <span style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1387,9 +1413,9 @@ export default function HistoricalBillMigrationModal({
                       gap: '4px',
                     }}
                   >
-                    <span>No sheet photo loaded yet.</span>
+                    <span>No sheet photo or CSV loaded yet.</span>
                     <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', opacity: 0.8 }}>
-                      Drop or select one or multiple photos
+                      Drop or select photos, PDF, or CSV file(s)
                     </span>
                   </div>
                 )}
@@ -1425,7 +1451,7 @@ export default function HistoricalBillMigrationModal({
                   {isParsing ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      <span>Analyzing Sheet{selectedFiles.length > 1 ? 's' : ''} with Gemini Vision...</span>
+                      <span>Parsing &amp; Verifying Bills...</span>
                     </>
                   ) : (
                     <>
@@ -1433,7 +1459,7 @@ export default function HistoricalBillMigrationModal({
                       <span>
                         {selectedFileIndices.length >= 2
                           ? `Merge & Parse Split Bill (${selectedFileIndices.length} Pages)`
-                          : `Extract & Verify Bills from Sheet${selectedFiles.length > 1 ? `s (${selectedFiles.length})` : ''}`}
+                          : `Extract & Verify Bills${selectedFiles.length > 0 ? ` (${selectedFiles.length} File${selectedFiles.length > 1 ? 's' : ''})` : ''}`}
                       </span>
                     </>
                   )}

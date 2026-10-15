@@ -450,64 +450,83 @@ export default function ItemTable({
       return 'right';
     }
   });
-  const [isDraggingEditBar, setIsDraggingEditBar] = useState(false);
-  const [dragDeltaX, setDragDeltaX] = useState(0);
   const floatingBarRef = useRef(null);
-  const dragInfoRef = useRef({ isDown: false, startX: 0, moved: false });
+  const dragInfoRef = useRef({ isDown: false, startX: 0, initialLeft: 0, moved: false, pointerId: null });
   const justDraggedRef = useRef(false);
 
-  useEffect(() => {
-    const handleWindowPointerMove = (e) => {
-      if (!dragInfoRef.current.isDown) return;
-      const dx = e.clientX - dragInfoRef.current.startX;
-      if (Math.abs(dx) > 6 || dragInfoRef.current.moved) {
-        dragInfoRef.current.moved = true;
-        setIsDraggingEditBar(true);
-        setDragDeltaX(dx);
-      }
-    };
-
-    const handleWindowPointerUp = () => {
-      if (!dragInfoRef.current.isDown) return;
-      const hadMoved = dragInfoRef.current.moved;
-      dragInfoRef.current.isDown = false;
-
-      if (hadMoved && floatingBarRef.current) {
-        const rect = floatingBarRef.current.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const newDock = centerX < window.innerWidth / 2 ? 'left' : 'right';
-        setDockSide(newDock);
-        try {
-          localStorage.setItem('wondersale_edit_bar_dock_side', newDock);
-        } catch (err) {}
-
-        justDraggedRef.current = true;
-        setTimeout(() => {
-          justDraggedRef.current = false;
-        }, 80);
-      }
-
-      setIsDraggingEditBar(false);
-      setDragDeltaX(0);
-    };
-
-    window.addEventListener('pointermove', handleWindowPointerMove);
-    window.addEventListener('pointerup', handleWindowPointerUp);
-    window.addEventListener('pointercancel', handleWindowPointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handleWindowPointerMove);
-      window.removeEventListener('pointerup', handleWindowPointerUp);
-      window.removeEventListener('pointercancel', handleWindowPointerUp);
-    };
-  }, []);
-
-  const handleStartDrag = (e) => {
+  const handlePointerDown = (e) => {
     if (e.button !== undefined && e.button !== 0) return;
+    const bar = floatingBarRef.current;
+    if (!bar) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
+    const rect = bar.getBoundingClientRect();
     dragInfoRef.current = {
       isDown: true,
       startX: e.clientX,
+      initialLeft: rect.left,
       moved: false,
+      pointerId: e.pointerId,
     };
+    bar.style.transition = 'none';
+  };
+
+  const handlePointerMove = (e) => {
+    if (!dragInfoRef.current.isDown) return;
+    const bar = floatingBarRef.current;
+    if (!bar) return;
+
+    const dx = e.clientX - dragInfoRef.current.startX;
+    if (Math.abs(dx) > 3 || dragInfoRef.current.moved) {
+      dragInfoRef.current.moved = true;
+      bar.style.transform = `translate3d(${dx}px, 0, 0)`;
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    if (!dragInfoRef.current.isDown) return;
+    const bar = floatingBarRef.current;
+    const hadMoved = dragInfoRef.current.moved;
+    dragInfoRef.current.isDown = false;
+
+    try {
+      if (dragInfoRef.current.pointerId !== null) {
+        e.currentTarget.releasePointerCapture(dragInfoRef.current.pointerId);
+      }
+    } catch (err) {}
+
+    if (bar) {
+      if (hadMoved) {
+        const rect = bar.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const newDock = centerX < window.innerWidth / 2 ? 'left' : 'right';
+
+        // Animate snap to edge smoothly
+        const targetX = newDock === 'left' ? 20 - dragInfoRef.current.initialLeft : (window.innerWidth - 20 - rect.width) - dragInfoRef.current.initialLeft;
+        bar.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
+        bar.style.transform = `translate3d(${targetX}px, 0, 0)`;
+
+        setTimeout(() => {
+          if (floatingBarRef.current) {
+            floatingBarRef.current.style.transition = 'none';
+            floatingBarRef.current.style.transform = 'translate3d(0, 0, 0)';
+          }
+          setDockSide(newDock);
+          try {
+            localStorage.setItem('wondersale_edit_bar_dock_side', newDock);
+          } catch (err) {}
+          justDraggedRef.current = false;
+        }, 220);
+
+        justDraggedRef.current = true;
+      } else {
+        bar.style.transition = 'transform 0.15s ease';
+        bar.style.transform = 'translate3d(0, 0, 0)';
+      }
+    }
   };
 
   // Synchronize initial editBuffer when items change or edit mode opens
@@ -2359,8 +2378,8 @@ export default function ItemTable({
           </div>
         )}
 
-        <div className={`inv-table-scroll ${isEditMode ? 'inv-table-scroll-editing' : ''}`} style={{ overflowX: 'auto' }}>
-          <table className={`inv-table ${isEditMode ? 'inv-table-editing' : ''}`} style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'auto' }}>
+        <div className={`inv-table-scroll ${isEditMode ? 'inv-table-scroll-editing' : ''}`}>
+          <table className={`inv-table ${isEditMode ? 'inv-table-editing' : ''}`} style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr
                 style={{
@@ -4091,7 +4110,10 @@ export default function ItemTable({
       <div
         ref={floatingBarRef}
         className={`inv-floating-bar ${isEditMode ? 'inv-floating-bar-editing' : ''}`}
-        onPointerDown={handleStartDrag}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         style={{
           position: 'fixed',
           bottom: '24px',
@@ -4101,12 +4123,10 @@ export default function ItemTable({
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          transform: isDraggingEditBar ? `translate3d(${dragDeltaX}px, 0, 0)` : 'translate3d(0, 0, 0)',
-          transition: isDraggingEditBar
-            ? 'none'
-            : 'transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), left 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), right 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)',
+          transition: 'transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), left 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), right 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)',
           userSelect: 'none',
           touchAction: 'none',
+          willChange: 'transform',
         }}
       >
         {/* Bulk Delete Button when items are selected in Edit Mode */}
@@ -4130,7 +4150,7 @@ export default function ItemTable({
               fontWeight: 800,
               padding: '10px 18px',
               fontSize: '0.88rem',
-              cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
+              cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
           >
@@ -4161,7 +4181,7 @@ export default function ItemTable({
               fontWeight: 800,
               padding: '10px 18px',
               fontSize: '0.88rem',
-              cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
+              cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
             title="Bulk change dropdowns, prices, suppliers, sections for selected products"
@@ -4191,7 +4211,7 @@ export default function ItemTable({
               fontWeight: 800,
               padding: '10px 18px',
               fontSize: '0.88rem',
-              cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
+              cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
             title="Launch AI Studio to generate names and descriptions using Gemini Vision"
@@ -4235,7 +4255,7 @@ export default function ItemTable({
               fontWeight: 800,
               padding: '10px 18px',
               fontSize: '0.88rem',
-              cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
+              cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
           >
@@ -4263,7 +4283,7 @@ export default function ItemTable({
             padding: '11px 20px',
             fontSize: '0.9rem',
             border: isEditMode ? '2px solid var(--brand-primary)' : 'none',
-            cursor: isDraggingEditBar ? 'grabbing' : 'pointer',
+            cursor: 'pointer',
             whiteSpace: 'nowrap',
           }}
           title="Toggle Inline Table Edit Mode"

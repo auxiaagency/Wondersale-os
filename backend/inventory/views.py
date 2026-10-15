@@ -3337,7 +3337,7 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
 
         if not files:
             return Response(
-                {'error': 'No sheet image provided. Please upload at least one tally sheet image.'},
+                {'error': 'No files provided. Please upload at least one tally sheet image, document, or CSV file.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

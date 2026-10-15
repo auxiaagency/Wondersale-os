@@ -1809,25 +1809,26 @@ input[type=number] {
 
   /* Tablet Edit Mode Table & Floating Bar Styling */
   .inv-floating-bar {
-    bottom: 12px !important;
+    bottom: 16px !important;
     gap: 6px !important;
-    padding: 5px 8px !important;
-    background: rgba(15, 23, 42, 0.88) !important;
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
-    border-radius: var(--radius-pill) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
-    flex-wrap: nowrap !important;
+    padding: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: auto !important;
+    max-width: none !important;
   }
 
   .inv-floating-bar .btn {
-    padding: 5px 12px !important;
+    padding: 6px 14px !important;
     font-size: 0.74rem !important;
-    height: 30px !important;
-    gap: 4px !important;
+    height: 32px !important;
+    gap: 5px !important;
     border-radius: var(--radius-pill) !important;
     flex-shrink: 0 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
   }
 
   .inv-floating-bar .btn svg,
@@ -3079,32 +3080,31 @@ input[type=number] {
   }
 
   .inv-floating-bar {
-    bottom: 8px !important;
-    left: 8px !important;
-    right: 8px !important;
-    max-width: calc(100vw - 16px) !important;
-    justify-content: center !important;
+    bottom: 14px !important;
+    max-width: none !important;
+    width: auto !important;
+    justify-content: flex-start !important;
     flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    gap: 4px !important;
-    padding: 4px 6px !important;
-    background: rgba(15, 23, 42, 0.92) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
+    overflow-x: visible !important;
+    gap: 6px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     border-radius: var(--radius-pill) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.75) !important;
+    border: none !important;
+    box-shadow: none !important;
     box-sizing: border-box !important;
   }
 
   .inv-floating-bar .btn {
-    padding: 4px 8px !important;
-    font-size: 0.66rem !important;
-    height: 27px !important;
-    gap: 3px !important;
+    padding: 5px 12px !important;
+    font-size: 0.70rem !important;
+    height: 30px !important;
+    gap: 4px !important;
     border-radius: var(--radius-pill) !important;
     flex-shrink: 0 !important;
-    box-shadow: none !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
   }
 
   .inv-floating-bar .btn svg,
@@ -6339,21 +6339,26 @@ input[type=number] {
 
   /* Small Mobile (<= 380px) Edit Mode Adjustments */
   .inv-floating-bar {
-    gap: 3px !important;
-    padding: 3px 4px !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: auto !important;
   }
 
   .inv-floating-bar .btn {
-    padding: 3px 6px !important;
-    font-size: 0.60rem !important;
-    height: 25px !important;
-    gap: 2px !important;
+    padding: 4px 10px !important;
+    font-size: 0.65rem !important;
+    height: 28px !important;
+    gap: 3px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
   }
 
   .inv-floating-bar .btn svg,
   .inv-floating-bar .inv-float-icon {
-    width: 10px !important;
-    height: 10px !important;
+    width: 11px !important;
+    height: 11px !important;
   }
 
   .inv-table-editing .inv-edit-cost-input {
@@ -8339,6 +8344,77 @@ input[type=number] {
     width: 111.11%;
   }
 }
+
+/* ==========================================================================
+   INVENTORY TABLE SCALING & FIT
+   Scale down the inventory item list table cleanly and proportionally
+   so all columns and details fit comfortably without overlapping or sideways scroll.
+   ========================================================================== */
+.inv-table-root {
+  width: 100%;
+}
+
+.inv-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.inv-table {
+  width: 100% !important;
+  font-size: 0.76rem !important;
+  zoom: 0.88;
+}
+
+@supports not (zoom: 0.88) {
+  .inv-table {
+    transform: scale(0.88);
+    transform-origin: top left;
+    width: 113.6% !important;
+  }
+}
+
+.inv-table th {
+  padding: 8px 6px !important;
+  font-size: 0.65rem !important;
+  white-space: nowrap;
+}
+
+.inv-table td {
+  padding: 8px 6px 4px !important;
+  font-size: 0.74rem !important;
+}
+
+.inv-product-title {
+  font-size: 0.78rem !important;
+}
+
+.inv-subcat-badge,
+.inv-subcat-dropdown-trigger {
+  font-size: 0.62rem !important;
+  padding: 1px 5px !important;
+}
+
+.inv-metric-badge {
+  font-size: 0.68rem !important;
+  padding: 2px 7px !important;
+}
+
+@media (max-width: 1024px) {
+  .inv-floating-bar {
+    position: fixed !important;
+    bottom: 16px !important;
+    width: auto !important;
+    max-width: fit-content !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+}
+
 
 /* ==========================================================================
    EMPLOYEE PORTAL WORKSTATION (RESPONSIVE STYLES)
