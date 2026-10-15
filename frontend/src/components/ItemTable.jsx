@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Search,
@@ -38,6 +38,7 @@ import {
   FolderOpen,
   Lock,
   AlertOctagon,
+  GripVertical,
 } from 'lucide-react';
 import { updateItem, deleteItem, bulkAIGenerateDescriptions } from '../api';
 import { SkeletonInventoryRows } from './Skeleton';
@@ -451,17 +452,21 @@ export default function ItemTable({
     }
   });
   const floatingBarRef = useRef(null);
-  const dragInfoRef = useRef({ isDown: false, startX: 0, initialLeft: 0, moved: false, pointerId: null });
+  const dragInfoRef = useRef({ isDown: false, startX: 0, initialLeft: 0, moved: false, pointerId: null, targetElement: null });
   const justDraggedRef = useRef(false);
+
+  // Synchronously reset transform when dock side updates in React DOM to prevent any frame glitch
+  useLayoutEffect(() => {
+    if (floatingBarRef.current) {
+      floatingBarRef.current.style.transition = 'none';
+      floatingBarRef.current.style.transform = 'translate3d(0, 0, 0)';
+    }
+  }, [dockSide]);
 
   const handlePointerDown = (e) => {
     if (e.button !== undefined && e.button !== 0) return;
     const bar = floatingBarRef.current;
     if (!bar) return;
-
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (err) {}
 
     const rect = bar.getBoundingClientRect();
     dragInfoRef.current = {
@@ -470,6 +475,7 @@ export default function ItemTable({
       initialLeft: rect.left,
       moved: false,
       pointerId: e.pointerId,
+      targetElement: e.currentTarget,
     };
     bar.style.transition = 'none';
   };
@@ -480,8 +486,16 @@ export default function ItemTable({
     if (!bar) return;
 
     const dx = e.clientX - dragInfoRef.current.startX;
-    if (Math.abs(dx) > 3 || dragInfoRef.current.moved) {
-      dragInfoRef.current.moved = true;
+    // Require at least 6px of movement to qualify as a drag gesture
+    if (Math.abs(dx) > 6 || dragInfoRef.current.moved) {
+      if (!dragInfoRef.current.moved) {
+        dragInfoRef.current.moved = true;
+        try {
+          if (dragInfoRef.current.targetElement && dragInfoRef.current.pointerId !== null) {
+            dragInfoRef.current.targetElement.setPointerCapture(dragInfoRef.current.pointerId);
+          }
+        } catch (err) {}
+      }
       bar.style.transform = `translate3d(${dx}px, 0, 0)`;
     }
   };
@@ -490,11 +504,13 @@ export default function ItemTable({
     if (!dragInfoRef.current.isDown) return;
     const bar = floatingBarRef.current;
     const hadMoved = dragInfoRef.current.moved;
+    const pointerId = dragInfoRef.current.pointerId;
+    const targetElement = dragInfoRef.current.targetElement;
     dragInfoRef.current.isDown = false;
 
     try {
-      if (dragInfoRef.current.pointerId !== null) {
-        e.currentTarget.releasePointerCapture(dragInfoRef.current.pointerId);
+      if (pointerId !== null && targetElement) {
+        targetElement.releasePointerCapture(pointerId);
       }
     } catch (err) {}
 
@@ -504,27 +520,38 @@ export default function ItemTable({
         const centerX = rect.left + rect.width / 2;
         const newDock = centerX < window.innerWidth / 2 ? 'left' : 'right';
 
-        // Animate snap to edge smoothly
-        const targetX = newDock === 'left' ? 20 - dragInfoRef.current.initialLeft : (window.innerWidth - 20 - rect.width) - dragInfoRef.current.initialLeft;
-        bar.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
-        bar.style.transform = `translate3d(${targetX}px, 0, 0)`;
+        if (newDock === dockSide) {
+          // Snap cleanly back to current side
+          bar.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
+          bar.style.transform = 'translate3d(0, 0, 0)';
+          setTimeout(() => {
+            justDraggedRef.current = false;
+          }, 220);
+        } else {
+          // Animate smoothly to the opposite edge
+          const targetX = newDock === 'left'
+            ? 24 - dragInfoRef.current.initialLeft
+            : (window.innerWidth - 24 - rect.width) - dragInfoRef.current.initialLeft;
 
-        setTimeout(() => {
-          if (floatingBarRef.current) {
-            floatingBarRef.current.style.transition = 'none';
-            floatingBarRef.current.style.transform = 'translate3d(0, 0, 0)';
-          }
-          setDockSide(newDock);
-          try {
-            localStorage.setItem('wondersale_edit_bar_dock_side', newDock);
-          } catch (err) {}
-          justDraggedRef.current = false;
-        }, 220);
+          bar.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)';
+          bar.style.transform = `translate3d(${targetX}px, 0, 0)`;
+
+          setTimeout(() => {
+            setDockSide(newDock);
+            try {
+              localStorage.setItem('wondersale_edit_bar_dock_side', newDock);
+            } catch (err) {}
+            setTimeout(() => {
+              justDraggedRef.current = false;
+            }, 60);
+          }, 220);
+        }
 
         justDraggedRef.current = true;
       } else {
         bar.style.transition = 'transform 0.15s ease';
         bar.style.transform = 'translate3d(0, 0, 0)';
+        justDraggedRef.current = false;
       }
     }
   };
@@ -4122,13 +4149,31 @@ export default function ItemTable({
           zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          transition: 'transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), left 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), right 0.25s cubic-bezier(0.2, 0.9, 0.3, 1)',
+          gap: '8px',
           userSelect: 'none',
           touchAction: 'none',
           willChange: 'transform',
         }}
       >
+        {/* Subtle Drag Grip Handle */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '22px',
+            height: '36px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'rgba(255, 255, 255, 0.07)',
+            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
+            cursor: 'grab',
+            color: 'var(--text-muted, #94a3b8)',
+            flexShrink: 0,
+          }}
+          title="Drag to dock on Left or Right"
+        >
+          <GripVertical size={14} />
+        </div>
         {/* Bulk Delete Button when items are selected in Edit Mode */}
         {isEditMode && selectedItemIds.length > 0 && (
           <button
@@ -4268,9 +4313,10 @@ export default function ItemTable({
         {/* Floating Edit Mode Toggle Button */}
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             if (justDraggedRef.current) return;
-            setIsEditMode(!isEditMode);
+            setIsEditMode((prev) => !prev);
           }}
           className={`btn ${isEditMode ? 'btn-secondary' : 'btn-primary'} inv-floating-btn`}
           style={{

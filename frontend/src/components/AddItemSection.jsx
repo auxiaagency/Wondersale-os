@@ -586,7 +586,10 @@ export default function AddItemSection({
   const cost = parseFloat(costPrice) || 0;
   const sell = parseFloat(sellingPrice) || 0;
   const marginAmt = sell - cost;
-  const marginPct = cost > 0 ? ((marginAmt / cost) * 100).toFixed(1) : 0;
+  // Margin % is calculated on Selling Price (standard gross margin used in retail & analytics: Profit / Selling Price * 100)
+  const marginPct = sell > 0 ? ((marginAmt / sell) * 100).toFixed(1) : 0;
+  // Markup % is calculated on Cost Price: Profit / Cost * 100
+  const markupPct = cost > 0 ? ((marginAmt / cost) * 100).toFixed(1) : 0;
 
   // Filtered subcategories grouped by category for top form dropdown
   const filteredCategoryGroups = useMemo(() => {
@@ -619,7 +622,7 @@ export default function AddItemSection({
     );
   };
 
-  const handleResetForm = () => {
+  const handleClearFormInputs = () => {
     setName('');
     setCustomUid('');
     setSelectedSubcatIds([]);
@@ -640,8 +643,12 @@ export default function AddItemSection({
     setImagePreviews([]);
     setError('');
     setFormFeedback('');
-    setSuccessItem(null);
     setSubcatSearch('');
+  };
+
+  const handleResetForm = () => {
+    handleClearFormInputs();
+    setSuccessItem(null);
   };
 
   // Form Validation helper
@@ -740,7 +747,7 @@ export default function AddItemSection({
       setSuccessItem(created);
       onProductCreated?.(created);
       onMetaUpdated?.();
-      handleResetForm();
+      handleClearFormInputs();
     } catch (err) {
       setError(err.message || 'Failed to create product');
     } finally {
@@ -2311,10 +2318,13 @@ export default function AddItemSection({
               fontSize: '0.82rem',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <TrendingUp size={15} style={{ color: marginAmt >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }} />
               <span>
-                Unit Margin: <strong>₹{marginAmt.toFixed(2)}</strong> ({marginPct}%)
+                Profit Margin: <strong>₹{marginAmt.toFixed(2)}</strong> ({marginPct}%)
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginLeft: '6px' }}>
+                · Markup: {markupPct}%
               </span>
             </div>
             {mrp && parseFloat(mrp) > sell && (

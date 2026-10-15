@@ -36,6 +36,10 @@ import {
   TrendingUp,
   PieChart as PieIcon,
   Users,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { getSaleOrders, recordOrderDuePayment } from '../api';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
@@ -97,6 +101,11 @@ export default function SalesInvoicesLedgerView({
   // Receipt Modal State
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
   const [copiedInvoice, setCopiedInvoice] = useState(null);
+
+  // Pagination
+  const LEDGER_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerPageSize, setLedgerPageSize] = useState(100);
 
   // Table Horizontal Drag-to-Scroll Refs & State
   const tableContainerRef = useRef(null);
@@ -330,6 +339,21 @@ export default function SalesInvoicesLedgerView({
 
     return list;
   }, [orders, searchQuery, dateRangeBounds, paymentMethodFilter, cashierFilter, statusFilter, sortBy]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setLedgerPage(1);
+  }, [filteredOrders]);
+
+  // Paginated slice of filteredOrders for the table only
+  const paginatedOrders = useMemo(() => {
+    const start = (ledgerPage - 1) * ledgerPageSize;
+    return filteredOrders.slice(start, start + ledgerPageSize);
+  }, [filteredOrders, ledgerPage, ledgerPageSize]);
+
+  const ledgerTotalPages = Math.max(1, Math.ceil(filteredOrders.length / ledgerPageSize));
+  const ledgerStartEntry = filteredOrders.length === 0 ? 0 : (ledgerPage - 1) * ledgerPageSize + 1;
+  const ledgerEndEntry = Math.min(ledgerPage * ledgerPageSize, filteredOrders.length);
 
   // ─── Helper: compute gross profit for a single order ──────────────────────
   const computeOrderProfit = useCallback((o) => {
@@ -1692,7 +1716,7 @@ export default function SalesInvoicesLedgerView({
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((o) => {
+                paginatedOrders.map((o) => {
                   const dt = new Date(o.created_at);
                   const dStr = dt.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
                   const tStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -1986,21 +2010,133 @@ export default function SalesInvoicesLedgerView({
           </table>
         </div>
 
-        {/* Footer info */}
+        {/* Footer info with pagination */}
         <div
           style={{
-            padding: '12px 18px',
+            padding: '14px 18px',
             borderTop: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
             backgroundColor: 'var(--bg-main, #0B0E17)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            fontSize: '0.76rem',
-            color: 'var(--text-muted, #64748B)',
+            flexWrap: 'wrap',
+            gap: '12px',
           }}
         >
-          <span>Showing {filteredOrders.length} orders</span>
-          <span>Click any order to view full itemized tax invoice receipt.</span>
+          {/* Entry count & page size selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted, #64748B)' }}>
+              Showing{' '}
+              <strong style={{ color: 'var(--text-secondary, #94A3B8)' }}>{ledgerStartEntry}–{ledgerEndEntry}</strong>
+              {' '}of{' '}
+              <strong style={{ color: 'var(--text-secondary, #94A3B8)' }}>{filteredOrders.length.toLocaleString('en-IN')}</strong>
+              {' '}orders · Click any row to view full invoice receipt.
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-muted, #64748B)' }}>Rows per page:</span>
+              <select
+                value={ledgerPageSize}
+                onChange={(e) => { setLedgerPageSize(Number(e.target.value)); setLedgerPage(1); }}
+                style={{
+                  height: '28px',
+                  fontSize: '0.76rem',
+                  padding: '0 6px',
+                  minWidth: '70px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface, #161B2C)',
+                  border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                  color: 'var(--text-primary, #F8FAFC)',
+                  cursor: 'pointer',
+                }}
+              >
+                {LEDGER_PAGE_SIZE_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Page navigation */}
+          {filteredOrders.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setLedgerPage(1)}
+                disabled={ledgerPage === 1}
+                style={{
+                  width: '28px', height: '28px', padding: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  cursor: ledgerPage === 1 ? 'not-allowed' : 'pointer',
+                  opacity: ledgerPage === 1 ? 0.4 : 1,
+                }}
+                title="First Page"
+              >
+                <ChevronsLeft size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                disabled={ledgerPage === 1}
+                style={{
+                  width: '28px', height: '28px', padding: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  cursor: ledgerPage === 1 ? 'not-allowed' : 'pointer',
+                  opacity: ledgerPage === 1 ? 0.4 : 1,
+                }}
+                title="Previous Page"
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <span
+                style={{
+                  padding: '0 10px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  color: 'var(--text-primary, #F8FAFC)',
+                  minWidth: '80px',
+                  textAlign: 'center',
+                }}
+              >
+                Page {ledgerPage} / {ledgerTotalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setLedgerPage((p) => Math.min(ledgerTotalPages, p + 1))}
+                disabled={ledgerPage >= ledgerTotalPages}
+                style={{
+                  width: '28px', height: '28px', padding: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  cursor: ledgerPage >= ledgerTotalPages ? 'not-allowed' : 'pointer',
+                  opacity: ledgerPage >= ledgerTotalPages ? 0.4 : 1,
+                }}
+                title="Next Page"
+              >
+                <ChevronRight size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLedgerPage(ledgerTotalPages)}
+                disabled={ledgerPage >= ledgerTotalPages}
+                style={{
+                  width: '28px', height: '28px', padding: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
+                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  cursor: ledgerPage >= ledgerTotalPages ? 'not-allowed' : 'pointer',
+                  opacity: ledgerPage >= ledgerTotalPages ? 0.4 : 1,
+                }}
+                title="Last Page"
+              >
+                <ChevronsRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
       </div>

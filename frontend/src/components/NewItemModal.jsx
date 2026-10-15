@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, AlertCircle, Tag, FolderPlus, Building2, Lock } from 'lucide-react';
+import { X, Plus, AlertCircle, Tag, FolderPlus, Building2, Lock, CheckCircle2 } from 'lucide-react';
 import { createItem } from '../api';
 import CategorySubcategoryPicker from './CategorySubcategoryPicker';
 
@@ -46,6 +46,7 @@ export default function NewItemModal({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successItem, setSuccessItem] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -96,8 +97,11 @@ export default function NewItemModal({
       };
 
       const created = await createItem(payload);
+      setSuccessItem(created);
       onSuccess?.(created);
-      onClose();
+      setTimeout(() => {
+        onClose();
+      }, 1800);
     } catch (err) {
       setError(err.message || 'Failed to create product');
     } finally {
@@ -144,7 +148,33 @@ export default function NewItemModal({
         </div>
 
         <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
-          {error && (
+          {successItem && (
+            <div
+              style={{
+                padding: '14px 18px',
+                marginBottom: '18px',
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.35)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.88rem',
+                color: '#10B981',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                fontWeight: 600,
+              }}
+            >
+              <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Product Added Successfully!</div>
+                <div style={{ fontSize: '0.80rem', color: '#34D399', marginTop: '2px', fontWeight: 500 }}>
+                  "{successItem.name}" has been saved to your inventory catalog.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && !successItem && (
             <div
               style={{
                 padding: '10px 14px',
@@ -416,11 +446,11 @@ export default function NewItemModal({
 
           {/* Footer */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-            <button type="button" onClick={onClose} className="btn btn-secondary">
+            <button type="button" onClick={onClose} className="btn btn-secondary" disabled={!!successItem}>
               Cancel
             </button>
-            <button type="submit" disabled={loading} className="btn btn-primary" style={{ fontWeight: 700 }}>
-              {loading ? 'Creating Product...' : 'Save Product'}
+            <button type="submit" disabled={loading || !!successItem} className="btn btn-primary" style={{ fontWeight: 700 }}>
+              {loading ? 'Creating Product...' : successItem ? '✓ Saved!' : 'Save Product'}
             </button>
           </div>
         </form>

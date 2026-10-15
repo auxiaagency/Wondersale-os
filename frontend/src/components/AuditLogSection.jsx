@@ -19,6 +19,10 @@ import {
   FileSpreadsheet,
   User,
   ShoppingCart,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { fetchAllStockMovements, fetchEmployees } from '../api';
 import { SkeletonAuditRows } from './Skeleton';
@@ -111,6 +115,11 @@ export default function AuditLogSection({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Pagination
+  const AUDIT_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditPageSize, setAuditPageSize] = useState(100);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -129,6 +138,7 @@ export default function AuditLogSection({
   const loadMovements = useCallback(async () => {
     setLoading(true);
     setError('');
+    setAuditPage(1); // reset to first page on reload
     try {
       const params = {};
       if (searchQuery.trim()) params.search = searchQuery.trim();
@@ -251,6 +261,21 @@ export default function AuditLogSection({
 
     return list;
   }, [movements, staffFilter, dateFilter, timeFilter]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setAuditPage(1);
+  }, [filteredMovements]);
+
+  // Paginated slice of filtered movements
+  const paginatedMovements = useMemo(() => {
+    const start = (auditPage - 1) * auditPageSize;
+    return filteredMovements.slice(start, start + auditPageSize);
+  }, [filteredMovements, auditPage, auditPageSize]);
+
+  const auditTotalPages = Math.max(1, Math.ceil(filteredMovements.length / auditPageSize));
+  const auditStartEntry = filteredMovements.length === 0 ? 0 : (auditPage - 1) * auditPageSize + 1;
+  const auditEndEntry = Math.min(auditPage * auditPageSize, filteredMovements.length);
 
   // Handle Export to CSV according to active filters & time period
   const handleExportCsv = () => {
@@ -389,7 +414,7 @@ export default function AuditLogSection({
             title="Export filtered audit logs to CSV spreadsheet"
           >
             <FileSpreadsheet size={15} />
-            <span>Export to CSV ({filteredMovements.length})</span>
+          <span>Export to CSV ({filteredMovements.length})</span>
           </button>
 
           <button
@@ -733,7 +758,7 @@ export default function AuditLogSection({
                   </td>
                 </tr>
               ) : (
-                filteredMovements.map((movement) => {
+                paginatedMovements.map((movement) => {
                   const reasonMeta = REASON_METAS[movement.reason] || {
                     label: movement.reason_display || movement.reason,
                     color: '#64748B',
@@ -922,6 +947,101 @@ export default function AuditLogSection({
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {!loading && filteredMovements.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            padding: '14px 18px',
+            marginTop: '4px',
+            background: 'var(--bg-surface)',
+            borderRadius: 'var(--radius-xl)',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
+          {/* Entry count & page size */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              Showing <strong style={{ color: 'var(--text-primary)' }}>{auditStartEntry}–{auditEndEntry}</strong> of{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>{filteredMovements.length.toLocaleString('en-IN')}</strong> entries
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>Rows per page:</span>
+              <select
+                value={auditPageSize}
+                onChange={(e) => { setAuditPageSize(Number(e.target.value)); setAuditPage(1); }}
+                className="form-select"
+                style={{ height: '30px', fontSize: '0.80rem', padding: '0 8px', minWidth: '80px' }}
+              >
+                {AUDIT_PAGE_SIZE_OPTIONS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Page navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button
+              type="button"
+              onClick={() => setAuditPage(1)}
+              disabled={auditPage === 1}
+              className="btn btn-secondary btn-sm"
+              style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              title="First Page"
+            >
+              <ChevronsLeft size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
+              disabled={auditPage === 1}
+              className="btn btn-secondary btn-sm"
+              style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              title="Previous Page"
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <span
+              style={{
+                padding: '0 12px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                minWidth: '80px',
+                textAlign: 'center',
+              }}
+            >
+              Page {auditPage} / {auditTotalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setAuditPage((p) => Math.min(auditTotalPages, p + 1))}
+              disabled={auditPage >= auditTotalPages}
+              className="btn btn-secondary btn-sm"
+              style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              title="Next Page"
+            >
+              <ChevronRight size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuditPage(auditTotalPages)}
+              disabled={auditPage >= auditTotalPages}
+              className="btn btn-secondary btn-sm"
+              style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              title="Last Page"
+            >
+              <ChevronsRight size={13} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
