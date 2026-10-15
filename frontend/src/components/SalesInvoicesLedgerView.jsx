@@ -40,6 +40,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Loader2,
 } from 'lucide-react';
 import { getSaleOrders, recordOrderDuePayment } from '../api';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
@@ -101,6 +102,8 @@ export default function SalesInvoicesLedgerView({
   // Receipt Modal State
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
   const [copiedInvoice, setCopiedInvoice] = useState(null);
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   // Pagination
   const LEDGER_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
@@ -574,9 +577,21 @@ export default function SalesInvoicesLedgerView({
 
   // Export to CSV (Enhanced with Profit, Cost, Cashier Summary, and Payment Method Attributions)
   const handleExportCsv = () => {
-    if (filteredOrders.length === 0) return;
+    if (filteredOrders.length === 0 || exportingCsv) return;
+    setExportingCsv(true);
+    setExportProgress(15);
 
-    // ── Section 1: Order-level ledger ──
+    const progressTimer = setInterval(() => {
+      setExportProgress((prev) => {
+        if (prev < 50) return prev + 15;
+        if (prev < 85) return prev + 8;
+        return prev;
+      });
+    }, 70);
+
+    setTimeout(() => {
+      try {
+        // ── Section 1: Order-level ledger ──
     const headers = [
       'Invoice Number',
       'Date',
@@ -698,6 +713,9 @@ export default function SalesInvoicesLedgerView({
       ...summaryRows.map((r) => r.join(',')),
     ].join('\n');
 
+    clearInterval(progressTimer);
+    setExportProgress(100);
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -705,6 +723,16 @@ export default function SalesInvoicesLedgerView({
     a.download = `sales_ledger_with_profit_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error('Failed to export sales ledger CSV:', err);
+      } finally {
+        clearInterval(progressTimer);
+        setTimeout(() => {
+          setExportingCsv(false);
+          setExportProgress(0);
+        }, 350);
+      }
+    }, 50);
   };
 
   const copyInvoiceNumber = (inv, e) => {
@@ -1156,22 +1184,57 @@ export default function SalesInvoicesLedgerView({
             <button
               type="button"
               onClick={handleExportCsv}
-              disabled={filteredOrders.length === 0}
+              disabled={filteredOrders.length === 0 || exportingCsv}
               className="btn btn-secondary"
               style={{
+                position: 'relative',
+                overflow: 'hidden',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
                 fontSize: '0.80rem',
                 padding: '8px 14px',
                 height: '36px',
-                cursor: filteredOrders.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: filteredOrders.length === 0 ? 0.5 : 1,
+                cursor: filteredOrders.length === 0 ? 'not-allowed' : exportingCsv ? 'wait' : 'pointer',
+                opacity: filteredOrders.length === 0 ? 0.5 : exportingCsv ? 0.85 : 1,
               }}
               title="Export filtered orders to CSV"
             >
-              <Download size={13} />
-              <span>Export CSV</span>
+              {exportingCsv ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" style={{ flexShrink: 0 }} />
+                  <span>
+                    {exportProgress > 0 ? `Exporting (${exportProgress}%)...` : 'Exporting...'}
+                  </span>
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '4px',
+                      backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'block',
+                        width: `${Math.max(10, Math.min(100, exportProgress || 15))}%`,
+                        height: '100%',
+                        background: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+                        borderRadius: '2px',
+                        transition: 'width 0.15s ease-out',
+                      }}
+                    />
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Download size={13} />
+                  <span>Export CSV</span>
+                </>
+              )}
             </button>
           </div>
         </div>

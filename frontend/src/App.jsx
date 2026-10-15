@@ -320,6 +320,8 @@ export default function App() {
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [isExportCsvOpen, setIsExportCsvOpen] = useState(false);
   const [exportItems, setExportItems] = useState([]);
+  const [isPreparingExportCsv, setIsPreparingExportCsv] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
   const [reviewJobId, setReviewJobId] = useState(null);
 
   // Expired stock write-off UI state (declared at top to strictly follow React Rules of Hooks)
@@ -1242,7 +1244,23 @@ export default function App() {
                 onPrintBarcode={(item) => setActiveBarcodeItem(item)}
                 onOpenImageModal={(item) => setActiveImageItem(item)}
                 onQuickAdjust={(item) => setActiveStockItem(item)}
+                isExportCsvLoading={isPreparingExportCsv}
+                exportCsvProgress={exportProgress}
                 onOpenExportCsv={async () => {
+                  if (isPreparingExportCsv) return;
+                  setIsPreparingExportCsv(true);
+                  setExportProgress(12);
+
+                  // Incrementally advance visual progress smoothly while network fetch is in-flight
+                  const progressTimer = setInterval(() => {
+                    setExportProgress((prev) => {
+                      if (prev < 40) return prev + 8;
+                      if (prev < 70) return prev + 5;
+                      if (prev < 88) return prev + 2;
+                      return prev;
+                    });
+                  }, 120);
+
                   try {
                     const exportFilterParams = {};
                     if (searchQuery.trim()) exportFilterParams.search = searchQuery.trim();
@@ -1280,12 +1298,26 @@ export default function App() {
                     // Fetch unpaginated dataset (backward-compatible, no page param)
                     const fullData = await fetchItems(exportFilterParams);
                     const fullList = Array.isArray(fullData) ? fullData : (fullData?.results || []);
-                    setExportItems(fullList);
+                    clearInterval(progressTimer);
+                    setExportProgress(100);
+                    // Slight micro-pause so user visually sees 100% completion before modal opens
+                    setTimeout(() => {
+                      setExportItems(fullList);
+                      setIsExportCsvOpen(true);
+                      setIsPreparingExportCsv(false);
+                      setExportProgress(0);
+                    }, 180);
                   } catch (e) {
                     console.error('Error preparing CSV export data', e);
-                    setExportItems(items);
+                    clearInterval(progressTimer);
+                    setExportProgress(100);
+                    setTimeout(() => {
+                      setExportItems(items);
+                      setIsExportCsvOpen(true);
+                      setIsPreparingExportCsv(false);
+                      setExportProgress(0);
+                    }, 180);
                   }
-                  setIsExportCsvOpen(true);
                 }}
                 onItemsChanged={loadItems}
                 onStartAIDescriptionJob={(job) => {

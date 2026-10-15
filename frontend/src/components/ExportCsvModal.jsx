@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Scale,
   Box,
+  Loader2,
 } from 'lucide-react';
 
 export default function ExportCsvModal({
@@ -34,6 +35,8 @@ export default function ExportCsvModal({
   }, []);
 
   const [fileName, setFileName] = useState(defaultFileName);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   // 2. Filter States (Pre-populated from active Inventory Management table filters)
   const [selectedSubcatIds, setSelectedSubcatIds] = useState([]);
@@ -129,9 +132,11 @@ export default function ExportCsvModal({
   const handleResetFilters = () => {
     setSelectedSubcatIds([]);
     setStockStatus('');
-    setHasNoImage(false);
-    setHasNoSubcategory(false);
-    setNeedsBarcode(false);
+    setImageFilterState('');
+    setSubcatFilterState('');
+    setBarcodeFilterState('');
+    setWeightFilterState('');
+    setVolumeFilterState('');
     setSubcatQuery('');
   };
 
@@ -139,11 +144,13 @@ export default function ExportCsvModal({
     let count = 0;
     if (selectedSubcatIds.length > 0) count++;
     if (stockStatus) count++;
-    if (hasNoImage) count++;
-    if (hasNoSubcategory) count++;
-    if (needsBarcode) count++;
+    if (imageFilterState) count++;
+    if (subcatFilterState) count++;
+    if (barcodeFilterState) count++;
+    if (weightFilterState) count++;
+    if (volumeFilterState) count++;
     return count;
-  }, [selectedSubcatIds, stockStatus, hasNoImage, hasNoSubcategory, needsBarcode]);
+  }, [selectedSubcatIds, stockStatus, imageFilterState, subcatFilterState, barcodeFilterState, weightFilterState, volumeFilterState]);
 
   // 3. Compute Filtered Items for Export
   const filteredItems = useMemo(() => {
@@ -233,13 +240,27 @@ export default function ExportCsvModal({
 
   // 4. Generate Standard RFC 4180 CSV with UTF-8 BOM
   const handleExport = () => {
-    let cleanName = (fileName || '').trim();
-    if (!cleanName) {
-      cleanName = `wondersale_inventory_${new Date().toISOString().slice(0, 10)}`;
-    }
-    if (!cleanName.toLowerCase().endsWith('.csv')) {
-      cleanName += '.csv';
-    }
+    if (isExporting || filteredItems.length === 0) return;
+    setIsExporting(true);
+    setExportProgress(20);
+
+    const progressTimer = setInterval(() => {
+      setExportProgress((prev) => {
+        if (prev < 60) return prev + 18;
+        if (prev < 90) return prev + 10;
+        return prev;
+      });
+    }, 70);
+
+    setTimeout(() => {
+      try {
+        let cleanName = (fileName || '').trim();
+        if (!cleanName) {
+          cleanName = `wondersale_inventory_${new Date().toISOString().slice(0, 10)}`;
+        }
+        if (!cleanName.toLowerCase().endsWith('.csv')) {
+          cleanName += '.csv';
+        }
 
     const headers = [
       'UID / Barcode',
@@ -363,6 +384,9 @@ export default function ExportCsvModal({
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
+    clearInterval(progressTimer);
+    setExportProgress(100);
+
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', cleanName);
@@ -371,7 +395,18 @@ export default function ExportCsvModal({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    onClose();
+    setTimeout(() => {
+      onClose();
+      setIsExporting(false);
+      setExportProgress(0);
+    }, 250);
+      } catch (err) {
+        console.error('Failed to export inventory CSV:', err);
+        clearInterval(progressTimer);
+        setIsExporting(false);
+        setExportProgress(0);
+      }
+    }, 50);
   };
 
   if (!isOpen) return null;
@@ -1111,18 +1146,55 @@ export default function ExportCsvModal({
           <button
             type="button"
             onClick={handleExport}
-            disabled={filteredItems.length === 0}
+            disabled={filteredItems.length === 0 || isExporting}
             className="btn btn-primary export-csv-download-btn"
             style={{
+              position: 'relative',
+              overflow: 'hidden',
               fontWeight: 800,
               padding: '10px 24px',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
+              cursor: filteredItems.length === 0 ? 'not-allowed' : isExporting ? 'wait' : 'pointer',
+              opacity: filteredItems.length === 0 ? 0.5 : isExporting ? 0.85 : 1,
             }}
           >
-            <Download size={16} />
-            <span>Download CSV ({filteredItems.length})</span>
+            {isExporting ? (
+              <>
+                <Loader2 size={13} className="animate-spin" style={{ flexShrink: 0 }} />
+                <span>
+                  {exportProgress > 0 ? `Exporting CSV (${exportProgress}%)...` : 'Exporting CSV...'}
+                </span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '4px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: `${Math.max(10, Math.min(100, exportProgress || 20))}%`,
+                      height: '100%',
+                      background: '#ffffff',
+                      borderRadius: '2px',
+                      transition: 'width 0.15s ease-out',
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <>
+                <Download size={15} />
+                <span>Download CSV ({filteredItems.length})</span>
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -39,6 +39,7 @@ import {
   Lock,
   AlertOctagon,
   GripVertical,
+  Loader2,
 } from 'lucide-react';
 import { updateItem, deleteItem, bulkAIGenerateDescriptions } from '../api';
 import { SkeletonInventoryRows } from './Skeleton';
@@ -129,6 +130,8 @@ export default function ItemTable({
   onOpenImageModal,
   onQuickAdjust,
   onOpenExportCsv,
+  isExportCsvLoading = false,
+  exportCsvProgress = 0,
   onItemsChanged,
   onStartAIDescriptionJob,
   // Server-side pagination & sorting props
@@ -1441,6 +1444,7 @@ export default function ItemTable({
           <button
             type="button"
             onClick={onOpenExportCsv}
+            disabled={isExportCsvLoading}
             className="btn btn-secondary inv-export-btn"
             style={{
               flex: '0 0 auto',
@@ -1455,11 +1459,48 @@ export default function ItemTable({
               color: 'var(--color-success)',
               borderColor: 'rgba(16, 185, 129, 0.4)',
               background: 'rgba(16, 185, 129, 0.08)',
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: isExportCsvLoading ? 'wait' : 'pointer',
+              opacity: isExportCsvLoading ? 0.85 : 1,
             }}
-            title="Export filtered inventory catalog to CSV"
+            title={isExportCsvLoading ? 'Preparing and fetching full catalog for export...' : 'Export filtered inventory catalog to CSV'}
           >
-            <FileSpreadsheet size={15} />
-            <span>Export CSV</span>
+            {isExportCsvLoading ? (
+              <>
+                <Loader2 size={12} className="animate-spin" style={{ flexShrink: 0 }} />
+                <span style={{ fontSize: '0.80rem' }}>
+                  {exportCsvProgress > 0 ? `Preparing (${exportCsvProgress}%)...` : 'Preparing CSV...'}
+                </span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '4px',
+                    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: `${Math.max(8, Math.min(100, exportCsvProgress || 12))}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #10B981, #34D399)',
+                      borderRadius: '2px',
+                      transition: 'width 0.18s ease-out',
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet size={14} />
+                <span>Export CSV</span>
+              </>
+            )}
           </button>
         )}
       </div>

@@ -74,7 +74,18 @@ const METRIC_CONFIG = {
     bgColor: 'rgba(236, 72, 153, 0.12)',
     borderColor: 'rgba(236, 72, 153, 0.3)',
     format: (val) => `${Number(val || 0).toFixed(1)}%`,
-    description: 'Gross profit percentage on retail sales or catalog markup',
+    description: 'Gross profit percentage on retail sales price: (Price - Cost) / Price',
+  },
+  markup_pct: {
+    id: 'markup_pct',
+    label: 'Cost Markup %',
+    shortLabel: 'Markup %',
+    icon: TrendingUp,
+    color: '#8B5CF6',
+    bgColor: 'rgba(139, 92, 246, 0.12)',
+    borderColor: 'rgba(139, 92, 246, 0.3)',
+    format: (val) => `${Number(val || 0).toFixed(1)}%`,
+    description: 'Gross profit markup on purchase cost price: (Price - Cost) / Cost',
   },
   velocity: {
     id: 'velocity',
@@ -180,17 +191,54 @@ export default function ProductRankingCard({
       case 'profit': return 'by_profit';
       case 'units_sold': return 'by_units';
       case 'margin_pct': return 'by_margin';
+      case 'markup_pct': return 'by_markup';
       case 'velocity': return 'by_velocity';
       case 'stock': return 'by_stock';
       default: return 'by_revenue';
     }
   }, [selectedMetric]);
 
-  // Current metric ranking details for this scope
+  // Current metric ranking details for this scope (with on-the-fly fallback for backward compatibility)
   const currentMetricDetails = useMemo(() => {
     if (!activeScopeData) return null;
-    return activeScopeData[metricDataKey] || null;
-  }, [activeScopeData, metricDataKey]);
+    if (activeScopeData[metricDataKey]) {
+      return activeScopeData[metricDataKey];
+    }
+    // Backward compatibility fallback if backend by_markup is not yet cached:
+    if (selectedMetric === 'markup_pct' && activeScopeData.all_items_ranked) {
+      const itemsWithMarkup = activeScopeData.all_items_ranked.map((it) => {
+        const c = Number(it.cost_price || 0);
+        const s = Number(it.selling_price || 0);
+        const m = c > 0 ? ((s - c) / c) * 100 : 0;
+        return {
+          ...it,
+          markup_pct: it.markup_pct !== undefined ? Number(it.markup_pct) : m,
+        };
+      }).sort((a, b) => b.markup_pct - a.markup_pct);
+
+      const foundIdx = itemsWithMarkup.findIndex((it) => it.is_current || (item && String(it.id) === String(item.id)));
+      const rank = foundIdx !== -1 ? foundIdx + 1 : itemsWithMarkup.length;
+      const curr = itemsWithMarkup[foundIdx]?.markup_pct ?? 0;
+      const total = itemsWithMarkup.length;
+      const avg = total > 0 ? itemsWithMarkup.reduce((acc, it) => acc + it.markup_pct, 0) / total : 0;
+      const leader = itemsWithMarkup[0] || {};
+      const diffVsAvg = avg > 0 ? ((curr - avg) / avg) * 100 : 0;
+
+      return {
+        rank,
+        total,
+        percentile: total > 0 ? Math.round(((total - rank + 1) / total) * 1000) / 10 : 100,
+        current_value: curr,
+        avg_value: Math.round(avg * 100) / 100,
+        leader_value: leader.markup_pct || 0,
+        leader_name: leader.name || '',
+        leader_uid: leader.uid || '',
+        diff_vs_avg_pct: Math.round(diffVsAvg * 10) / 10,
+        leaderboard: itemsWithMarkup.slice(0, 10).map((it, idx) => ({ ...it, rank: idx + 1 })),
+      };
+    }
+    return null;
+  }, [activeScopeData, metricDataKey, selectedMetric, item]);
 
   // Filtered and sorted leaderboard items
   const sortedLeaderboardItems = useMemo(() => {
@@ -210,16 +258,39 @@ export default function ProductRankingCard({
 
     // Sort by selected metric
     items.sort((a, b) => {
-      const valA = Number(a[selectedMetric] || 0);
-      const valB = Number(b[selectedMetric] || 0);
+      let valA = a[selectedMetric];
+      let valB = b[selectedMetric];
+      if (selectedMetric === 'markup_pct') {
+        if (valA === undefined) {
+          const cA = Number(a.cost_price || 0);
+          const sA = Number(a.selling_price || 0);
+          valA = cA > 0 ? ((sA - cA) / cA) * 100 : 0;
+        }
+        if (valB === undefined) {
+          const cB = Number(b.cost_price || 0);
+          const sB = Number(b.selling_price || 0);
+          valB = cB > 0 ? ((sB - cB) / cB) * 100 : 0;
+        }
+      }
+      valA = Number(valA || 0);
+      valB = Number(valB || 0);
       return sortAscending ? valA - valB : valB - valA;
     });
 
     // Re-compute display ranks
-    return items.map((it, idx) => ({
-      ...it,
-      displayRank: idx + 1,
-    }));
+    return items.map((it, idx) => {
+      let metricVal = it[selectedMetric];
+      if (selectedMetric === 'markup_pct' && metricVal === undefined) {
+        const c = Number(it.cost_price || 0);
+        const s = Number(it.selling_price || 0);
+        metricVal = c > 0 ? ((s - c) / c) * 100 : 0;
+      }
+      return {
+        ...it,
+        [selectedMetric]: metricVal,
+        displayRank: idx + 1,
+      };
+    });
   }, [activeScopeData, selectedMetric, sortAscending, searchQuery, currentMetricDetails]);
 
   const activeMetricCfg = METRIC_CONFIG[selectedMetric] || METRIC_CONFIG.revenue;
@@ -231,9 +302,21 @@ export default function ProductRankingCard({
       return [];
     }
     const sorted = [...activeScopeData.all_items_ranked].sort((a, b) => {
-      const valA = Number(a[selectedMetric] || 0);
-      const valB = Number(b[selectedMetric] || 0);
-      return valB - valA;
+      let valA = a[selectedMetric];
+      let valB = b[selectedMetric];
+      if (selectedMetric === 'markup_pct') {
+        if (valA === undefined) {
+          const cA = Number(a.cost_price || 0);
+          const sA = Number(a.selling_price || 0);
+          valA = cA > 0 ? ((sA - cA) / cA) * 100 : 0;
+        }
+        if (valB === undefined) {
+          const cB = Number(b.cost_price || 0);
+          const sB = Number(b.selling_price || 0);
+          valB = cB > 0 ? ((sB - cB) / cB) * 100 : 0;
+        }
+      }
+      return Number(valB || 0) - Number(valA || 0);
     });
     return sorted.slice(0, 3);
   }, [activeScopeData, selectedMetric]);

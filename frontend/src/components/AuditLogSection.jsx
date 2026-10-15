@@ -23,6 +23,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Loader2,
 } from 'lucide-react';
 import { fetchAllStockMovements, fetchEmployees } from '../api';
 import { SkeletonAuditRows } from './Skeleton';
@@ -114,6 +115,8 @@ export default function AuditLogSection({
   const [movements, setMovements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   // Pagination
   const AUDIT_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
@@ -279,60 +282,85 @@ export default function AuditLogSection({
 
   // Handle Export to CSV according to active filters & time period
   const handleExportCsv = () => {
+    if (exportingCsv) return;
     if (!filteredMovements || filteredMovements.length === 0) {
       alert('No audit movements found to export with the currently selected filters.');
       return;
     }
 
-    const headers = [
-      'Date & Time',
-      'Product Name',
-      'Product UID',
-      'Movement Reason',
-      'Stock Change (Units)',
-      'Current Balance',
-      'Performed By',
-      'Role',
-      'Store Branch',
-      'Audit Note',
-    ];
+    setExportingCsv(true);
+    setExportProgress(18);
 
-    const rows = filteredMovements.map((m) => {
-      const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '—';
-      const reasonMeta = REASON_METAS[m.reason] || {};
-      const reasonLabel = reasonMeta.label || m.reason_display || m.reason || 'Stock Movement';
-      const changeStr = m.change > 0 ? `+${m.change}` : String(m.change);
-      const perfName = m.performed_by_name || 'Owner / Admin';
-      const perfRole = m.performed_by_role || 'Owner';
-      const storeName = m.store_name || (stores.find((s) => String(s.id) === String(m.store_id))?.name) || 'All Stores';
+    const progressTimer = setInterval(() => {
+      setExportProgress((prev) => {
+        if (prev < 50) return prev + 15;
+        if (prev < 85) return prev + 8;
+        return prev;
+      });
+    }, 80);
 
-      return [
-        `"${dt.replace(/"/g, '""')}"`,
-        `"${(m.item_name || 'Unknown Product').replace(/"/g, '""')}"`,
-        `"${(m.item_uid || '').replace(/"/g, '""')}"`,
-        `"${reasonLabel.replace(/"/g, '""')}"`,
-        changeStr,
-        m.item_current_quantity !== undefined && m.item_current_quantity !== null ? m.item_current_quantity : '',
-        `"${perfName.replace(/"/g, '""')}"`,
-        `"${perfRole.replace(/"/g, '""')}"`,
-        `"${storeName.replace(/"/g, '""')}"`,
-        `"${(m.note || '').replace(/"/g, '""')}"`,
-      ];
-    });
+    setTimeout(() => {
+      try {
+        const headers = [
+          'Date & Time',
+          'Product Name',
+          'Product UID',
+          'Movement Reason',
+          'Stock Change (Units)',
+          'Current Balance',
+          'Performed By',
+          'Role',
+          'Store Branch',
+          'Audit Note',
+        ];
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const dateTag = new Date().toISOString().split('T')[0];
-    const staffTag = staffFilter ? `_staff_${staffFilter}` : '';
-    const reasonTag = reasonFilter ? `_${reasonFilter}` : '';
-    a.download = `stock_movement_audit_ledger_${dateTag}${staffTag}${reasonTag}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+        const rows = filteredMovements.map((m) => {
+          const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '—';
+          const reasonMeta = REASON_METAS[m.reason] || {};
+          const reasonLabel = reasonMeta.label || m.reason_display || m.reason || 'Stock Movement';
+          const changeStr = m.change > 0 ? `+${m.change}` : String(m.change);
+          const perfName = m.performed_by_name || 'Owner / Admin';
+          const perfRole = m.performed_by_role || 'Owner';
+          const storeName = m.store_name || (stores.find((s) => String(s.id) === String(m.store_id))?.name) || 'All Stores';
+
+          return [
+            `"${dt.replace(/"/g, '""')}"`,
+            `"${(m.item_name || 'Unknown Product').replace(/"/g, '""')}"`,
+            `"${(m.item_uid || '').replace(/"/g, '""')}"`,
+            `"${reasonLabel.replace(/"/g, '""')}"`,
+            changeStr,
+            m.item_current_quantity !== undefined && m.item_current_quantity !== null ? m.item_current_quantity : '',
+            `"${perfName.replace(/"/g, '""')}"`,
+            `"${perfRole.replace(/"/g, '""')}"`,
+            `"${storeName.replace(/"/g, '""')}"`,
+            `"${(m.note || '').replace(/"/g, '""')}"`,
+          ];
+        });
+
+        clearInterval(progressTimer);
+        setExportProgress(100);
+
+        const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dateTag = new Date().toISOString().split('T')[0];
+        const staffTag = staffFilter ? `_staff_${staffFilter}` : '';
+        const reasonTag = reasonFilter ? `_${reasonFilter}` : '';
+        a.download = `stock_movement_audit_ledger_${dateTag}${staffTag}${reasonTag}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } finally {
+        clearInterval(progressTimer);
+        setTimeout(() => {
+          setExportingCsv(false);
+          setExportProgress(0);
+        }, 350);
+      }
+    }, 50);
   };
 
   // Aggregate Metrics
@@ -399,7 +427,7 @@ export default function AuditLogSection({
           <button
             type="button"
             onClick={handleExportCsv}
-            disabled={filteredMovements.length === 0}
+            disabled={filteredMovements.length === 0 || exportingCsv}
             className="btn btn-secondary audit-export-csv-btn"
             style={{
               display: 'flex',
@@ -410,11 +438,48 @@ export default function AuditLogSection({
               background: 'rgba(16, 185, 129, 0.1)',
               borderColor: 'rgba(16, 185, 129, 0.35)',
               color: '#10B981',
+              position: 'relative',
+              overflow: 'hidden',
+              cursor: exportingCsv ? 'wait' : filteredMovements.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: filteredMovements.length === 0 ? 0.5 : 1,
             }}
-            title="Export filtered audit logs to CSV spreadsheet"
+            title={exportingCsv ? 'Generating CSV spreadsheet...' : 'Export filtered audit logs to CSV spreadsheet'}
           >
-            <FileSpreadsheet size={15} />
-          <span>Export to CSV ({filteredMovements.length})</span>
+            {exportingCsv ? (
+              <>
+                <Loader2 size={12} className="animate-spin" style={{ flexShrink: 0 }} />
+                <span>
+                  {exportProgress > 0 ? `Exporting (${exportProgress}%)...` : `Exporting (${filteredMovements.length})...`}
+                </span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '4px',
+                    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: `${Math.max(10, Math.min(100, exportProgress || 15))}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #10B981, #34D399)',
+                      borderRadius: '2px',
+                      transition: 'width 0.15s ease-out',
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet size={14} />
+                <span>Export to CSV ({filteredMovements.length})</span>
+              </>
+            )}
           </button>
 
           <button

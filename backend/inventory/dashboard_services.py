@@ -1265,6 +1265,8 @@ def get_product_analytics(item: Item, request=None):
         profit = round(rev - tot_c, 2)
         # Consistent catalog margin % based on active selling price & cost price
         m_pct = round(((s_price - c_price) / s_price * 100), 2) if s_price > 0 else 0.0
+        # Consistent catalog markup % based on cost price (profit markup on cost)
+        markup_pct = round(((s_price - c_price) / c_price * 100), 2) if c_price > 0 else 0.0
 
         c_days = max(1, (end_date - cit['created_at'].date()).days + 1)
         velocity = round(u_sold / c_days, 2)
@@ -1281,6 +1283,7 @@ def get_product_analytics(item: Item, request=None):
             'revenue': rev,
             'profit': profit,
             'margin_pct': m_pct,
+            'markup_pct': markup_pct,
             'velocity': velocity,
             'supplier_id': cit['supplier_id'],
             'supplier_name': cit['supplier__name'] or '',
@@ -1361,6 +1364,7 @@ def get_product_analytics(item: Item, request=None):
             'by_profit': rank_by('profit'),
             'by_units': rank_by('units_sold'),
             'by_margin': rank_by('margin_pct'),
+            'by_markup': rank_by('markup_pct'),
             'by_velocity': rank_by('velocity'),
             'by_stock': rank_by('stock'),
             'all_items_ranked': [
@@ -1373,6 +1377,7 @@ def get_product_analytics(item: Item, request=None):
                     'revenue': x['revenue'],
                     'profit': x['profit'],
                     'margin_pct': x['margin_pct'],
+                    'markup_pct': x['markup_pct'],
                     'velocity': x['velocity'],
                     'supplier_name': x['supplier_name'],
                     'is_current': x['is_current'],
@@ -1419,6 +1424,7 @@ def get_product_analytics(item: Item, request=None):
         'by_revenue': all_scope['by_revenue'] if all_scope else {},
         'by_profit': all_scope['by_profit'] if all_scope else {},
         'by_margin': all_scope['by_margin'] if all_scope else {},
+        'by_markup': all_scope['by_markup'] if all_scope else {},
         'by_velocity': all_scope['by_velocity'] if all_scope else {},
         'by_stock': all_scope['by_stock'] if all_scope else {},
         'scopes': {
