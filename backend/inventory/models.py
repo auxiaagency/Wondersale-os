@@ -417,6 +417,11 @@ class Item(models.Model):
         db_index=True,
         help_text="Flag indicating whether this item is published/listed on the online website."
     )
+    has_variants = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Flag indicating whether this item has colour/design variants sharing the same barcode."
+    )
 
     # ── Variant / Batch Grouping ─────────────────────────────────────────────
     variant_group_id = models.CharField(
@@ -653,6 +658,20 @@ class BrokenItemReport(models.Model):
         on_delete=models.CASCADE,
         related_name='broken_reports'
     )
+    variant = models.ForeignKey(
+        'ItemVariant',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='broken_reports',
+        help_text="Optional specific colour/design variant that was broken/damaged."
+    )
+    variant_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Snapshot of the variant name at write-off time."
+    )
     store = models.ForeignKey(
         Store,
         on_delete=models.CASCADE,
@@ -846,6 +865,46 @@ class ItemImage(models.Model):
                 super().save(*args, **kwargs)
         else:
             super().save(*args, **kwargs)
+
+
+class ItemVariant(models.Model):
+    """
+    Sub-variant for an Item sharing the identical barcode / UID.
+    Used for physical merchandise designs and colours (e.g. Iron Man vs Spider-Man).
+    """
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name='design_variants'
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Colour or design title, e.g. 'Spider-Man', 'Iron Man', 'Crimson Red'"
+    )
+    quantity = models.PositiveIntegerField(
+        default=0,
+        help_text="Current in-stock count for this design variant."
+    )
+    image = models.ForeignKey(
+        ItemImage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='variant_links',
+        help_text="Optional photo depicting this exact design."
+    )
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'id']
+        verbose_name = 'Item Variant (Colour/Design)'
+        verbose_name_plural = 'Item Variants (Colour/Design)'
+        unique_together = [('item', 'name')]
+
+    def __str__(self):
+        return f"{self.item.name} - {self.name} (Qty: {self.quantity})"
 
 
 class AIDescriptionBatchJob(models.Model):
@@ -1343,6 +1402,20 @@ class SaleOrderItem(models.Model):
         null=True,
         blank=True,
         related_name='sale_items'
+    )
+    variant = models.ForeignKey(
+        'ItemVariant',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sale_items',
+        help_text="Optional design/colour variant."
+    )
+    variant_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Snapshot of the colour/design variant at time of checkout."
     )
     item_name = models.CharField(max_length=255)
     item_uid = models.CharField(max_length=64)

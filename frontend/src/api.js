@@ -728,11 +728,11 @@ export async function deleteItem(id) {
   return true;
 }
 
-export async function adjustStock(id, { change, reason, note }) {
+export async function adjustStock(id, { change, reason, note, variant_adjustments }) {
   const res = await fetch(`${API_BASE}/items/${id}/adjust-stock/`, {
     method: 'POST',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ change, reason, note }),
+    body: JSON.stringify({ change, reason, note, variant_adjustments }),
   });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));

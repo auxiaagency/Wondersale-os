@@ -40,6 +40,7 @@ import {
   AlertOctagon,
   GripVertical,
   Loader2,
+  Palette,
 } from 'lucide-react';
 import { updateItem, deleteItem, bulkAIGenerateDescriptions } from '../api';
 import { SkeletonInventoryRows } from './Skeleton';
@@ -202,6 +203,10 @@ export default function ItemTable({
   const [lightboxImage, setLightboxImage] = useState(null); // { src, name, uid }
   const [brokenItemTarget, setBrokenItemTarget] = useState(null);
 
+  // Per-item active image index for zero-lag carousel in inventory table
+  const [activeImageIndexByItem, setActiveImageIndexByItem] = useState({});
+  const [hoveredCarouselItemId, setHoveredCarouselItemId] = useState(null);
+
   // Barcode Scanner Timing & Buffer Refs for Inventory View
   const barcodeScanBufferRef = useRef('');
   const lastScanKeyTimeRef = useRef(0);
@@ -212,6 +217,36 @@ export default function ItemTable({
   const [activeVariantIdByGroup, setActiveVariantIdByGroup] = useState({});
 
   const searchInputRef = useRef(null);
+
+  // Automatic Smooth Image Carousel (every 2 seconds, paused when hovering over product thumbnail)
+  useEffect(() => {
+    // Only run timer if there is at least one item with multiple images
+    const multiImageItems = (items || []).filter(
+      (it) => (Array.isArray(it.images) && it.images.length > 1) || (it.has_variants && it.design_variants?.length > 1)
+    );
+    if (multiImageItems.length === 0) return;
+
+    const timer = setInterval(() => {
+      setActiveImageIndexByItem((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const it of multiImageItems) {
+          // Pause rotation for the item currently being hovered by staff
+          if (hoveredCarouselItemId === it.id) continue;
+
+          const total = it.images?.length || 1;
+          if (total > 1) {
+            const current = next[it.id] || 0;
+            next[it.id] = (current + 1) % total;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, [items, hoveredCarouselItemId]);
 
   // Keyboard shortcut (Escape to close Lightbox modal) & Barcode Scanner Detection
   useEffect(() => {
@@ -2587,88 +2622,148 @@ export default function ItemTable({
                           }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div style={{ position: 'relative', width: '48px', height: '100%', minHeight: '68px', margin: '0 auto' }}>
-                            <div
-                              className="inv-thumb-box"
-                              onClick={() => {
-                                if (isEditMode) {
-                                  if (onOpenImageModal) onOpenImageModal(item);
-                                } else if (item.primary_image_url) {
-                                  setLightboxImage({
-                                    src: item.primary_image_url,
-                                    name: item.name,
-                                    uid: item.uid,
-                                  });
-                                }
-                              }}
-                              style={{
-                                width: '40px',
-                                height: '40px',
-                                borderRadius: 'var(--radius-sm)',
-                                overflow: 'hidden',
-                                background: 'var(--bg-surface-hover)',
-                                border: isEditMode ? '1px dashed var(--brand-primary)' : '1px solid var(--border-subtle)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: isEditMode ? 'pointer' : (item.primary_image_url ? 'zoom-in' : 'default'),
-                                transition: 'all 0.15s ease',
-                                boxShadow: '0 2px 5px rgba(0,0,0,0.25)',
-                                position: 'absolute',
-                                left: '4px',
-                                top: '4px',
-                                zIndex: 2,
-                              }}
-                              onMouseEnter={(e) => {
-                                if (isEditMode || item.primary_image_url) {
-                                  e.currentTarget.style.transform = 'scale(1.08)';
-                                  e.currentTarget.style.borderColor = 'var(--brand-primary)';
-                                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.45)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
-                                e.currentTarget.style.borderColor = isEditMode ? 'var(--brand-primary)' : 'var(--border-subtle)';
-                                e.currentTarget.style.boxShadow = '0 2px 5px rgba(0,0,0,0.25)';
-                              }}
-                              title={
-                                isEditMode
-                                  ? `Manage image gallery for "${item.name}"`
-                                  : (item.primary_image_url ? `View full image for "${item.name}" (Lightbox)` : item.name)
-                              }
-                            >
-                              {item.primary_image_url ? (
-                                <img
-                                  src={item.primary_image_url}
-                                  alt={item.name}
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
-                              ) : (
-                                <ImageIcon
-                                  size={18}
-                                  style={{
-                                    color: isEditMode ? 'var(--brand-primary)' : 'var(--text-muted)',
-                                    opacity: isEditMode ? 0.9 : 0.45,
-                                  }}
-                                />
-                              )}
-                            </div>
+                          {(() => {
+                            const imagesList = Array.isArray(item.images) && item.images.length > 0
+                              ? item.images
+                              : (item.primary_image_url ? [{ id: 'p', image_url: item.primary_image_url }] : []);
+                            const imgCount = imagesList.length;
+                            const curIdx = imgCount > 0 ? ((activeImageIndexByItem[item.id] || 0) % imgCount + imgCount) % imgCount : 0;
+                            const curImgObj = imagesList[curIdx];
+                            const currentSrc = curImgObj?.image_url || curImgObj?.image || item.primary_image_url || null;
 
-                            {/* Continuous Tree Trunk Connector Line down to Child Variants */}
-                            {item._isVariantGroupParent && expandedVariantGroups[item._variantGroupId] && otherVariants.length > 0 && (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  left: '14px',
-                                  top: '44px',
-                                  bottom: 0,
-                                  width: '2px',
-                                  background: 'rgba(59, 130, 246, 0.65)',
-                                  zIndex: 1,
-                                }}
-                              />
-                            )}
-                          </div>
+                            const dVariants = item.design_variants || [];
+                            const hasDesignVars = Boolean(item.has_variants && dVariants.length > 0);
+                            const totalVarStock = dVariants.reduce((sum, v) => sum + (Number(v.quantity) || 0), 0);
+                            const varSummary = dVariants.map((v) => `${v.name}: ${v.quantity}`).join(', ');
+
+                            return (
+                              <div style={{ position: 'relative', width: '48px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <div
+                                  className="inv-thumb-box"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isEditMode) {
+                                      if (onOpenImageModal) onOpenImageModal(item);
+                                    } else if (currentSrc) {
+                                      setLightboxImage({
+                                        src: currentSrc,
+                                        name: item.name + (imgCount > 1 ? ` (${curIdx + 1}/${imgCount})` : ''),
+                                        uid: item.uid,
+                                      });
+                                    }
+                                  }}
+                                  onMouseEnter={() => setHoveredCarouselItemId(item.id)}
+                                  onMouseLeave={() => setHoveredCarouselItemId((prev) => (prev === item.id ? null : prev))}
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    overflow: 'hidden',
+                                    background: 'var(--bg-surface-hover)',
+                                    border: isEditMode ? '1px dashed var(--brand-primary)' : '1px solid var(--border-subtle)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: isEditMode ? 'pointer' : (currentSrc ? 'zoom-in' : 'default'),
+                                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    boxShadow: '0 2px 5px rgba(0,0,0,0.25)',
+                                    position: 'relative',
+                                    zIndex: 2,
+                                  }}
+                                  title={
+                                    isEditMode
+                                      ? `Manage image gallery for "${item.name}"`
+                                      : (currentSrc ? `Click to enlarge "${item.name}" (${curIdx + 1}/${imgCount || 1})` : item.name)
+                                  }
+                                >
+                                  {currentSrc ? (
+                                    <img
+                                      key={`${item.id}-${curIdx}`}
+                                      src={currentSrc}
+                                      alt={item.name}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        animation: 'fadeIn 0.35s ease',
+                                        pointerEvents: 'none',
+                                      }}
+                                    />
+                                  ) : (
+                                    <ImageIcon
+                                      size={18}
+                                      style={{
+                                        color: isEditMode ? 'var(--brand-primary)' : 'var(--text-muted)',
+                                        opacity: isEditMode ? 0.9 : 0.45,
+                                      }}
+                                    />
+                                  )}
+
+                                  {/* Multi-image Count Pip (subtle, non-blocking at bottom-right) */}
+                                  {imgCount > 1 && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: '1px',
+                                        right: '2px',
+                                        background: 'rgba(0,0,0,0.75)',
+                                        color: '#ffffff',
+                                        fontSize: '0.55rem',
+                                        fontWeight: 800,
+                                        padding: '0 3px',
+                                        borderRadius: '3px',
+                                        lineHeight: 1.2,
+                                        pointerEvents: 'none',
+                                        backdropFilter: 'blur(2px)',
+                                      }}
+                                    >
+                                      {curIdx + 1}/{imgCount}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Colour / Design Indicator Pill Below Photo */}
+                                {hasDesignVars && (
+                                  <div
+                                    style={{
+                                      marginTop: '3px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                      padding: '1px 4px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.58rem',
+                                      fontWeight: 800,
+                                      background: 'rgba(168, 85, 247, 0.16)',
+                                      color: '#c084fc',
+                                      border: '1px solid rgba(168, 85, 247, 0.35)',
+                                      whiteSpace: 'nowrap',
+                                      cursor: 'help',
+                                    }}
+                                    title={`Colours / Designs breakdown:\n${varSummary}\nTotal: ${totalVarStock} pcs`}
+                                  >
+                                    <Palette size={9} />
+                                    <span>{dVariants.length} C</span>
+                                  </div>
+                                )}
+
+                                {/* Continuous Tree Trunk Connector Line down to Child Variants */}
+                                {item._isVariantGroupParent && expandedVariantGroups[item._variantGroupId] && otherVariants.length > 0 && (
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      left: '14px',
+                                      top: '44px',
+                                      bottom: 0,
+                                      width: '2px',
+                                      background: 'rgba(59, 130, 246, 0.65)',
+                                      zIndex: 1,
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 2. Product Details */}
@@ -4441,18 +4536,18 @@ export default function ItemTable({
         onClose={() => setActiveSubcatViewer(null)}
       />
 
-      {/* FULL-SIZE IMAGE LIGHTBOX MODAL */}
-      {lightboxImage && (
+      {/* FULL-SIZE IMAGE LIGHTBOX MODAL (Rendered into document.body portal with high z-index) */}
+      {lightboxImage && createPortal(
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.92)',
-            backdropFilter: 'blur(12px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.94)',
+            backdropFilter: 'blur(14px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 3000,
+            zIndex: 999999,
             padding: '24px',
             animation: 'fadeIn 0.15s ease',
           }}
@@ -4563,7 +4658,8 @@ export default function ItemTable({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* AI Error Dialog Window Modal */}

@@ -40,6 +40,7 @@ import ScanBillModal from './ScanBillModal';
 import BulkEditModal, { BulkConfirmModal } from './BulkEditModal';
 import UIDConflictVerificationModal from './UIDConflictVerificationModal';
 import { calculateVolumeMetrics } from './ItemTable';
+import VariantManager from './VariantManager';
 
 // Validation helper for staged product rows (ensures missing or invalid text fields are treated as RED errors)
 export function getItemErrors(item, allStagedItems = [], existingUidMap = {}) {
@@ -268,6 +269,10 @@ export default function AddItemSection({
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('');
   const [description, setDescription] = useState('');
+
+  // Colour / Design Variant state
+  const [hasVariants, setHasVariants] = useState(false);
+  const [variants, setVariants] = useState([]);
 
   // Form Photo Modal state
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
@@ -641,6 +646,8 @@ export default function AddItemSection({
     setDescription('');
     setImageFiles([]);
     setImagePreviews([]);
+    setHasVariants(false);
+    setVariants([]);
     setError('');
     setFormFeedback('');
     setSubcatSearch('');
@@ -675,6 +682,21 @@ export default function AddItemSection({
     }
     if (initialQuantity === '' || isNaN(initialQuantity) || parseInt(initialQuantity, 10) < 0) {
       return 'Stock Quantity is required and must be 0 or greater.';
+    }
+    if (hasVariants) {
+      if (!variants || variants.length === 0) {
+        return 'Please add at least one colour / design variant or disable variants.';
+      }
+      for (const v of variants) {
+        if (!v.name || !v.name.trim()) {
+          return 'All design variants must have a name (e.g. Iron Man, Spider-Man).';
+        }
+      }
+      const sumQty = variants.reduce((acc, v) => acc + (parseInt(v.quantity, 10) || 0), 0);
+      const totalQty = parseInt(initialQuantity, 10) || 0;
+      if (sumQty !== totalQty) {
+        return `Variant quantities sum (${sumQty}) must equal total stock quantity (${totalQty}).`;
+      }
     }
     return null;
   };
@@ -730,6 +752,8 @@ export default function AddItemSection({
         height: height ? parseFloat(height) : null,
         description: description.trim(),
         needs_new_barcode_printed: true,
+        has_variants: Boolean(hasVariants),
+        variants: hasVariants ? variants.map((v) => ({ name: v.name.trim(), quantity: parseInt(v.quantity, 10) || 0, image_id: v.image_id })) : [],
         ...(isManualUidEnabled && customUid.trim() ? { uid: customUid.trim() } : {}),
       };
 
@@ -738,7 +762,8 @@ export default function AddItemSection({
       // Upload staged images if any
       if (imageFiles.length > 0) {
         try {
-          await uploadItemImages(created.id, imageFiles);
+          const uploadedImgs = await uploadItemImages(created.id, imageFiles);
+          // If variants had temporary image references, update them if needed
         } catch (imgErr) {
           console.warn('Image upload warning after single product creation:', imgErr);
         }
@@ -2302,6 +2327,16 @@ export default function AddItemSection({
             </div>
           );
         })()}
+
+        {/* Variant Manager (Colours / Designs sharing identical barcode) */}
+        <VariantManager
+          hasVariants={hasVariants}
+          setHasVariants={setHasVariants}
+          variants={variants}
+          setVariants={setVariants}
+          totalStock={initialQuantity}
+          availableImages={imagePreviews.map((url, idx) => ({ id: idx + 1, url }))}
+        />
 
         {/* Profit Margin Helper */}
         {cost > 0 && sell > 0 && (

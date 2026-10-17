@@ -1,10 +1,11 @@
+import re
 from rest_framework import serializers
 from decimal import Decimal
 from django.db.models import Q
 
 from .models import (
     Store, Category, SubCategory, Supplier, Section, Item, StockMovement, ItemImage,
-    Customer, SaleOrder, SaleOrderItem, OrderPaymentTransaction, VIPCardTransaction,
+    ItemVariant, Customer, SaleOrder, SaleOrderItem, OrderPaymentTransaction, VIPCardTransaction,
     CounterPayout, DailyRegisterShift, AIDescriptionBatchJob, BrokenItemReport
 )
 from .services import adjust_stock, generate_next_uid, report_broken_item
@@ -168,6 +169,23 @@ class ItemImageSerializer(serializers.ModelSerializer):
         return None
 
 
+class ItemVariantSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ItemVariant
+        fields = ['id', 'item', 'name', 'quantity', 'image', 'image_url', 'order', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'image_url']
+
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image and obj.image.image:
+            if request:
+                return request.build_absolute_uri(obj.image.image.url)
+            return obj.image.image.url
+        return None
+
+
 from staff.services.auth import get_current_staff
 
 
@@ -249,6 +267,8 @@ class BrokenItemReportSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'item',
+            'variant',
+            'variant_name',
             'item_uid',
             'item_name',
             'item_current_stock',
@@ -429,6 +449,7 @@ class ItemSerializer(serializers.ModelSerializer):
     store = serializers.PrimaryKeyRelatedField(queryset=Store.objects.all())
     images = ItemImageSerializer(many=True, read_only=True)
     primary_image_url = serializers.SerializerMethodField()
+    design_variants = ItemVariantSerializer(many=True, read_only=True)
     sibling_variants = serializers.SerializerMethodField()
     variant_count = serializers.SerializerMethodField()
 
@@ -483,6 +504,8 @@ class ItemSerializer(serializers.ModelSerializer):
             'legacy_uid',
             'needs_new_barcode_printed',
             'is_listed_on_website',
+            'has_variants',
+            'design_variants',
             'variant_group_id',
             'variant_name',
             'is_master_variant',
@@ -684,6 +707,17 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         default="none"
     )
 
+    has_variants = serializers.BooleanField(
+        required=False,
+        default=False
+    )
+    variants = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        write_only=True,
+        help_text="Optional list of colour/design variants with name, quantity, and image_id."
+    )
+
     class Meta:
         model = Item
         fields = [
@@ -716,6 +750,8 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
             'source',
             'legacy_uid',
             'needs_new_barcode_printed',
+            'has_variants',
+            'variants',
             'initial_quantity',
             'quantity',
         ]
@@ -736,8 +772,16 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         initial_quantity = validated_data.pop('initial_quantity', None)
         target_quantity = validated_data.pop('quantity', None)
+        variants_data = validated_data.pop('variants', None)
         qty = initial_quantity if initial_quantity is not None else (target_quantity or 0)
         subcategories = validated_data.pop('subcategories', [])
+
+        has_vars = validated_data.get('has_variants', False)
+        if has_vars and variants_data:
+            var_qty_sum = sum(int(v.get('quantity') or 0) for v in variants_data)
+            if var_qty_sum != qty:
+                # Align qty to sum of variants
+                qty = var_qty_sum
 
         validated_data.setdefault('needs_new_barcode_printed', True)
 
@@ -764,6 +808,23 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         elif item.primary_subcategory:
             item.subcategories.add(item.primary_subcategory)
 
+        # Save variants if enabled
+        if has_vars and variants_data:
+            for idx, v in enumerate(variants_data):
+                v_name = (v.get('name') or f"Variant {idx+1}").strip()
+                v_qty = max(0, int(v.get('quantity') or 0))
+                v_img_id = v.get('image_id') or v.get('image')
+                img_obj = None
+                if v_img_id:
+                    img_obj = ItemImage.objects.filter(id=v_img_id, item=item).first()
+                ItemVariant.objects.create(
+                    item=item,
+                    name=v_name,
+                    quantity=v_qty,
+                    image=img_obj,
+                    order=idx
+                )
+
         request = self.context.get('request')
         staff = get_current_staff(request) if request else None
         adjust_stock(
@@ -779,6 +840,38 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         target_quantity = validated_data.pop('quantity', None)
         subcategories = validated_data.pop('subcategories', None)
+        variants_data = validated_data.pop('variants', None)
+        has_vars = validated_data.get('has_variants', instance.has_variants)
+
+        if has_vars and variants_data is not None:
+            # Sync variants
+            var_qty_sum = sum(int(v.get('quantity') or 0) for v in variants_data)
+            target_quantity = var_qty_sum
+
+            # Upsert variants
+            keep_ids = []
+            for idx, v in enumerate(variants_data):
+                v_name = (v.get('name') or f"Variant {idx+1}").strip()
+                v_qty = max(0, int(v.get('quantity') or 0))
+                v_img_id = v.get('image_id') or v.get('image')
+                img_obj = ItemImage.objects.filter(id=v_img_id, item=instance).first() if v_img_id else None
+
+                variant_obj, _ = ItemVariant.objects.update_or_create(
+                    item=instance,
+                    name=v_name,
+                    defaults={
+                        'quantity': v_qty,
+                        'image': img_obj,
+                        'order': idx,
+                    }
+                )
+                keep_ids.append(variant_obj.id)
+            # Remove any variants not in updated payload
+            instance.design_variants.exclude(id__in=keep_ids).delete()
+        elif not has_vars:
+            # Variants disabled: remove existing design variants
+            instance.design_variants.all().delete()
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -823,6 +916,12 @@ class StockAdjustmentSerializer(serializers.Serializer):
         allow_blank=True,
         default=""
     )
+    variant_adjustments = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        allow_empty=True,
+        help_text="Optional list of { variant_id, change } or { variant_name, change } for variant products."
+    )
 
     def validate_change(self, value):
         if value == 0:
@@ -837,6 +936,13 @@ class StockAdjustmentSerializer(serializers.Serializer):
                 raise serializers.ValidationError({
                     'change': f"Deduction of {abs(change)} exceeds available stock ({item.quantity}). Minimum stock permitted is 0."
                 })
+            var_adjs = attrs.get('variant_adjustments')
+            if item.has_variants and var_adjs:
+                sum_var_change = sum(int(va.get('change', 0)) for va in var_adjs)
+                if sum_var_change != change:
+                    raise serializers.ValidationError({
+                        'variant_adjustments': f"Sum of variant adjustments ({sum_var_change:+d}) must equal total change ({change:+d})."
+                    })
         return attrs
 
 
@@ -1369,6 +1475,8 @@ class SaleOrderItemSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'item',
+            'variant',
+            'variant_name',
             'item_name',
             'item_uid',
             'unit_cost_price',
@@ -1820,6 +1928,7 @@ class ProcessReturnSerializer(serializers.Serializer):
 
 class CheckoutItemInputSerializer(serializers.Serializer):
     item_id = serializers.IntegerField(required=True)
+    variant_id = serializers.IntegerField(required=False, allow_null=True)
     quantity = serializers.IntegerField(min_value=1, required=True)
     unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
     discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, default=Decimal('0.00'))
@@ -1870,12 +1979,14 @@ class CheckoutSerializer(serializers.Serializer):
         if not items and not return_items:
             raise serializers.ValidationError({"non_field_errors": ["Cart cannot be empty. Please add items to purchase or return."]})
 
-        seen_item_ids = set()
+        seen_cart_keys = set()
         for ci in items:
             iid = ci.get('item_id')
-            if iid in seen_item_ids:
-                raise serializers.ValidationError({"items": [f"Duplicate item ID #{iid} in cart. Please combine quantities into a single line item."]})
-            seen_item_ids.add(iid)
+            vid = ci.get('variant_id') or None
+            ckey = (iid, vid)
+            if ckey in seen_cart_keys:
+                raise serializers.ValidationError({"items": [f"Duplicate item ID / variant in cart. Please combine quantities into a single line item."]})
+            seen_cart_keys.add(ckey)
 
         if return_items:
             ret_ref = attrs.get('return_reference', '').strip()
@@ -2026,10 +2137,28 @@ class CheckoutSerializer(serializers.Serializer):
                     for item in Item.objects.select_for_update().filter(id__in=item_ids)
                 }
 
+                # Lock relevant variants if any
+                variant_ids = [ci['variant_id'] for ci in cart_items if ci.get('variant_id')]
+                variants_by_id = {}
+                if variant_ids:
+                    variants_by_id = {
+                        v.id: v
+                        for v in ItemVariant.objects.select_for_update().filter(id__in=variant_ids)
+                    }
+
+                # Also aggregate requested quantities per item across line items
+                total_qty_by_item = {}
+                total_qty_by_variant = {}
+                for ci in cart_items:
+                    total_qty_by_item[ci['item_id']] = total_qty_by_item.get(ci['item_id'], 0) + ci['quantity']
+                    if ci.get('variant_id'):
+                        total_qty_by_variant[ci['variant_id']] = total_qty_by_variant.get(ci['variant_id'], 0) + ci['quantity']
+
                 for ci in cart_items:
                     i_id = ci['item_id']
                     qty = ci['quantity']
                     item = items_by_id.get(i_id)
+                    v_id = ci.get('variant_id')
 
                     if not item:
                         raise serializers.ValidationError(f"Item ID {i_id} not found in inventory.")
@@ -2038,10 +2167,36 @@ class CheckoutSerializer(serializers.Serializer):
                         raise serializers.ValidationError(
                             f"Item '{item.name}' (UID: {item.uid}) is Out of Stock (0 available in inventory). Cannot complete sale."
                         )
-                    if item.quantity < qty:
+                    if total_qty_by_item[i_id] > item.quantity:
                         raise serializers.ValidationError(
-                            f"Insufficient stock for '{item.name}' (UID: {item.uid}). Only {item.quantity} available in inventory, but {qty} requested."
+                            f"Insufficient stock for '{item.name}' (UID: {item.uid}). Only {item.quantity} available in inventory, but {total_qty_by_item[i_id]} requested."
                         )
+
+                    variant_obj = None
+                    variant_name_str = ""
+                    if item.has_variants:
+                        if not v_id:
+                            # If item has variants, picking a variant is mandatory
+                            # If exactly one variant exists, auto-fallback, else raise error
+                            first_var = item.design_variants.first()
+                            if first_var and item.design_variants.count() == 1:
+                                variant_obj = first_var
+                                variant_name_str = first_var.name
+                            else:
+                                raise serializers.ValidationError(
+                                    f"Please select a design / colour variant for '{item.name}' (UID: {item.uid})."
+                                )
+                        else:
+                            variant_obj = variants_by_id.get(v_id)
+                            if not variant_obj or variant_obj.item_id != item.id:
+                                raise serializers.ValidationError(
+                                    f"Selected variant #{v_id} does not belong to item '{item.name}'."
+                                )
+                            if total_qty_by_variant[v_id] > variant_obj.quantity:
+                                raise serializers.ValidationError(
+                                    f"Insufficient stock for design '{variant_obj.name}' of '{item.name}'. Only {variant_obj.quantity} available, but {total_qty_by_variant[v_id]} requested."
+                                )
+                            variant_name_str = variant_obj.name
 
                     custom_unit_price = ci.get('unit_price')
                     disc_pct = Decimal(str(ci.get('discount_percent') or 0.00))
@@ -2066,6 +2221,8 @@ class CheckoutSerializer(serializers.Serializer):
 
                     line_items_data.append({
                         'item': item,
+                        'variant': variant_obj,
+                        'variant_name': variant_name_str,
                         'item_name': item.name,
                         'item_uid': item.uid,
                         'unit_cost_price': unit_cost,
@@ -2354,10 +2511,14 @@ class CheckoutSerializer(serializers.Serializer):
             for line in line_items_data:
                 item = line['item']
                 qty = line['quantity']
+                variant_obj = line.get('variant')
+                variant_name = line.get('variant_name', '')
 
                 SaleOrderItem.objects.create(
                     sale_order=sale_order,
                     item=item,
+                    variant=variant_obj,
+                    variant_name=variant_name,
                     item_name=line['item_name'],
                     item_uid=line['item_uid'],
                     unit_cost_price=line['unit_cost_price'],
@@ -2369,11 +2530,15 @@ class CheckoutSerializer(serializers.Serializer):
                     total_price=line['total_price'],
                 )
 
+                if variant_obj:
+                    variant_obj.quantity = max(0, variant_obj.quantity - qty)
+                    variant_obj.save(update_fields=['quantity', 'updated_at'])
+
                 adjust_stock(
                     item=item,
                     change=-qty,
                     reason=StockMovement.REASON_SALE,
-                    note=f"POS Sale #{invoice_num} ({customer.display_name})",
+                    note=f"POS Sale #{invoice_num} ({customer.display_name})" + (f" [{variant_name}]" if variant_name else ""),
                     performed_by=staff
                 )
 

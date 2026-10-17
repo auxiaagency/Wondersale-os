@@ -34,6 +34,7 @@ export default function BrokenItemModal({
   const [proofImageFile, setProofImageFile] = useState(null);
   const [proofPreviewUrl, setProofPreviewUrl] = useState(null);
 
+  const [selectedVariantId, setSelectedVariantId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -134,8 +135,17 @@ export default function BrokenItemModal({
     }
   };
 
+  // Variant considerations
+  const hasVariants = Boolean(selectedItem?.has_variants && (selectedItem?.design_variants || []).length > 0);
+  const activeVariants = selectedItem?.design_variants || [];
+  const selectedVariantObj = hasVariants
+    ? activeVariants.find((v) => String(v.id) === String(selectedVariantId))
+    : null;
+
   // Stock calculations
-  const inStockQty = Number(selectedItem?.quantity || 0);
+  const inStockQty = selectedVariantObj
+    ? Number(selectedVariantObj.quantity || 0)
+    : Number(selectedItem?.quantity || 0);
   const costPrice = Number(selectedItem?.cost_price || 0);
   const isOutOfStock = inStockQty <= 0;
   const parsedQty = Math.max(1, parseInt(quantity, 10) || 1);
@@ -144,8 +154,10 @@ export default function BrokenItemModal({
 
   // Validation
   const isQtyExceeded = parsedQty > inStockQty;
+  const isVariantMissing = hasVariants && !selectedVariantId;
   const canSubmit =
     Boolean(selectedItem) &&
+    !isVariantMissing &&
     !isOutOfStock &&
     !isQtyExceeded &&
     parsedQty >= 1 &&
@@ -158,6 +170,11 @@ export default function BrokenItemModal({
 
     if (!selectedItem) {
       setErrorMessage('Please select an in-stock item to report.');
+      return;
+    }
+
+    if (hasVariants && !selectedVariantId) {
+      setErrorMessage('Please select the specific colour / design variant that was broken.');
       return;
     }
 
@@ -192,6 +209,9 @@ export default function BrokenItemModal({
     const formData = new FormData();
     formData.append('item', selectedItem.id);
     formData.append('item_id', selectedItem.id);
+    if (selectedVariantId) {
+      formData.append('variant_id', selectedVariantId);
+    }
     formData.append('quantity', parsedQty);
     formData.append('reason', fullReason);
     formData.append('proof_image', proofImageFile);
@@ -445,6 +465,7 @@ export default function BrokenItemModal({
                       type="button"
                       onClick={() => {
                         setSelectedItem(it);
+                        setSelectedVariantId('');
                         setQuantity(1);
                         setErrorMessage(null);
                       }}
@@ -547,6 +568,7 @@ export default function BrokenItemModal({
                     type="button"
                     onClick={() => {
                       setSelectedItem(null);
+                      setSelectedVariantId('');
                       setQuantity(1);
                     }}
                     style={{
@@ -592,6 +614,45 @@ export default function BrokenItemModal({
           {/* Form Inputs (Visible once item is selected and verified in stock) */}
           {selectedItem && !isOutOfStock && (
             <>
+              {/* Variant Picker (If product has colour/design variants) */}
+              {hasVariants && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted, #94a3b8)' }}>
+                    Select Damaged Colour / Design <span style={{ color: '#f43f5e' }}>*</span>
+                  </label>
+                  <select
+                    value={selectedVariantId}
+                    onChange={(e) => {
+                      setSelectedVariantId(e.target.value);
+                      setQuantity(1);
+                      setErrorMessage(null);
+                    }}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      background: 'rgba(0, 0, 0, 0.45)',
+                      border: !selectedVariantId ? '1px solid #f43f5e' : '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
+                      color: '#fff',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="">-- Choose which design/colour was broken --</option>
+                    {activeVariants.map((v) => (
+                      <option key={v.id} value={v.id} disabled={(v.quantity || 0) <= 0}>
+                        {v.name} — ({v.quantity || 0} in stock){(v.quantity || 0) <= 0 ? ' [Out of Stock]' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {!selectedVariantId && (
+                    <span style={{ fontSize: '0.73rem', color: '#f87171', fontWeight: 600 }}>
+                      ⚠️ Please specify the damaged variant to prevent variant counts from drifting.
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Quantity Input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -17,7 +17,7 @@ from django.db import transaction
 from django.db.models import Sum
 
 from rest_framework.exceptions import ValidationError, PermissionDenied
-from .models import Item, StockMovement, ItemImage, BrokenItemReport
+from .models import Item, StockMovement, ItemImage, BrokenItemReport, ItemVariant
 
 
 def adjust_stock(
@@ -595,7 +595,8 @@ def report_broken_item(
     reason: str,
     proof_image,
     performed_by=None,
-    user_display: str = ""
+    user_display: str = "",
+    variant_id: Optional[int] = None
 ) -> BrokenItemReport:
     """
     Bulletproof service function to report and write off broken/damaged physical merchandise:
@@ -674,6 +675,31 @@ def report_broken_item(
                 )
             })
 
+        # 2b. Variant validation if item has variants or variant_id supplied
+        variant_obj = None
+        variant_name = ""
+        if variant_id:
+            try:
+                variant_obj = ItemVariant.objects.select_for_update().get(pk=variant_id, item=locked_item)
+                if qty > variant_obj.quantity:
+                    raise ValidationError({
+                        "quantity": (
+                            f"Cannot report {qty} unit(s) as broken for design '{variant_obj.name}'. "
+                            f"Only {variant_obj.quantity} unit(s) are currently in stock."
+                        )
+                    })
+                variant_name = variant_obj.name
+            except ItemVariant.DoesNotExist:
+                raise ValidationError({"variant": f"Design variant #{variant_id} does not exist for this item."})
+        elif locked_item.has_variants:
+            # If item has variants, picking a variant is required if multiple exist
+            first_v = locked_item.design_variants.first()
+            if first_v and locked_item.design_variants.count() == 1:
+                variant_obj = first_v
+                variant_name = first_v.name
+            else:
+                raise ValidationError({"variant": "Please specify which colour / design variant was damaged."})
+
         # 3. Create negative StockMovement
         cost_price = locked_item.cost_price or Decimal('0.00')
         total_loss = (cost_price * Decimal(qty)).quantize(Decimal('0.01'))
@@ -682,7 +708,7 @@ def report_broken_item(
             item=locked_item,
             change=-qty,
             reason=StockMovement.REASON_BROKEN,
-            note=f"Broken item write-off: {str(reason).strip()[:200]}",
+            note=f"Broken item write-off: {str(reason).strip()[:180]}" + (f" [{variant_name}]" if variant_name else ""),
             proof_image=proof_image,
             performed_by=performed_by if hasattr(performed_by, 'pk') else None,
             performed_by_name=staff_name,
@@ -696,9 +722,15 @@ def report_broken_item(
         locked_item.quantity = total_stock
         locked_item.save(update_fields=['quantity', 'updated_at'])
 
+        if variant_obj:
+            variant_obj.quantity = max(0, variant_obj.quantity - qty)
+            variant_obj.save(update_fields=['quantity', 'updated_at'])
+
         # 5. Create BrokenItemReport
         report = BrokenItemReport.objects.create(
             item=locked_item,
+            variant=variant_obj,
+            variant_name=variant_name,
             store=locked_item.store,
             section=locked_item.section,
             quantity=qty,

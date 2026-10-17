@@ -50,6 +50,7 @@ import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 import ImageCropModal from './ImageCropModal';
 import BrokenItemModal from './BrokenItemModal';
 import { calculateVolumeMetrics } from './ItemTable';
+import VariantManager from './VariantManager';
 
 export default function ItemDetailModal({
   item,
@@ -131,6 +132,17 @@ export default function ItemDetailModal({
   const [aiStatus, setAiStatus] = useState(item?.ai_description_status || 'none');
   const [aiNameDraft, setAiNameDraft] = useState(item?.ai_name_draft || '');
 
+  // Colour / Design Variants (Same barcode)
+  const [hasVariants, setHasVariants] = useState(Boolean(item?.has_variants));
+  const [designVariants, setDesignVariants] = useState(
+    (item?.design_variants || []).map((v) => ({
+      id: v.id,
+      name: v.name,
+      quantity: v.quantity,
+      image_id: v.image || v.image_id,
+    }))
+  );
+
   // Variants/Batches Tab State
   const [variants, setVariants] = useState(null); // null = not loaded yet
   const [loadingVariants, setLoadingVariants] = useState(false);
@@ -186,6 +198,15 @@ export default function ItemDetailModal({
       setPrimarySubcatId(itemPrimary);
       setStoreId(item.store || stores[0]?.id);
       setImages(item.images || []);
+      setHasVariants(Boolean(item.has_variants));
+      setDesignVariants(
+        (item.design_variants || []).map((v) => ({
+          id: v.id,
+          name: v.name,
+          quantity: v.quantity,
+          image_id: v.image || v.image_id,
+        }))
+      );
 
       // Auto-load variants for dropdown selector
       if (item.id) {
@@ -195,6 +216,15 @@ export default function ItemDetailModal({
       }
     }
   }, [item, stores]);
+
+  // Synchronize quantity with designVariants sum when colours/designs are active
+  useEffect(() => {
+    if (hasVariants) {
+      const sum = (designVariants || []).reduce((acc, v) => acc + (parseInt(v.quantity, 10) || 0), 0);
+      setQuantity(sum);
+    }
+  }, [hasVariants, designVariants]);
+
 
   // When opening Create Variant, automatically pre-fetch next unique UID
   useEffect(() => {
@@ -355,6 +385,25 @@ export default function ItemDetailModal({
       return;
     }
 
+    if (hasVariants) {
+      if (!designVariants || designVariants.length === 0) {
+        setErrorMsg('Please add at least one colour / design variant or disable variants.');
+        return;
+      }
+      for (const v of designVariants) {
+        if (!v.name || !v.name.trim()) {
+          setErrorMsg('All colour / design variants must have a name (e.g. Iron Man, Spider-Man).');
+          return;
+        }
+      }
+      const sumQty = designVariants.reduce((acc, v) => acc + (parseInt(v.quantity, 10) || 0), 0);
+      const totalQty = parseInt(quantity, 10) || 0;
+      if (sumQty !== totalQty) {
+        setErrorMsg(`Variant quantities sum (${sumQty}) must equal total stock quantity (${totalQty}).`);
+        return;
+      }
+    }
+
     setSaving(true);
 
     try {
@@ -376,6 +425,8 @@ export default function ItemDetailModal({
         subcategories: selectedSubcatIds,
         primary_subcategory: primarySubcatId,
         store: storeId,
+        has_variants: Boolean(hasVariants),
+        variants: hasVariants ? designVariants.map((v) => ({ name: v.name.trim(), quantity: parseInt(v.quantity, 10) || 0, image_id: v.image_id })) : [],
       };
 
       const updated = await updateItem(item.id, payload);
@@ -669,42 +720,49 @@ export default function ItemDetailModal({
           </button>
         </div>
 
-        {/* Notifications */}
-        {feedbackMsg && (
+        {/* Floating Notification Toast */}
+        {(feedbackMsg || errorMsg) && (
           <div
             style={{
-              margin: '16px 24px 0',
-              padding: '10px 16px',
-              background: 'var(--color-success-bg)',
-              color: 'var(--color-success)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.85rem',
+              position: 'fixed',
+              top: '28px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 9999,
+              padding: '12px 22px',
+              borderRadius: 'var(--radius-pill, 9999px)',
+              background: feedbackMsg ? '#065F46' : '#991B1B',
+              color: '#FFFFFF',
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.45)',
+              border: `1px solid ${feedbackMsg ? '#10B981' : '#EF4444'}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '10px',
+              fontSize: '0.92rem',
+              fontWeight: 700,
+              maxWidth: '90vw',
+              animation: 'fadeInDown 0.25s ease-out',
             }}
           >
-            <CheckCircle2 size={16} />
-            <span>{feedbackMsg}</span>
-          </div>
-        )}
-
-        {errorMsg && (
-          <div
-            style={{
-              margin: '16px 24px 0',
-              padding: '10px 16px',
-              background: 'var(--color-danger-bg)',
-              color: 'var(--color-danger)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.85rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <AlertTriangle size={16} />
-            <span>{errorMsg}</span>
+            {feedbackMsg ? <CheckCircle2 size={19} color="#34D399" /> : <AlertTriangle size={19} color="#FCA5A5" />}
+            <span>{feedbackMsg || errorMsg}</span>
+            <button
+              type="button"
+              onClick={() => { setFeedbackMsg(''); setErrorMsg(''); }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#FFFFFF',
+                cursor: 'pointer',
+                padding: '2px',
+                display: 'flex',
+                alignItems: 'center',
+                marginLeft: '8px',
+                opacity: 0.8,
+              }}
+            >
+              <X size={15} />
+            </button>
           </div>
         )}
 
@@ -968,20 +1026,31 @@ export default function ItemDetailModal({
             {/* Quantity & Location */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
               <div>
-                <label className="form-label">
-                  Stock Quantity <span style={{ color: 'var(--color-danger)' }}>*</span>{' '}
-                  <span style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600 }}>(Required)</span>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>
+                    Stock Quantity <span style={{ color: 'var(--color-danger)' }}>*</span>{' '}
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-danger)', fontWeight: 600 }}>(Required)</span>
+                  </span>
+                  {hasVariants && (
+                    <span style={{ fontSize: '0.72rem', color: '#c084fc', fontWeight: 700 }}>
+                      Auto-summed from Colours ({designVariants.reduce((s, v) => s + (parseInt(v.quantity, 10) || 0), 0)} pcs)
+                    </span>
+                  )}
                 </label>
                 <input
                   type="number"
                   min="0"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
+                  disabled={hasVariants}
                   className="form-input mono"
+                  style={hasVariants ? { opacity: 0.85, background: 'var(--bg-surface-hover)', cursor: 'not-allowed' } : undefined}
                   required
                 />
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Modifications will automatically record a stock ledger entry.
+                  {hasVariants
+                    ? 'Total stock is linked directly to your colour / design variant quantities below.'
+                    : 'Modifications will automatically record a stock ledger entry.'}
                 </div>
               </div>
               <div>
@@ -1086,6 +1155,16 @@ export default function ItemDetailModal({
                 </div>
               </div>
             </div>
+
+            {/* Colour / Design Variants Component */}
+            <VariantManager
+              hasVariants={hasVariants}
+              setHasVariants={setHasVariants}
+              variants={designVariants}
+              setVariants={setDesignVariants}
+              totalStock={quantity}
+              availableImages={images.map((img, idx) => ({ id: img.id, url: img.image_url || img.image }))}
+            />
 
             {/* Description */}
             <div style={{ marginBottom: '24px' }}>

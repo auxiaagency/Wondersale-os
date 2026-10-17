@@ -75,6 +75,7 @@ import {
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 import ProductReturnModal from './ProductReturnModal';
 import HistoricalBillMigrationModal from './HistoricalBillMigrationModal';
+import VariantSelectionModal from './VariantSelectionModal';
 import { getVipSettings } from '../utils/vipSettings';
 import {
   connectRfidReader,
@@ -141,6 +142,7 @@ export default function BillingView({
   // Cart State
   const [cart, setCart] = useState([]);
   const [notification, setNotification] = useState(null); // { type: 'success' | 'error' | 'warning', message: '' }
+  const [variantPromptItem, setVariantPromptItem] = useState(null); // Item currently waiting for design variant selection
 
   // Checkout State (Inline Checkout Station)
   const [customerPhone, setCustomerPhone] = useState('');
@@ -732,19 +734,22 @@ export default function BillingView({
       return false;
     }
 
-    // Check if ALL stock units are already in the cart
-    const existingInCart = cart.find((ci) => ci.item.id === foundItem.id);
-    const inCartQty = existingInCart ? existingInCart.quantity : 0;
-    if (inCartQty >= foundItem.quantity) {
-      playVipRejectedSound();
-      showNotification(
-        'warning',
-        `Cannot add more: All ${foundItem.quantity} available units of "${foundItem.name}" are already in the cart.`
-      );
-      return false;
+    // Check if item has colour/design variants - if so, delegate to handleAddToCart directly to prompt variant selection modal
+    if (!foundItem.has_variants) {
+      // Check if ALL stock units are already in the cart for non-variant items
+      const existingInCart = cart.find((ci) => !ci.is_return && ci.item.id === foundItem.id);
+      const inCartQty = existingInCart ? existingInCart.quantity : 0;
+      if (inCartQty >= foundItem.quantity) {
+        playVipRejectedSound();
+        showNotification(
+          'warning',
+          `Cannot add more: All ${foundItem.quantity} available units of "${foundItem.name}" are already in the cart.`
+        );
+        return false;
+      }
     }
 
-    // Add directly to cart with audio chime
+    // Add directly to cart (or prompt variant selection if item has variants) with audio chime
     playVipReadySound();
     handleAddToCart(foundItem, 1);
     setSearchQuery('');
@@ -758,8 +763,8 @@ export default function BillingView({
   // Keep handleBarcodeScannedRef synchronized
   handleBarcodeScannedRef.current = handleBarcodeScanned;
 
-  // Add Item to Cart
-  const handleAddToCart = (itemToAdd, qtyToAdd = 1) => {
+  // Add Item to Cart (Supports Colour / Design Variants)
+  const handleAddToCart = (itemToAdd, qtyToAdd = 1, selectedVariant = null) => {
     if (!itemToAdd) return;
 
     // Strict Out of stock verification
@@ -769,18 +774,34 @@ export default function BillingView({
       return;
     }
 
+    // Check if product has colour/design variants and none was pre-selected
+    if (itemToAdd.has_variants && (itemToAdd.design_variants || []).length > 0 && !selectedVariant) {
+      setVariantPromptItem(itemToAdd);
+      return;
+    }
+
+    const variantKey = selectedVariant ? `_var_${selectedVariant.id}` : '';
+    const cartKey = `buy_${itemToAdd.id}${variantKey}`;
+    const maxStock = selectedVariant ? (selectedVariant.quantity || 0) : itemToAdd.quantity;
+
+    if (selectedVariant && selectedVariant.quantity <= 0) {
+      playVipRejectedSound();
+      showNotification('error', `Cannot add "${itemToAdd.name} (${selectedVariant.name})": Out of Stock (0 units).`);
+      return;
+    }
+
     setCart((prevCart) => {
-      const existingIdx = prevCart.findIndex((ci) => !ci.is_return && ci.item.id === itemToAdd.id);
+      const existingIdx = prevCart.findIndex((ci) => !ci.is_return && ci.cart_key === cartKey);
       if (existingIdx >= 0) {
         const currentCartQty = prevCart[existingIdx].quantity;
         const currentPrice = prevCart[existingIdx].unit_price || itemToAdd.selling_price;
         const newTotalQty = currentCartQty + qtyToAdd;
 
         // Check if exceeds stock
-        if (newTotalQty > itemToAdd.quantity) {
+        if (newTotalQty > maxStock) {
           showNotification(
             'warning',
-            `Cannot add more: All ${itemToAdd.quantity} available units of "${itemToAdd.name}" are already in the cart.`
+            `Cannot add more: All ${maxStock} available units of "${itemToAdd.name}${selectedVariant ? ` (${selectedVariant.name})` : ''}" are already in the cart.`
           );
           return prevCart;
         }
@@ -791,24 +812,25 @@ export default function BillingView({
           quantity: newTotalQty,
           total: (parseFloat(currentPrice) * newTotalQty).toFixed(2),
         };
-        showNotification('success', `Added another "${itemToAdd.name}" (Qty: ${newTotalQty} in bill).`);
+        showNotification('success', `Added another "${itemToAdd.name}${selectedVariant ? ` (${selectedVariant.name})` : ''}" (Qty: ${newTotalQty} in bill).`);
         return updated;
       } else {
-        if (qtyToAdd > itemToAdd.quantity) {
+        if (qtyToAdd > maxStock) {
           showNotification(
             'warning',
-            `Cannot add ${qtyToAdd}: Only ${itemToAdd.quantity} units of "${itemToAdd.name}" available.`
+            `Cannot add ${qtyToAdd}: Only ${maxStock} units of "${itemToAdd.name}${selectedVariant ? ` (${selectedVariant.name})` : ''}" available.`
           );
           return prevCart;
         }
 
-        showNotification('success', `Added "${itemToAdd.name}" directly to bill.`);
+        showNotification('success', `Added "${itemToAdd.name}${selectedVariant ? ` (${selectedVariant.name})` : ''}" directly to bill.`);
         return [
           ...prevCart,
           {
             is_return: false,
-            cart_key: `buy_${itemToAdd.id}`,
+            cart_key: cartKey,
             item: itemToAdd,
+            variant: selectedVariant || null,
             quantity: qtyToAdd,
             unit_price: parseFloat(itemToAdd.selling_price).toFixed(2),
             total: (parseFloat(itemToAdd.selling_price) * qtyToAdd).toFixed(2),
@@ -848,10 +870,11 @@ export default function BillingView({
         if (isNaN(qty) || qty <= 0) {
           return prev.filter((_, idx) => idx !== targetIdx);
         }
-        if (qty > ci.item.quantity) {
+        const maxStock = ci.variant ? (ci.variant.quantity || 0) : ci.item.quantity;
+        if (qty > maxStock) {
           showNotification(
             'warning',
-            `Cannot exceed stock: Only ${ci.item.quantity} units of "${ci.item.name}" available.`
+            `Cannot exceed stock: Only ${maxStock} units of "${ci.item.name}${ci.variant ? ` (${ci.variant.name})` : ''}" available.`
           );
           return prev;
         }
@@ -1734,6 +1757,7 @@ export default function BillingView({
 
     const purchasedPayloadItems = purchasedCartItems.map((ci) => ({
       item_id: ci.item.id,
+      variant_id: ci.variant?.id || undefined,
       quantity: ci.quantity,
       unit_price: Number((parseFloat(ci.unit_price) || parseFloat(ci.item.selling_price) || 0).toFixed(2)),
     }));
@@ -2038,7 +2062,10 @@ export default function BillingView({
     if (!completedOrder) return;
     const itemsList =
       completedOrder.items
-        ?.map((item, idx) => `${idx + 1}. ${item.item_name} (Qty: ${item.quantity} × ₹${item.unit_selling_price} = ₹${item.total_price})`)
+        ?.map((item, idx) => {
+          const displayName = item.variant_name ? `${item.item_name} (${item.variant_name})` : item.item_name;
+          return `${idx + 1}. ${displayName} (Qty: ${item.quantity} × ₹${item.unit_selling_price} = ₹${item.total_price})`;
+        })
         .join('\n') || '';
     const storeName = completedOrder.store_name || activeStore?.name || 'Wondersale';
     const custName = completedOrder.customer_name || (completedOrder.customer_display_name && !completedOrder.customer_display_name.startsWith('Customer (') ? completedOrder.customer_display_name : '') || completedOrder.customer_phone || '';
@@ -2895,7 +2922,16 @@ export default function BillingView({
                 </thead>
                 <tbody>
                   {cart.map((ci) => {
-                    const primaryImg = ci.item.images?.find((img) => img.is_primary) || ci.item.images?.[0];
+                    // 1. If variant has an image linked, match against item.images or variant.image_url / variant.image
+                    let variantImgUrl = null;
+                    if (ci.variant) {
+                      const vImgId = ci.variant.image_id || ci.variant.image;
+                      const matchedImg = ci.item.images?.find((img) => img.id === vImgId);
+                      variantImgUrl = matchedImg?.image_url || matchedImg?.image || ci.variant.image_url || (typeof ci.variant.image === 'string' ? ci.variant.image : null);
+                    }
+                    const itemPrimary = ci.item.images?.find((img) => img.is_primary) || ci.item.images?.[0];
+                    const itemImgUrl = itemPrimary?.image_url || itemPrimary?.image || ci.item.primary_image_url || null;
+                    const finalImgSrc = variantImgUrl || itemImgUrl;
                     const itemKey = ci.cart_key || (ci.is_return ? `return_${ci.original_order_item_id}` : `buy_${ci.item.id}`);
                     const isRet = Boolean(ci.is_return);
 
@@ -2916,10 +2952,10 @@ export default function BillingView({
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div
                               onClick={() => {
-                                if (primaryImg) {
+                                if (finalImgSrc) {
                                   setLightboxImage({
-                                    src: primaryImg.image_url || primaryImg.image,
-                                    name: ci.item.name,
+                                    src: finalImgSrc,
+                                    name: ci.item.name + (ci.variant ? ` (${ci.variant.name})` : ''),
                                     uid: ci.item.uid,
                                   });
                                 }
@@ -2938,15 +2974,18 @@ export default function BillingView({
                                 justifyContent: 'center',
                                 flexShrink: 0,
                                 boxShadow: '0 2px 6px rgba(0, 0, 0, 0.25)',
-                                cursor: primaryImg ? 'zoom-in' : 'default',
+                                cursor: finalImgSrc ? 'zoom-in' : 'default',
                               }}
-                              title={primaryImg ? 'Click to view full-size image' : undefined}
+                              title={finalImgSrc ? 'Click to view full-size image' : undefined}
                             >
-                              {primaryImg ? (
+                              {finalImgSrc ? (
                                 <img
-                                  src={primaryImg.image_url || primaryImg.image}
+                                  src={finalImgSrc}
                                   alt={ci.item.name}
                                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
                                 />
                               ) : isRet ? (
                                 <RotateCcw size={16} style={{ color: '#FB923C' }} />
@@ -2958,6 +2997,11 @@ export default function BillingView({
                             <div style={{ minWidth: 0, flex: 1 }}>
                               <div className="billing-cart-item-name" style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.82rem', lineHeight: 1.25 }}>
                                 {ci.item.name}
+                                {ci.variant && (
+                                  <span style={{ marginLeft: '6px', color: 'var(--brand-primary)', fontWeight: 800 }}>
+                                    ({ci.variant.name})
+                                  </span>
+                                )}
                               </div>
                               <div
                                 className="billing-cart-item-submeta"
@@ -6159,6 +6203,11 @@ export default function BillingView({
                               </span>
                             )}
                             {ci.item.name}
+                            {ci.variant && (
+                              <span style={{ marginLeft: '6px', color: 'var(--brand-primary)', fontWeight: 800 }}>
+                                ({ci.variant.name})
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: isRet ? '#FB923C' : undefined }}>
                             {ci.quantity}
@@ -6700,6 +6749,7 @@ export default function BillingView({
                                 {returnLines.map((item, i) => {
                                   const rateVal = parseFloat(item.unit_selling_price || 0);
                                   const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
+                                  const displayName = item.variant_name ? `${item.item_name} (${item.variant_name})` : item.item_name;
                                   return (
                                     <React.Fragment key={`ret_row_${i}`}>
                                       <tr>
@@ -6713,7 +6763,7 @@ export default function BillingView({
                                               wordBreak: 'break-word',
                                             }}
                                           >
-                                            {item.item_name}
+                                            {displayName}
                                           </div>
                                         </td>
                                       </tr>
@@ -6751,6 +6801,7 @@ export default function BillingView({
                                 const rateVal = parseFloat(item.unit_selling_price || 0);
                                 const discountVal = Math.max(0, (mrpVal - rateVal) * item.quantity);
                                 const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
+                                const displayName = item.variant_name ? `${item.item_name} (${item.variant_name})` : item.item_name;
                                 return (
                                   <React.Fragment key={`pur_row_${i}`}>
                                     <tr>
@@ -6769,9 +6820,9 @@ export default function BillingView({
                                             WebkitBoxOrient: 'vertical',
                                             wordBreak: 'break-word',
                                           }}
-                                          title={item.item_name}
+                                          title={displayName}
                                         >
-                                          {item.item_name}
+                                          {displayName}
                                         </div>
                                       </td>
                                     </tr>
@@ -6808,6 +6859,7 @@ export default function BillingView({
                               const rateVal = parseFloat(item.unit_selling_price || 0);
                               const discountVal = Math.max(0, (mrpVal - rateVal) * item.quantity);
                               const lineTotal = parseFloat(item.total_price || (rateVal * item.quantity));
+                              const displayName = item.variant_name ? `${item.item_name} (${item.variant_name})` : item.item_name;
                               return (
                                 <React.Fragment key={i}>
                                   <tr>
@@ -6826,9 +6878,9 @@ export default function BillingView({
                                           WebkitBoxOrient: 'vertical',
                                           wordBreak: 'break-word',
                                         }}
-                                        title={item.item_name}
+                                        title={displayName}
                                       >
-                                        {item.item_name}
+                                        {displayName}
                                       </div>
                                     </td>
                                   </tr>
@@ -10622,6 +10674,19 @@ export default function BillingView({
           loadStoreItems();
         }}
       />
+
+      {/* POS Colour / Design Variant Quick-Selection Modal */}
+      {variantPromptItem && (
+        <VariantSelectionModal
+          item={variantPromptItem}
+          onSelectVariant={(selectedVariant) => {
+            const item = variantPromptItem;
+            setVariantPromptItem(null);
+            handleAddToCart(item, 1, selectedVariant);
+          }}
+          onClose={() => setVariantPromptItem(null)}
+        />
+      )}
     </div>
   );
 }

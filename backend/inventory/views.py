@@ -267,7 +267,9 @@ class OptionalPageNumberPagination(PageNumberPagination):
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.select_related(
         'store', 'supplier', 'section', 'primary_subcategory', 'primary_subcategory__category'
-    ).prefetch_related('subcategories', 'subcategories__category', 'images').all()
+    ).prefetch_related(
+        'subcategories', 'subcategories__category', 'images', 'design_variants', 'design_variants__image'
+    ).all()
     parser_classes = [JSONParser, FormParser, MultiPartParser]
     pagination_class = OptionalPageNumberPagination
 
@@ -298,7 +300,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         if vg_ids:
             all_siblings = (
                 Item.objects.filter(variant_group_id__in=vg_ids)
-                .prefetch_related('images', 'subcategories')
+                .prefetch_related('images', 'subcategories', 'design_variants', 'design_variants__image')
                 .select_related('supplier')
                 .order_by('-is_master_variant', 'id')
             )
@@ -333,6 +335,21 @@ class ItemViewSet(viewsets.ModelViewSet):
                     'subcategories': [{'id': sc.id, 'name': sc.name} for sc in s.subcategories.all()],
                     'is_master_variant': s.is_master_variant,
                     'primary_image_url': img_url,
+                    'has_variants': s.has_variants,
+                    'design_variants': [
+                        {
+                            'id': dv.id,
+                            'name': dv.name,
+                            'quantity': dv.quantity,
+                            'image': dv.image_id,
+                            'image_url': (
+                                request.build_absolute_uri(dv.image.image.url)
+                                if (dv.image and dv.image.image and request)
+                                else (dv.image.image.url if dv.image and dv.image.image else None)
+                            ),
+                        }
+                        for dv in s.design_variants.all()
+                    ],
                 })
 
         context = self.get_serializer_context()
@@ -699,6 +716,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         change = serializer.validated_data['change']
         reason = serializer.validated_data['reason']
         note = serializer.validated_data.get('note', '')
+        var_adjs = serializer.validated_data.get('variant_adjustments', [])
 
         staff = get_current_staff(request)
 
@@ -709,6 +727,17 @@ class ItemViewSet(viewsets.ModelViewSet):
             note=note,
             performed_by=staff
         )
+
+        if item.has_variants and var_adjs:
+            for va in var_adjs:
+                v_id = va.get('variant_id') or va.get('id')
+                v_chg = int(va.get('change') or 0)
+                if v_id and v_chg != 0:
+                    v_obj = ItemVariant.objects.filter(id=v_id, item=item).first()
+                    if v_obj:
+                        v_obj.quantity = max(0, v_obj.quantity + v_chg)
+                        v_obj.save(update_fields=['quantity', 'updated_at'])
+
         item.refresh_from_db()
 
         return Response({
@@ -2242,6 +2271,7 @@ class BrokenItemReportViewSet(viewsets.ModelViewSet):
         quantity = request.data.get('quantity')
         reason = request.data.get('reason')
         proof_image = request.FILES.get('proof_image') or request.data.get('proof_image')
+        variant_id = request.data.get('variant') or request.data.get('variant_id')
 
         member = get_current_staff(request)
 
@@ -2252,7 +2282,8 @@ class BrokenItemReportViewSet(viewsets.ModelViewSet):
                 reason=reason,
                 proof_image=proof_image,
                 performed_by=member,
-                user_display=getattr(member, 'name', '') or str(request.user)
+                user_display=getattr(member, 'name', '') or str(request.user),
+                variant_id=variant_id
             )
         except Exception as e:
             if hasattr(e, 'detail'):
