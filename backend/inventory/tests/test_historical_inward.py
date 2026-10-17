@@ -113,7 +113,7 @@ class HistoricalInwardProductionTests(TestCase):
         payload = {
             "store_id": self.store.id,
             "batch_datetime": batch_dt_str,
-            "deduct_inventory_stock": False,
+            "deduct_inventory_stock": True,
             "sheet_reference": "10/10/26 Kitchen Utility Board",
             "bills": [
                 {
@@ -180,3 +180,42 @@ class HistoricalInwardProductionTests(TestCase):
         self.assertEqual(Decimal(str(live_shift.get("cash_sales_amount", 0))), Decimal("0.00"))
         # Expected cash in drawer must equal opening cash (1000.00), NOT 1387.00!
         self.assertEqual(Decimal(str(live_shift.get("expected_cash", 0))), Decimal("1000.00"))
+
+    def test_historical_batch_rejects_deductions_exceeding_stock(self):
+        """
+        Verify that commit-historical-batch rejects any batch where stock deduction
+        exceeds current inventory, preventing negative stock.
+        """
+        # self.item1 has 10 units
+        payload = {
+            "store_id": self.store.id,
+            "batch_datetime": "2026-10-10T12:00:00",
+            "deduct_inventory_stock": True,
+            "bills": [
+                {
+                    "bill_index": 1,
+                    "customer_phone": "9893042523",
+                    "payment_method": "cash",
+                    "total_amount": 2890.00,
+                    "items": [
+                        {
+                            "item_id": self.item1.id,
+                            "item_uid": self.item1.uid,
+                            "item_name": self.item1.name,
+                            "quantity": 15,  # 15 > 10 available
+                            "unit_price": 289.00,
+                            "total_price": 4335.00
+                        }
+                    ]
+                }
+            ]
+        }
+
+        url = reverse("sale-order-commit-historical-batch")
+        response = self.client.post(url, data=json.dumps(payload), content_type="application/json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("negative inventory", response.data.get("error", "").lower())
+        self.item1.refresh_from_db()
+        self.assertEqual(self.item1.quantity, 10)  # Stock untouched
+        self.assertEqual(SaleOrder.objects.count(), 0)

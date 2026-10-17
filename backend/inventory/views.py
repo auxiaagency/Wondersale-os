@@ -693,7 +693,7 @@ class ItemViewSet(viewsets.ModelViewSet):
     def adjust_stock_action(self, request, pk=None):
         """Perform a stock addition or deduction through the ledger."""
         item = self.get_object()
-        serializer = StockAdjustmentSerializer(data=request.data)
+        serializer = StockAdjustmentSerializer(data=request.data, context={'request': request, 'item': item})
         serializer.is_valid(raise_exception=True)
 
         change = serializer.validated_data['change']
@@ -3432,8 +3432,13 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         if parsed_dt and timezone.is_naive(parsed_dt):
             parsed_dt = timezone.make_aware(parsed_dt)
 
-        # Billing always deducts stock from inventory
-        deduct_stock = True
+        # Deduct stock option from request (default True: backward entries must deduct stock and verify non-negativity)
+        raw_deduct = request.data.get('deduct_inventory_stock')
+        if raw_deduct is not None:
+            deduct_stock = str(raw_deduct).lower() in ('true', '1', 'yes')
+        else:
+            deduct_stock = True
+
         entry_source = request.data.get('entry_source', 'sheet_photo_ocr')
         sheet_ref = request.data.get('sheet_reference', '')
         bills_data = request.data.get('bills', [])
@@ -3443,6 +3448,9 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
 
         # STRICT VALIDATION GATE: Check that all items in all submitted bills exist in DB!
         catalog_item_ids = set(Item.objects.filter(Q(store=store) | Q(store__isnull=True)).values_list('id', flat=True))
+
+        # If stock deduction is requested, aggregate total units needed per item to ensure no item goes negative
+        batch_required_quantities = {}
 
         for idx, b in enumerate(bills_data):
             b_num = b.get('bill_index') or (idx + 1)
@@ -3462,6 +3470,47 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
                         },
                         status=status.HTTP_400_BAD_REQUEST
                     )
+                if deduct_stock:
+                    qty = int(it.get('quantity', 1))
+                    batch_required_quantities[i_id] = batch_required_quantities.get(i_id, 0) + qty
+
+        if deduct_stock and batch_required_quantities:
+            items_to_check = {it.id: it for it in Item.objects.filter(id__in=batch_required_quantities.keys())}
+            insufficient_items = []
+            for i_id, needed_qty in batch_required_quantities.items():
+                checked_item = items_to_check.get(i_id)
+                avail_qty = int(checked_item.quantity) if checked_item else 0
+                if avail_qty < needed_qty:
+                    insufficient_items.append({
+                        'item_id': checked_item.id if checked_item else i_id,
+                        'item_uid': checked_item.uid if checked_item else str(i_id),
+                        'item_name': checked_item.name if checked_item else f"Item #{i_id}",
+                        'available_stock': max(0, avail_qty),
+                        'required_stock': needed_qty,
+                        'shortfall': needed_qty - max(0, avail_qty)
+                    })
+
+            if insufficient_items:
+                first_deficit = insufficient_items[0]
+                summary_names = ", ".join([f"'{d['item_name']}' (UID: {d['item_uid']}, Needed: {d['required_stock']}, Available: {d['available_stock']})" for d in insufficient_items[:3]])
+                if len(insufficient_items) > 3:
+                    summary_names += f" and {len(insufficient_items) - 3} more item(s)"
+
+                return Response(
+                    {
+                        'error': (
+                            f"Historical batch rejected: Stock deduction would cause negative inventory. "
+                            f"Stock must always remain 0 or a positive integer. "
+                            f"Deficit found in: {summary_names}. "
+                            f"Please restock these items in inventory and click 'Revalidate Stock', or commit without stock deduction."
+                        ),
+                        'insufficient_stock_items': insufficient_items,
+                        'item_id': first_deficit['item_id'],
+                        'available_stock': first_deficit['available_stock'],
+                        'required_stock': first_deficit['required_stock']
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         # ATOMIC INWARD COMMIT
         cashier_name = staff_member.name if staff_member else "Manager (Historical)"
@@ -3585,15 +3634,19 @@ class CounterPayoutViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         store_id = self.request.query_params.get('store') or self.request.query_params.get('store_id')
-        if store_id:
-            qs = qs.filter(store_id=store_id)
+        if store_id and str(store_id).strip().lower() != 'all':
+            s_ids = [s.strip() for s in str(store_id).split(',') if s.strip().isdigit()]
+            if len(s_ids) == 1:
+                qs = qs.filter(store_id=s_ids[0])
+            elif len(s_ids) > 1:
+                qs = qs.filter(store_id__in=s_ids)
 
         category = self.request.query_params.get('category')
-        if category:
+        if category and category != 'all':
             qs = qs.filter(category=category)
 
         payment_method = self.request.query_params.get('payment_method')
-        if payment_method:
+        if payment_method and payment_method != 'all':
             qs = qs.filter(payment_method=payment_method)
 
         search = self.request.query_params.get('search', '').strip()
@@ -3606,12 +3659,19 @@ class CounterPayoutViewSet(viewsets.ModelViewSet):
                 Q(receipt_number__icontains=search)
             )
 
-        start_time = parse_filter_datetime(self.request.query_params.get('start_time'))
-        end_time = parse_filter_datetime(self.request.query_params.get('end_time'))
-        if start_time:
-            qs = qs.filter(paid_at__gte=start_time)
-        if end_time:
-            qs = qs.filter(paid_at__lte=end_time)
+        start_time_raw = self.request.query_params.get('start_time') or self.request.query_params.get('start_date')
+        end_time_raw = self.request.query_params.get('end_time') or self.request.query_params.get('end_date')
+        if start_time_raw:
+            start_time = parse_filter_datetime(start_time_raw)
+            if start_time:
+                qs = qs.filter(paid_at__gte=start_time)
+        if end_time_raw:
+            end_time = parse_filter_datetime(end_time_raw)
+            if end_time:
+                # If date only, make end of day inclusive
+                if len(str(end_time_raw).strip()) == 10:
+                    end_time = end_time.replace(hour=23, minute=59, second=59, microsecond=999999)
+                qs = qs.filter(paid_at__lte=end_time)
 
         return qs.order_by('-paid_at', '-created_at')
 

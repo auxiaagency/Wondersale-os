@@ -46,12 +46,46 @@ export default function ImageCropModal({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [rotation, setRotation] = useState(0); // 0, 90, 180, 270
 
-  // Dragging state
+  // Dragging & Gesture state
   const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef({ x: 0, y: 0, initialPanX: 0, initialPanY: 0 });
+  const dragStartRef = useRef({ x: 0, y: 0, initialPanX: 0, initialPanY: 0, initialDistance: 0, initialZoom: 1 });
 
   const viewportRef = useRef(null);
   const imageRef = useRef(null);
+
+  // Responsive measured viewport dimension (default 380 for desktop, adapts on mobile)
+  const [measuredViewportSize, setMeasuredViewportSize] = useState(380);
+
+  useEffect(() => {
+    if (!viewportRef.current) return;
+    const updateSize = () => {
+      if (viewportRef.current) {
+        const w = viewportRef.current.clientWidth;
+        if (w > 0) setMeasuredViewportSize(w);
+      }
+    };
+    updateSize();
+
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateSize());
+      resizeObserver.observe(viewportRef.current);
+    }
+    window.addEventListener('resize', updateSize);
+
+    return () => {
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [currentFile, isOpen]);
+
+  // Helper to compute Euclidean distance between two touch points
+  const getTouchDistance = (touches) => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  };
 
   // Initialize and load the image source when currentFile changes
   useEffect(() => {
@@ -107,6 +141,8 @@ export default function ImageCropModal({
       y: e.clientY,
       initialPanX: pan.x,
       initialPanY: pan.y,
+      initialDistance: 0,
+      initialZoom: zoom,
     };
   };
 
@@ -127,45 +163,85 @@ export default function ImageCropModal({
     setIsDragging(false);
   }, []);
 
-  // Touch support for mobile / tablets
+  // Touch support for mobile / tablets with multi-touch Pinch-to-Zoom
   const handleTouchStart = (e) => {
+    e.stopPropagation();
     if (e.touches.length === 1) {
-      e.stopPropagation();
       setIsDragging(true);
       dragStartRef.current = {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
         initialPanX: pan.x,
         initialPanY: pan.y,
+        initialDistance: 0,
+        initialZoom: zoom,
+      };
+    } else if (e.touches.length === 2) {
+      setIsDragging(true);
+      const dist = getTouchDistance(e.touches);
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      dragStartRef.current = {
+        x: midX,
+        y: midY,
+        initialPanX: pan.x,
+        initialPanY: pan.y,
+        initialDistance: dist,
+        initialZoom: zoom,
       };
     }
   };
 
   const handleTouchMove = useCallback(
     (e) => {
-      if (!isDragging || e.touches.length !== 1) return;
-      const dx = e.touches[0].clientX - dragStartRef.current.x;
-      const dy = e.touches[0].clientY - dragStartRef.current.y;
-      setPan({
-        x: dragStartRef.current.initialPanX + dx,
-        y: dragStartRef.current.initialPanY + dy,
-      });
+      if (!isDragging) return;
+      // Prevent browser default gesture scrolling on mobile touch move
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - dragStartRef.current.x;
+        const dy = e.touches[0].clientY - dragStartRef.current.y;
+        setPan({
+          x: dragStartRef.current.initialPanX + dx,
+          y: dragStartRef.current.initialPanY + dy,
+        });
+      } else if (e.touches.length === 2 && dragStartRef.current.initialDistance > 0) {
+        // Pinch-to-Zoom
+        const newDist = getTouchDistance(e.touches);
+        const scaleChange = newDist / dragStartRef.current.initialDistance;
+        const newZoom = Math.max(minZoom, Math.min(3.0, dragStartRef.current.initialZoom * scaleChange));
+        setZoom(newZoom);
+
+        // Also track dual-finger center pan
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const dx = midX - dragStartRef.current.x;
+        const dy = midY - dragStartRef.current.y;
+        setPan({
+          x: dragStartRef.current.initialPanX + dx,
+          y: dragStartRef.current.initialPanY + dy,
+        });
+      }
     },
-    [isDragging]
+    [isDragging, minZoom]
   );
 
   useEffect(() => {
     if (isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
-      window.addEventListener('touchmove', handleTouchMove);
+      window.addEventListener('touchmove', handleTouchMove, { passive: false });
       window.addEventListener('touchend', handleMouseUp);
+      window.addEventListener('touchcancel', handleMouseUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleMouseUp);
+      window.removeEventListener('touchcancel', handleMouseUp);
     };
   }, [isDragging, handleMouseMove, handleMouseUp, handleTouchMove]);
 
@@ -313,20 +389,20 @@ export default function ImageCropModal({
 
   if (!isOpen || !currentFile) return null;
 
-  // Viewport display dimensions: responsive square up to 380px
-  const viewportSize = 380;
+  // Viewport display dimensions: dynamic square up to 380px on desktop, scaling down responsively on mobile
+  const activeViewportSize = Math.max(200, Math.min(380, measuredViewportSize || 380));
 
-  // Calculate sharp foreground CSS dimensions
-  let fgBaseW = viewportSize;
-  let fgBaseH = viewportSize;
+  // Calculate sharp foreground CSS dimensions based on active viewport
+  let fgBaseW = activeViewportSize;
+  let fgBaseH = activeViewportSize;
   if (naturalSize.width && naturalSize.height) {
     const ratio = naturalSize.width / naturalSize.height;
     if (ratio >= 1) {
-      fgBaseW = viewportSize;
-      fgBaseH = viewportSize / ratio;
+      fgBaseW = activeViewportSize;
+      fgBaseH = activeViewportSize / ratio;
     } else {
-      fgBaseH = viewportSize;
-      fgBaseW = viewportSize * ratio;
+      fgBaseH = activeViewportSize;
+      fgBaseW = activeViewportSize * ratio;
     }
   }
 
@@ -458,7 +534,7 @@ export default function ImageCropModal({
             onWheel={handleWheel}
             style={{
               width: '100%',
-              maxWidth: `${viewportSize}px`,
+              maxWidth: '380px',
               aspectRatio: '1 / 1',
               borderRadius: '16px',
               overflow: 'hidden',
@@ -466,6 +542,7 @@ export default function ImageCropModal({
               boxShadow: '0 12px 36px rgba(0, 0, 0, 0.7), 0 0 0 2px var(--brand-primary, #10B981)',
               cursor: isDragging ? 'grabbing' : 'grab',
               userSelect: 'none',
+              WebkitUserSelect: 'none',
               touchAction: 'none',
             }}
           >
@@ -655,13 +732,13 @@ export default function ImageCropModal({
 
           {/* Preset Buttons & Rotation */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={handlePresetFit}
                 title="Fit entire product image with blurred background borders"
                 style={{
-                  padding: '6px 12px',
+                  padding: '8px 12px',
                   borderRadius: '8px',
                   fontSize: '0.78rem',
                   fontWeight: 600,
@@ -672,6 +749,9 @@ export default function ImageCropModal({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
+                  touchAction: 'manipulation',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
                 }}
               >
                 <Minimize2 size={13} /> Fit (Blur BG)
@@ -682,7 +762,7 @@ export default function ImageCropModal({
                 onClick={handlePresetFill}
                 title="Zoom in to fill entire 1:1 square without borders"
                 style={{
-                  padding: '6px 12px',
+                  padding: '8px 12px',
                   borderRadius: '8px',
                   fontSize: '0.78rem',
                   fontWeight: 600,
@@ -693,6 +773,9 @@ export default function ImageCropModal({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
+                  touchAction: 'manipulation',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
                 }}
               >
                 <Maximize2 size={13} /> Fill Square
@@ -705,7 +788,7 @@ export default function ImageCropModal({
                 onClick={handleRotate}
                 title="Rotate 90 degrees"
                 style={{
-                  padding: '6px 10px',
+                  padding: '8px 12px',
                   borderRadius: '8px',
                   fontSize: '0.78rem',
                   fontWeight: 600,
@@ -716,6 +799,9 @@ export default function ImageCropModal({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
+                  touchAction: 'manipulation',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
                 }}
               >
                 <RotateCw size={13} /> Rotate {rotation > 0 ? `${rotation}°` : ''}
@@ -727,7 +813,7 @@ export default function ImageCropModal({
                   onClick={handleResetCenter}
                   title="Reset centering"
                   style={{
-                    padding: '6px 10px',
+                    padding: '8px 12px',
                     borderRadius: '8px',
                     fontSize: '0.78rem',
                     fontWeight: 600,
@@ -735,6 +821,9 @@ export default function ImageCropModal({
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     color: 'inherit',
                     cursor: 'pointer',
+                    touchAction: 'manipulation',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
                   }}
                 >
                   Center

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import FinancialAnalysisDashboard from './FinancialAnalysisDashboard';
 import SalesInvoicesLedgerView from './SalesInvoicesLedgerView';
+import CounterPayoutsLedgerView from './CounterPayoutsLedgerView';
 import TimelineRangeSelector, { calculateDatesForDuration } from './TimelineRangeSelector';
 import {
   fetchOperatingExpenses,
@@ -828,7 +829,7 @@ export default function AccountsView({
           )}
         </button>
 
-<button
+        <button
           onClick={() => setActiveTab('invoices_ledger')}
           style={{
             display: 'flex',
@@ -848,6 +849,28 @@ export default function AccountsView({
         >
           <FileSpreadsheet size={16} />
           Sales &amp; Invoices Ledger
+        </button>
+
+        <button
+          onClick={() => setActiveTab('counter_payouts')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 18px',
+            borderRadius: '9px',
+            border: 'none',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'counter_payouts' ? '#EF4444' : 'transparent',
+            color: activeTab === 'counter_payouts' ? '#FFFFFF' : 'var(--text-secondary, #94A3B8)',
+            boxShadow: activeTab === 'counter_payouts' ? '0 2px 8px rgba(239, 68, 68, 0.4)' : 'none',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <Receipt size={16} />
+          Counter Payouts Ledger
         </button>
       </div>
 
@@ -875,6 +898,20 @@ export default function AccountsView({
       {/* ========================================================================= */}
       {activeTab === 'invoices_ledger' && (
         <SalesInvoicesLedgerView
+          activeStoreId={activeStoreQueryString}
+          isCombined={isCombinedView}
+          currentUser={currentUser}
+          stores={stores}
+          timelineRange={masterTimelineRange}
+          onTimelineRangeChange={handleMasterTimelineRangeChange}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW: COUNTER PAYOUTS AUDIT & EXPENSE LEDGER                             */}
+      {/* ========================================================================= */}
+      {activeTab === 'counter_payouts' && (
+        <CounterPayoutsLedgerView
           activeStoreId={activeStoreQueryString}
           isCombined={isCombinedView}
           currentUser={currentUser}

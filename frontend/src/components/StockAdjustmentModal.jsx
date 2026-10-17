@@ -19,6 +19,12 @@ export default function StockAdjustmentModal({ item, onClose, onSuccess }) {
       return;
     }
 
+    const currentQty = parseInt(item.quantity, 10) || 0;
+    if (currentQty + numChange < 0) {
+      setError(`Cannot deduct ${Math.abs(numChange)} units: Current stock is ${currentQty}. Minimum permissible stock is 0.`);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -37,7 +43,8 @@ export default function StockAdjustmentModal({ item, onClose, onSuccess }) {
     }
   };
 
-  const newProjectedQty = item.quantity + (parseInt(change, 10) || 0);
+  const newProjectedQty = (parseInt(item.quantity, 10) || 0) + (parseInt(change, 10) || 0);
+  const isNegativeProjected = (parseInt(change, 10) || 0) !== 0 && newProjectedQty < 0;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -139,6 +146,11 @@ export default function StockAdjustmentModal({ item, onClose, onSuccess }) {
                 <strong style={{ color: newProjectedQty < 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>
                   {newProjectedQty} units
                 </strong>
+                {isNegativeProjected && (
+                  <span style={{ color: 'var(--color-danger)', display: 'block', marginTop: '2px', fontSize: '0.75rem' }}>
+                    ⚠️ Stock cannot drop below 0.
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -173,7 +185,7 @@ export default function StockAdjustmentModal({ item, onClose, onSuccess }) {
             <button type="button" onClick={onClose} className="btn btn-secondary">
               Cancel
             </button>
-            <button type="submit" disabled={loading || !change} className="btn btn-primary">
+            <button type="submit" disabled={loading || !change || isNegativeProjected} className="btn btn-primary">
               {loading ? 'Recording...' : 'Record Movement'}
             </button>
           </div>

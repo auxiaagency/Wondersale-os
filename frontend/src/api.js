@@ -1021,6 +1021,10 @@ export async function getCounterPayouts(params = {}) {
   if (params.search) query.append('search', params.search);
   if (params.category) query.append('category', params.category);
   if (params.payment_method) query.append('payment_method', params.payment_method);
+  if (params.start_time) query.append('start_time', params.start_time);
+  if (params.end_time) query.append('end_time', params.end_time);
+  if (params.start_date) query.append('start_date', params.start_date);
+  if (params.end_date) query.append('end_date', params.end_date);
 
   const url = `${API_BASE}/counter-payouts/${query.toString() ? `?${query.toString()}` : ''}`;
   const res = await fetch(url, { headers: getAuthHeaders() });
@@ -3091,7 +3095,10 @@ export async function commitHistoricalBatch(payload) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || 'Failed to commit historical bills batch.');
+    const err = new Error(data.error || 'Failed to commit historical bills batch.');
+    err.insufficient_stock_items = data.insufficient_stock_items || null;
+    err.data = data;
+    throw err;
   }
   return data;
 }

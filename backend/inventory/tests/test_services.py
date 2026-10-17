@@ -53,6 +53,39 @@ class InventoryServiceTests(TestCase):
         # Check movements count
         self.assertEqual(self.item.stock_movements.count(), 2)
 
+    def test_adjust_stock_prevents_negative_inventory(self):
+        """Verify adjust_stock raises ValidationError if deduction exceeds available balance."""
+        from rest_framework.exceptions import ValidationError
+        self.assertEqual(self.item.quantity, 0)
+
+        # Attempting to deduct from 0 stock must fail
+        with self.assertRaises(ValidationError) as ctx:
+            adjust_stock(
+                item=self.item,
+                change=-1,
+                reason=StockMovement.REASON_MANUAL_ADJUSTMENT,
+                note="Illegal deduction below 0"
+            )
+        self.assertIn("Stock cannot drop below 0", str(ctx.exception))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 0)
+
+        # Inward 10 units
+        adjust_stock(item=self.item, change=10, reason=StockMovement.REASON_RESTOCK)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 10)
+
+        # Deducting 15 units from 10 must fail
+        with self.assertRaises(ValidationError) as ctx:
+            adjust_stock(
+                item=self.item,
+                change=-15,
+                reason=StockMovement.REASON_MANUAL_ADJUSTMENT
+            )
+        self.assertIn("Stock cannot drop below 0", str(ctx.exception))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 10)
+
     def test_generate_next_uid_starts_at_million_and_increments(self):
         # When no items >= 1000000 exist
         uid1 = generate_next_uid()

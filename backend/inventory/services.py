@@ -51,6 +51,21 @@ def adjust_stock(
         # Acquire row-level lock on the item to prevent concurrent race conditions during parallel checkouts
         locked_item = Item.objects.select_for_update().get(pk=item.pk) if hasattr(item, 'pk') and item.pk else item
 
+        movement_sum = StockMovement.objects.filter(item=locked_item).aggregate(
+            total=Sum('change')
+        )['total']
+
+        # If movements exist, use the ledger aggregate sum; otherwise fallback to cached quantity (e.g. legacy/direct fixtures)
+        current_total = movement_sum if movement_sum is not None else (locked_item.quantity or 0)
+
+        projected_total = current_total + change
+        if projected_total < 0:
+            raise ValidationError(
+                f"Cannot adjust stock for '{locked_item.name}' (UID: {locked_item.uid}). "
+                f"Current stock is {current_total}, but requested change ({change:+d}) "
+                f"would result in negative inventory ({projected_total}). Stock cannot drop below 0."
+            )
+
         movement = StockMovement.objects.create(
             item=locked_item,
             change=change,

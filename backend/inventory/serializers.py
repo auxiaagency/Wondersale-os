@@ -829,6 +829,16 @@ class StockAdjustmentSerializer(serializers.Serializer):
             raise serializers.ValidationError("Adjustment change cannot be 0.")
         return value
 
+    def validate(self, attrs):
+        item = self.context.get('item')
+        if item is not None:
+            change = attrs.get('change', 0)
+            if (item.quantity + change) < 0:
+                raise serializers.ValidationError({
+                    'change': f"Deduction of {abs(change)} exceeds available stock ({item.quantity}). Minimum stock permitted is 0."
+                })
+        return attrs
+
 
 # ----------------- Customer & POS Billing Serializers -----------------
 
@@ -874,6 +884,7 @@ class CounterPayoutSerializer(serializers.ModelSerializer):
     store_name = serializers.CharField(source='store.name', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    register_shift_number = serializers.CharField(source='register_shift.shift_number', read_only=True)
 
     class Meta:
         model = CounterPayout
@@ -892,6 +903,9 @@ class CounterPayoutSerializer(serializers.ModelSerializer):
             'category_display',
             'reason',
             'receipt_number',
+            'register_shift',
+            'register_shift_number',
+            'is_post_close',
             'paid_at',
             'created_at',
             'updated_at',
@@ -902,6 +916,7 @@ class CounterPayoutSerializer(serializers.ModelSerializer):
             'store_name',
             'category_display',
             'payment_method_display',
+            'register_shift_number',
             'created_at',
             'updated_at',
         ]

@@ -28,8 +28,9 @@ import {
   CheckSquare,
   Clipboard,
   FileSpreadsheet,
+  RefreshCw,
 } from 'lucide-react';
-import { parseHistoricalSheet, commitHistoricalBatch } from '../api';
+import { parseHistoricalSheet, commitHistoricalBatch, fetchItems } from '../api';
 
 export default function HistoricalBillMigrationModal({
   isOpen = false,
@@ -50,7 +51,7 @@ export default function HistoricalBillMigrationModal({
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T12:00`;
   });
-  const deductStock = true; // Billing always deducts stock from inventory
+  const [deductStock, setDeductStock] = useState(true); // Default to true: backward entries strictly deduct stock and prevent negative inventory
   const [sheetReference, setSheetReference] = useState('10/10/26 Kitchen Utility');
 
   // Custom AI Guidance / Prompt (Default instructions stay in background, input field is solely for user's additional context)
@@ -87,6 +88,67 @@ export default function HistoricalBillMigrationModal({
   const [inspectingBill, setInspectingBill] = useState(null);
   const [inspectorSearchQuery, setInspectorSearchQuery] = useState('');
   const [selectedLineForRemap, setSelectedLineForRemap] = useState(null);
+
+  // Live Catalog and Real-Time Stock Validation State
+  const [liveCatalogItems, setLiveCatalogItems] = useState(items || []);
+  const [isRevalidating, setIsRevalidating] = useState(false);
+  const [revalidationNotification, setRevalidationNotification] = useState(null);
+
+  // Helper: Evaluates a list of bills against liveCatalogItems to check for stock deficits
+  const checkBillsForStockDeficits = (billsToCheck, catalogList, shouldDeductStock = true) => {
+    if (!Array.isArray(billsToCheck) || billsToCheck.length === 0) {
+      return [];
+    }
+
+    const catMap = new Map();
+    (catalogList || []).forEach((c) => {
+      catMap.set(c.id, c);
+      if (c.uid) catMap.set(String(c.uid).trim().toLowerCase(), c);
+    });
+
+    return billsToCheck.map((b) => {
+      const deficits = [];
+      const itemsList = Array.isArray(b.items) ? b.items : [];
+
+      itemsList.forEach((it) => {
+        if (!it.is_valid && !it.item_id) return;
+        const catObj = catMap.get(it.item_id) || (it.item_uid ? catMap.get(String(it.item_uid).trim().toLowerCase()) : null);
+        const avail = Math.max(0, parseInt(catObj?.quantity ?? it.available_stock ?? 0, 10));
+        const req = parseInt(it.quantity, 10) || 1;
+
+        if (req > avail) {
+          deficits.push({
+            item_id: it.item_id || catObj?.id,
+            item_uid: it.item_uid || catObj?.uid,
+            item_name: it.item_name || catObj?.name,
+            available_stock: avail,
+            requested_stock: req,
+            shortfall: req - avail,
+          });
+        }
+      });
+
+      return {
+        ...b,
+        stock_deficits: deficits,
+        has_stock_deficit: deficits.length > 0,
+      };
+    });
+  };
+
+  // Sync liveCatalogItems whenever items prop changes
+  useEffect(() => {
+    if (items && items.length > 0) {
+      setLiveCatalogItems(items);
+    }
+  }, [items]);
+
+  // When deductStock toggle changes, immediately re-check all queues
+  useEffect(() => {
+    if (!isOpen) return;
+    setValidBills((prev) => checkBillsForStockDeficits(prev, liveCatalogItems, deductStock));
+    setRejectedBills((prev) => checkBillsForStockDeficits(prev, liveCatalogItems, deductStock));
+  }, [isOpen, deductStock, liveCatalogItems]);
 
   // Manual Bill Entry State
   const [manualPhone, setManualPhone] = useState('');
@@ -349,11 +411,14 @@ export default function HistoricalBillMigrationModal({
 
       const result = await parseHistoricalSheet(formData);
 
-      setValidBills(result.valid_bills || []);
-      setRejectedBills(result.rejected_bills || []);
+      const parsedValid = checkBillsForStockDeficits(result.valid_bills || [], liveCatalogItems, deductStock);
+      const parsedRejected = checkBillsForStockDeficits(result.rejected_bills || [], liveCatalogItems, deductStock);
+
+      setValidBills(parsedValid);
+      setRejectedBills(parsedRejected);
       setUsedModel(result.used_model || 'Gemini Vision');
 
-      if ((result.rejected_bills || []).length > 0) {
+      if (parsedRejected.length > 0) {
         setActiveTab('rejected');
       } else {
         setActiveTab('ready');
@@ -374,6 +439,12 @@ export default function HistoricalBillMigrationModal({
     const qty = parseInt(manualQuantity, 10);
     if (isNaN(qty) || qty <= 0) {
       setManualError('Please enter a valid quantity greater than 0.');
+      return;
+    }
+
+    const availableStock = Math.max(0, parseInt(manualSelectedProduct.quantity, 10) || 0);
+    if (qty > availableStock) {
+      setManualError(`Cannot add ${qty} units: Only ${availableStock} units available in stock for "${manualSelectedProduct.name}". Stock cannot be negative. Please replenish inventory first.`);
       return;
     }
 
@@ -409,6 +480,54 @@ export default function HistoricalBillMigrationModal({
     setManualItems((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+
+  // Revalidate Stock Handler: Re-fetches the latest live inventory catalog from server and updates bills
+  const handleRevalidateLiveStock = async () => {
+    setIsRevalidating(true);
+    setRevalidationNotification(null);
+    try {
+      const refreshedData = await fetchItems({
+        store: store?.id || '',
+        page_size: 2500,
+      });
+
+      const freshItems = Array.isArray(refreshedData)
+        ? refreshedData
+        : Array.isArray(refreshedData?.results)
+        ? refreshedData.results
+        : [];
+
+      setLiveCatalogItems(freshItems);
+
+      // Re-evaluate current valid bills
+      setValidBills((prev) => checkBillsForStockDeficits(prev, freshItems, deductStock));
+
+      // Re-evaluate rejected bills
+      setRejectedBills((prev) => checkBillsForStockDeficits(prev, freshItems, deductStock));
+
+      // Re-evaluate inspected bill if open
+      if (inspectingBill) {
+        const reCheckedInspected = checkBillsForStockDeficits([inspectingBill], freshItems, deductStock)[0];
+        setInspectingBill(reCheckedInspected);
+      }
+
+      setRevalidationNotification({
+        type: 'success',
+        text: `Stock revalidated successfully against live inventory (${freshItems.length} products refreshed).`,
+      });
+      setTimeout(() => setRevalidationNotification(null), 4000);
+    } catch (err) {
+      setRevalidationNotification({
+        type: 'error',
+        text: `Failed to revalidate live stock: ${err.message || 'Network error'}`,
+      });
+      setTimeout(() => setRevalidationNotification(null), 5000);
+    } finally {
+      setIsRevalidating(false);
+    }
+  };
+
+
   const handleStageManualBill = () => {
     if (manualItems.length === 0) {
       setManualError('Add at least one item before staging this manual bill.');
@@ -428,7 +547,9 @@ export default function HistoricalBillMigrationModal({
       notes: manualBillNotes.trim() || undefined,
     };
 
-    setValidBills((prev) => [...prev, newBill]);
+    const evaluatedBill = checkBillsForStockDeficits([newBill], liveCatalogItems, deductStock)[0];
+
+    setValidBills((prev) => [...prev, evaluatedBill]);
     // Reset manual form
     setManualItems([]);
     setManualPhone('');
@@ -442,6 +563,19 @@ export default function HistoricalBillMigrationModal({
   const handleCommitBatch = async () => {
     if (validBills.length === 0) {
       alert('There are no verified bills ready to commit.');
+      return;
+    }
+
+    // Client-side pre-flight check: backward inwarding strictly blocks committing items with stock deficits
+    const billsWithDeficits = validBills.filter((b) => b.has_stock_deficit);
+    if (billsWithDeficits.length > 0) {
+      const deficitList = billsWithDeficits.flatMap((b) => b.stock_deficits || []);
+      const sampleDeficits = deficitList.slice(0, 3).map((d) => `• ${d.item_name} (UID: ${d.item_uid}): ${d.available_stock} available, ${d.requested_stock} needed (Deficit: -${d.shortfall})`).join('\n');
+      alert(
+        `Cannot commit backward entry: Insufficient stock in inventory.\n\n` +
+        `Deficit items found in Ready queue:\n${sampleDeficits}\n\n` +
+        `Stock must always be 0 or a positive integer and cannot be sold without available inventory. Please replenish these products in inventory and click "Revalidate Stock".`
+      );
       return;
     }
 
@@ -470,6 +604,10 @@ export default function HistoricalBillMigrationModal({
       if (onSuccess) onSuccess(res);
     } catch (err) {
       setParseError(err.message || 'Failed to commit historical batch.');
+      // If server returned structured insufficient stock items, update bills and trigger re-check
+      if (err.insufficient_stock_items && Array.isArray(err.insufficient_stock_items)) {
+        setValidBills((prev) => checkBillsForStockDeficits(prev, liveCatalogItems, true));
+      }
     } finally {
       setIsCommitting(false);
     }
@@ -515,7 +653,7 @@ export default function HistoricalBillMigrationModal({
     }
 
     const newTotal = inspectingBill.items.reduce((sum, it) => sum + (Number(it.unit_price) * Number(it.quantity)), 0);
-    const revalidatedBill = {
+    const candidateBill = {
       ...inspectingBill,
       total_amount: Math.round(newTotal * 100) / 100,
       is_valid: true,
@@ -523,6 +661,17 @@ export default function HistoricalBillMigrationModal({
       rejection_reasons: [],
       anomalous_indices: [],
     };
+
+    const revalidatedBill = checkBillsForStockDeficits([candidateBill], liveCatalogItems, deductStock)[0];
+
+    if (revalidatedBill.has_stock_deficit) {
+      const deficitMsgs = revalidatedBill.stock_deficits.map((d) => `• ${d.item_name} (UID: ${d.item_uid}): ${d.available_stock} available, ${d.requested_stock} needed (Deficit: -${d.shortfall})`).join('\n');
+      alert(
+        `Cannot move bill to Ready queue: Insufficient stock in inventory:\n\n${deficitMsgs}\n\n` +
+        `Items cannot be sold without available stock in inventory. Please replenish inventory and click "Revalidate Stock", or adjust the bill quantities.`
+      );
+      return;
+    }
 
     setRejectedBills((prev) => prev.filter((b) => b.bill_index !== inspectingBill.bill_index));
     setValidBills((prev) => [...prev, revalidatedBill]);
@@ -616,7 +765,7 @@ export default function HistoricalBillMigrationModal({
   };
 
   // Filter items for remap autocomplete
-  const filteredCatalogItems = items
+  const filteredCatalogItems = (liveCatalogItems || [])
     .filter((it) => {
       if (!inspectorSearchQuery) return true;
       const q = inspectorSearchQuery.toLowerCase();
@@ -629,7 +778,7 @@ export default function HistoricalBillMigrationModal({
     .slice(0, 8);
 
   // Filter items for manual product search
-  const manualFilteredProducts = items
+  const manualFilteredProducts = (liveCatalogItems || [])
     .filter((it) => {
       if (!manualCatalogQuery.trim()) return false;
       const q = manualCatalogQuery.toLowerCase();
@@ -854,40 +1003,41 @@ export default function HistoricalBillMigrationModal({
           </div>
 
           {/* Inventory Stock Deduction Status */}
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '4px' }}>
-            <div
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '6px' }}>
+            <label
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
+                cursor: 'default',
+                userSelect: 'none',
               }}
             >
-              <div
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: '#10B981',
-                  boxShadow: '0 0 8px rgba(16, 185, 129, 0.6)',
-                }}
+              <input
+                type="checkbox"
+                checked={true}
+                disabled={true}
+                readOnly={true}
+                style={{ width: '15px', height: '15px', accentColor: '#10B981', cursor: 'default' }}
               />
               <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Inventory Stock Ledger
+                Deduct Inventory Stock (Mandatory)
               </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '16px' }}>
+            </label>
+            <div style={{ paddingLeft: '23px' }}>
               <span
                 style={{
-                  fontSize: '0.7rem',
-                  fontWeight: 700,
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: 'var(--radius-pill)',
-                  background: 'rgba(16, 185, 129, 0.15)',
+                  background: 'rgba(16, 185, 129, 0.12)',
                   color: '#34D399',
-                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  display: 'inline-block',
                 }}
               >
-                Stock Deductions Enabled (Always Active)
+                ✓ Enforced: Stock deduction strictly verified (stock cannot be negative)
               </span>
             </div>
           </div>
@@ -1590,29 +1740,79 @@ export default function HistoricalBillMigrationModal({
                 </button>
               </div>
 
-              {validBills.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* REVALIDATE STOCK BUTTON */}
                 <button
                   type="button"
-                  disabled={isCommitting}
-                  onClick={handleCommitBatch}
-                  className="btn btn-sm"
+                  disabled={isRevalidating || isCommitting}
+                  onClick={handleRevalidateLiveStock}
+                  className="btn btn-secondary btn-sm"
                   style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                    color: '#FFFFFF',
-                    fontWeight: 800,
-                    padding: '7px 16px',
+                    padding: '6px 14px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
                     borderRadius: 'var(--radius-pill)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                    color: '#38BDF8',
+                    borderColor: 'rgba(56, 189, 248, 0.4)',
+                    background: 'rgba(56, 189, 248, 0.08)',
                   }}
+                  title="Re-fetch live stock from inventory to check if restocked items now have sufficient balance"
                 >
-                  {isCommitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                  <span>Commit Verified Bills ({validBills.length})</span>
+                  <RefreshCw size={13} className={isRevalidating ? 'animate-spin' : ''} />
+                  <span>{isRevalidating ? 'Revalidating...' : 'Revalidate Stock'}</span>
                 </button>
-              )}
+
+                {validBills.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isCommitting || isRevalidating}
+                    onClick={handleCommitBatch}
+                    className="btn btn-sm"
+                    style={{
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#FFFFFF',
+                      fontWeight: 800,
+                      padding: '7px 16px',
+                      borderRadius: 'var(--radius-pill)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                    }}
+                  >
+                    {isCommitting ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    <span>Commit Verified Bills ({validBills.length})</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Revalidation Toast / Notification Banner */}
+            {revalidationNotification && (
+              <div
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 'var(--radius-md, 8px)',
+                  background: revalidationNotification.type === 'success' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                  border: `1px solid ${revalidationNotification.type === 'success' ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                  fontSize: '0.78rem',
+                  color: revalidationNotification.type === 'success' ? '#6EE7B7' : '#FCA5A5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                {revalidationNotification.type === 'success' ? (
+                  <CheckCircle2 size={15} style={{ color: '#10B981', flexShrink: 0 }} />
+                ) : (
+                  <AlertCircle size={15} style={{ color: '#EF4444', flexShrink: 0 }} />
+                )}
+                <span>{revalidationNotification.text}</span>
+              </div>
+            )}
 
             {/* TAB 1: READY TO PUSH BILLS */}
             {activeTab === 'ready' && (
@@ -1775,6 +1975,54 @@ export default function HistoricalBillMigrationModal({
                             </span>
                           </p>
                         </div>
+
+                        {/* Stock Deficit Warning in Ready Queue */}
+                        {b.has_stock_deficit && deductStock && (
+                          <div
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: '6px',
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.35)',
+                              fontSize: '0.72rem',
+                              color: '#FCA5A5',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '3px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontWeight: 800, color: '#F87171', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <AlertTriangle size={12} /> Stock Deficit Detected
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRevalidateLiveStock();
+                                }}
+                                disabled={isRevalidating}
+                                className="btn btn-secondary btn-sm"
+                                style={{
+                                  fontSize: '0.66rem',
+                                  padding: '2px 6px',
+                                  height: '20px',
+                                  borderRadius: '4px',
+                                  color: '#38BDF8',
+                                  borderColor: 'rgba(56, 189, 248, 0.3)',
+                                  background: 'rgba(56, 189, 248, 0.1)',
+                                }}
+                              >
+                                Revalidate
+                              </button>
+                            </div>
+                            {b.stock_deficits.map((d, dIdx) => (
+                              <span key={dIdx} style={{ fontSize: '0.7rem' }}>
+                                • <strong>{d.item_name}</strong> (UID: {d.item_uid}): {d.available_stock} in stock, {d.requested_stock} needed (Deficit: -{d.shortfall})
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
                         <div
                           style={{
@@ -2004,6 +2252,55 @@ export default function HistoricalBillMigrationModal({
                                 <span key={rIdx}>• {r}</span>
                               ))}
                             </div>
+
+                            {/* Stock Deficit Warning in Rejected Queue */}
+                            {b.has_stock_deficit && deductStock && (
+                              <div
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  background: 'rgba(239, 68, 68, 0.15)',
+                                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                                  fontSize: '0.72rem',
+                                  color: '#FCA5A5',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '3px',
+                                  marginTop: '4px',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span style={{ fontWeight: 800, color: '#F87171', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <AlertTriangle size={12} /> Stock Deficit Detected
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRevalidateLiveStock();
+                                    }}
+                                    disabled={isRevalidating}
+                                    className="btn btn-secondary btn-sm"
+                                    style={{
+                                      fontSize: '0.66rem',
+                                      padding: '2px 6px',
+                                      height: '20px',
+                                      borderRadius: '4px',
+                                      color: '#38BDF8',
+                                      borderColor: 'rgba(56, 189, 248, 0.3)',
+                                      background: 'rgba(56, 189, 248, 0.1)',
+                                    }}
+                                  >
+                                    Revalidate
+                                  </button>
+                                </div>
+                                {b.stock_deficits.map((d, dIdx) => (
+                                  <span key={dIdx} style={{ fontSize: '0.7rem' }}>
+                                    • <strong>{d.item_name}</strong> (UID: {d.item_uid}): {d.available_stock} in stock, {d.requested_stock} needed (Deficit: -{d.shortfall})
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
 
                           <div
@@ -2237,8 +2534,12 @@ export default function HistoricalBillMigrationModal({
                               >
                                 <div>
                                   <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.name}</div>
-                                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                                    UID: {p.uid}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                    <span style={{ fontFamily: 'monospace' }}>UID: {p.uid}</span>
+                                    <span>•</span>
+                                    <span style={{ fontWeight: 700, color: (p.quantity || 0) > 0 ? '#34D399' : '#EF4444' }}>
+                                      {Math.max(0, p.quantity || 0)} in stock
+                                    </span>
                                   </div>
                                 </div>
                                 <span style={{ fontWeight: 800, color: '#34D399', fontFamily: 'monospace' }}>

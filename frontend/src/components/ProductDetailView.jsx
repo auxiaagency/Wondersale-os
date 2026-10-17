@@ -610,8 +610,8 @@ export default function ProductDetailView({ item, onBack, onUpdateItem, onOpenBa
                         {v.uid}
                       </td>
                       <td style={{ padding:'12px 14px' }}>
-                        <span style={{ fontWeight:700, color: v.quantity > 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                          {v.quantity}
+                        <span style={{ fontWeight:700, color: (v.quantity || 0) > 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                          {Math.max(0, parseInt(v.quantity, 10) || 0)}
                         </span>
                       </td>
                       <td style={{ padding:'12px 14px', fontWeight:600 }}>

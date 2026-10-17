@@ -516,8 +516,8 @@ export default function ProductQuantitySalesChart({
             <span style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted, #94A3B8)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: '5px' }}>
               <Boxes size={12} color="#EC4899" /> Runout Forecast
             </span>
-            <span style={{ fontSize: '0.66rem', color: item?.quantity > 0 ? '#34D399' : '#EF4444', fontWeight: 700 }}>
-              {item?.quantity ?? 0} in stock
+            <span style={{ fontSize: '0.66rem', color: (item?.quantity ?? 0) > 0 ? '#34D399' : '#EF4444', fontWeight: 700 }}>
+              {Math.max(0, item?.quantity ?? 0)} in stock
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
