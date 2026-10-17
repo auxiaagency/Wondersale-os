@@ -145,6 +145,8 @@ export default function BillingView({
   // Checkout State (Inline Checkout Station)
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerGst, setCustomerGst] = useState('');
+  const [showCustomerGst, setShowCustomerGst] = useState(false);
   const [customerEmail, setCustomerEmail] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [splitCashAmount, setSplitCashAmount] = useState('');
@@ -1052,6 +1054,10 @@ export default function BillingView({
               setMatchedCustomer(exact);
               if (!customerName) setCustomerName(exact.name || '');
               if (!customerEmail) setCustomerEmail(exact.email || '');
+              if (exact.gst_number) {
+                setCustomerGst(exact.gst_number);
+                setShowCustomerGst(true);
+              }
             } else {
               setMatchedCustomer(null);
             }
@@ -1075,6 +1081,10 @@ export default function BillingView({
     setCustomerPhone(cust.phone);
     setCustomerName(cust.name || '');
     setCustomerEmail(cust.email || '');
+    if (cust.gst_number) {
+      setCustomerGst(cust.gst_number);
+      setShowCustomerGst(true);
+    }
     setMatchedCustomer(cust);
     setShowCustomerDropdown(false);
   };
@@ -1746,6 +1756,7 @@ export default function BillingView({
         customer_phone: cleanPhone,
         customer_name: customerName.trim(), // Optional
         customer_email: customerEmail.trim(),
+        customer_gst_number: customerGst.trim().toUpperCase() || undefined,
         payment_method: paymentMethod,
         return_reference: returnReference || undefined,
         return_items: returnPayloadItems.length > 0 ? returnPayloadItems : undefined,
@@ -1784,6 +1795,8 @@ export default function BillingView({
       setProductQuantity(1);
       setCustomerPhone('');
       setCustomerName('');
+      setCustomerGst('');
+      setShowCustomerGst(false);
       setCustomerEmail('');
       setDiscountAmount('0');
       setDiscountPercent('0');
@@ -1834,6 +1847,7 @@ export default function BillingView({
       timestamp: new Date().toISOString(),
       customerPhone: customerPhone.trim(),
       customerName: customerName.trim(),
+      customerGst: customerGst.trim(),
       customerEmail: customerEmail.trim(),
       paymentMethod,
       discountAmount,
@@ -1863,6 +1877,8 @@ export default function BillingView({
     setProductQuantity(1);
     setCustomerPhone('');
     setCustomerName('');
+    setCustomerGst('');
+    setShowCustomerGst(false);
     setCustomerEmail('');
     setDiscountAmount('0');
     setDiscountPercent('0');
@@ -1886,6 +1902,7 @@ export default function BillingView({
         timestamp: new Date().toISOString(),
         customerPhone: customerPhone.trim(),
         customerName: customerName.trim(),
+        customerGst: customerGst.trim(),
         customerEmail: customerEmail.trim(),
         paymentMethod,
         discountAmount,
@@ -1914,6 +1931,8 @@ export default function BillingView({
     setOriginalReturnBill(draft.originalReturnBill || null);
     setCustomerPhone(draft.customerPhone || '');
     setCustomerName(draft.customerName || '');
+    setCustomerGst(draft.customerGst || '');
+    setShowCustomerGst(Boolean(draft.customerGst));
     setCustomerEmail(draft.customerEmail || '');
     setPaymentMethod(draft.paymentMethod || 'cash');
     setDiscountAmount(draft.discountAmount || '0');
@@ -3448,9 +3467,32 @@ export default function BillingView({
 
                 {/* Customer Name (Optional) */}
                 <div className="billing-customer-name-wrap">
-                  <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '2px', display: 'block' }}>
-                    Customer Name <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>(Opt)</span>
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'block' }}>
+                      Customer Name <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>(Opt)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomerGst((prev) => !prev)}
+                      style={{
+                        background: showCustomerGst ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                        border: `1px solid ${showCustomerGst ? 'rgba(59, 130, 246, 0.4)' : 'var(--border-subtle, rgba(255,255,255,0.12))'}`,
+                        borderRadius: '4px',
+                        padding: '1px 6px',
+                        fontSize: '0.64rem',
+                        fontWeight: 700,
+                        color: showCustomerGst ? '#60A5FA' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="Toggle optional Customer GSTIN input"
+                    >
+                      <span>{showCustomerGst ? '✓ GST' : '+ GST'}</span>
+                    </button>
+                  </div>
                   <div style={{ position: 'relative' }}>
                     <User
                       size={13}
@@ -3467,6 +3509,61 @@ export default function BillingView({
                   </div>
                 </div>
               </div>
+
+              {/* Optional Customer GSTIN Input Row */}
+              {showCustomerGst && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    padding: '6px 8px',
+                    borderRadius: '8px',
+                    background: 'rgba(59, 130, 246, 0.06)',
+                    border: '1px dashed rgba(59, 130, 246, 0.3)',
+                    marginTop: '2px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: '0.70rem', fontWeight: 800, color: '#60A5FA' }}>
+                      Customer GSTIN <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>(Optional for B2B Invoice)</span>
+                    </label>
+                    {customerGst && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerGst('')}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontSize: '0.64rem',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '0 2px',
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={customerGst}
+                    onChange={(e) => setCustomerGst(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))}
+                    placeholder="15-digit GSTIN (e.g. 23AAAAA0000A1Z5)"
+                    maxLength={15}
+                    className="form-input"
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      height: '28px',
+                      fontSize: '0.80rem',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                    }}
+                  />
+                </div>
+              )}
 
               {/* VIP Status Badge under Phone Input */}
               {customerHasVipCard ? (
@@ -6509,7 +6606,8 @@ export default function BillingView({
                 if (storePhone) storeContactParts.push(`M-${storePhone}`);
                 const storeContactLine = storeContactParts.join('. ');
 
-                const customerDisplayName = completedOrder.customer_name || (completedOrder.customer_display_name && !completedOrder.customer_display_name.startsWith('Customer (') ? completedOrder.customer_display_name : '') || 'Dear Customer';
+                const customerReceiptName = completedOrder.customer_name || (completedOrder.customer_display_name && !completedOrder.customer_display_name.startsWith('Customer (') ? completedOrder.customer_display_name : '') || '';
+                const customerGstNumber = completedOrder.customer_gst_number || '';
 
                 return (
                   <>
@@ -6556,8 +6654,11 @@ export default function BillingView({
                           {(isExchangeOrder || isReturnOrder) && completedOrder.return_reference && (
                             <div><strong>Ref Original Bill: #{completedOrder.return_reference}</strong></div>
                           )}
-                          <div>Name :- {customerDisplayName}</div>
+                          <div>Name :- {customerReceiptName}</div>
                           <div>Mobile No: {completedOrder.customer_phone || ''}</div>
+                          {customerGstNumber ? (
+                            <div>Customer GSTIN : {customerGstNumber}</div>
+                          ) : null}
                           <div>GST NO : {storeGst}</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'right' }}>

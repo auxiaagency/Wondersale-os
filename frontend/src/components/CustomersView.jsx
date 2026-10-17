@@ -2495,7 +2495,9 @@ export default function CustomersView({
                 if (storePhone) storeContactParts.push(`M-${storePhone}`);
                 const storeContactLine = storeContactParts.join('. ');
 
-                const customerDisplayName = selectedCustomerForHistory?.name || selectedOrderForReceipt.customer_name || (selectedOrderForReceipt.customer_display_name && !selectedOrderForReceipt.customer_display_name.startsWith('Customer (') ? selectedOrderForReceipt.customer_display_name : '') || 'Dear Customer';
+                const rawCustomerName = selectedCustomerForHistory?.name || selectedOrderForReceipt.customer_name || (selectedOrderForReceipt.customer_display_name && !selectedOrderForReceipt.customer_display_name.startsWith('Customer (') ? selectedOrderForReceipt.customer_display_name : '');
+                const customerDisplayName = rawCustomerName && rawCustomerName.trim().toLowerCase() !== 'dear customer' ? rawCustomerName : '';
+                const customerGstNumber = selectedOrderForReceipt.customer_gst_number || selectedCustomerForHistory?.gst_number || '';
                 const isReceiptReturn = Boolean(
                   selectedOrderForReceipt.is_return ||
                   selectedOrderForReceipt.invoice_number?.startsWith('RET-') ||
@@ -2538,6 +2540,9 @@ export default function CustomersView({
                             <div><strong>Original Bill:</strong> #{selectedOrderForReceipt.return_reference}</div>
                           )}
                           <div>Name :- {customerDisplayName}</div>
+                          {customerGstNumber && (
+                            <div><strong>Customer GSTIN : {customerGstNumber}</strong></div>
+                          )}
                           <div>Mobile No: {selectedCustomerForHistory?.phone || selectedOrderForReceipt.customer_phone || ''}</div>
                           <div>GST NO : {storeGst}</div>
                         </div>

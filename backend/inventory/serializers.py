@@ -1139,6 +1139,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             'email',
             'address',
             'notes',
+            'gst_number',
             'total_purchases_count',
             'total_spent',
             'total_outstanding_dues',
@@ -1468,6 +1469,7 @@ class SaleOrderSerializer(serializers.ModelSerializer):
             'customer_phone',
             'customer_name',
             'customer_display_name',
+            'customer_gst_number',
             'cashier',
             'cashier_name',
             'subtotal',
@@ -1828,6 +1830,7 @@ class CheckoutSerializer(serializers.Serializer):
     customer_phone = serializers.CharField(max_length=30, required=True)
     customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     customer_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    customer_gst_number = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
     payment_method = serializers.ChoiceField(
         choices=SaleOrder.PAYMENT_CHOICES,
         default=SaleOrder.PAYMENT_CASH
@@ -1926,6 +1929,7 @@ class CheckoutSerializer(serializers.Serializer):
         raw_phone = validated_data['customer_phone'].strip()
         raw_name = validated_data.get('customer_name', '').strip()
         raw_email = validated_data.get('customer_email', '').strip()
+        raw_gst = (validated_data.get('customer_gst_number') or '').strip().upper()
         payment_method = validated_data.get('payment_method', SaleOrder.PAYMENT_CASH)
         initial_pay_method = (validated_data.get('initial_payment_method') or 'cash').strip().lower()
         vip_card_uid_input = validated_data.get('vip_card_uid', '').strip()
@@ -2094,6 +2098,8 @@ class CheckoutSerializer(serializers.Serializer):
                 customer.name = raw_name
             if raw_email and not customer.email:
                 customer.email = raw_email
+            if raw_gst:
+                customer.gst_number = raw_gst
 
             # ---------------- 5. Financial Settlement Calculations ----------------
             raw_paid = validated_data.get('amount_paid')
@@ -2208,6 +2214,7 @@ class CheckoutSerializer(serializers.Serializer):
                 customer=customer,
                 customer_phone=raw_phone,
                 customer_name=customer.name or raw_name,
+                customer_gst_number=raw_gst or getattr(customer, 'gst_number', ''),
                 cashier=staff,
                 cashier_name=cashier_name,
                 subtotal=gross_purchase_subtotal if not is_pure_return else total_return_credit,

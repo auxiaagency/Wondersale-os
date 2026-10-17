@@ -3187,6 +3187,7 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
                 customer_phone=order.customer_phone,
                 customer_name=order.customer_name,
                 customer_email=order.customer_email,
+                customer_gst_number=order.customer_gst_number or (order.customer.gst_number if order.customer else ""),
                 subtotal=total_refund,
                 tax_amount=Decimal('0.00'),
                 discount_amount=Decimal('0.00'),

@@ -927,6 +927,12 @@ class Customer(models.Model):
     email = models.EmailField(blank=True, default="")
     address = models.TextField(blank=True, default="")
     notes = models.TextField(blank=True, default="")
+    gst_number = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Customer GSTIN / Tax ID for B2B billing"
+    )
     total_purchases_count = models.PositiveIntegerField(default=0)
     total_spent = models.DecimalField(
         max_digits=14,
@@ -1105,6 +1111,12 @@ class SaleOrder(models.Model):
     customer_phone = models.CharField(max_length=30)
     customer_name = models.CharField(max_length=255, blank=True, default="")
     customer_email = models.EmailField(blank=True, default="")
+    customer_gst_number = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Optional customer GSTIN / Tax ID for B2B billing"
+    )
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     tax_amount = models.DecimalField(
         max_digits=12,

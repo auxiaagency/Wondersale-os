@@ -267,13 +267,14 @@ export default function SalesInvoicesLedgerView({
   const filteredOrders = useMemo(() => {
     let list = [...orders];
 
-    // 1. Text Search Filter (Invoice, Customer Name, Phone, Cashier)
+    // 1. Text Search Filter (Invoice, Customer Name, Phone, Cashier, Customer GSTIN)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((o) => {
         const inv = (o.invoice_number || '').toLowerCase();
         const cName = (o.customer_name || o.customer_display_name || '').toLowerCase();
         const cPhone = (o.customer_phone || '').toLowerCase();
+        const cGst = (o.customer_gst_number || '').toLowerCase();
         const cashName = (o.cashier_name || '').toLowerCase();
         const itemNames = (o.items || []).map((it) => (it.item_name || '').toLowerCase()).join(' ');
         const notes = (o.notes || '').toLowerCase();
@@ -282,6 +283,7 @@ export default function SalesInvoicesLedgerView({
           inv.includes(q) ||
           cName.includes(q) ||
           cPhone.includes(q) ||
+          cGst.includes(q) ||
           cashName.includes(q) ||
           itemNames.includes(q) ||
           notes.includes(q)
@@ -598,6 +600,7 @@ export default function SalesInvoicesLedgerView({
       'Time',
       'Customer Name',
       'Customer Phone',
+      'Customer GSTIN',
       'Cashier',
       'Payment Method',
       'Items Count',
@@ -629,6 +632,7 @@ export default function SalesInvoicesLedgerView({
         `"${tStr}"`,
         `"${(o.customer_name || o.customer_display_name || 'Walk-in Customer').replace(/"/g, '""')}"`,
         `"${o.customer_phone || ''}"`,
+        `"${o.customer_gst_number || ''}"`,
         `"${(o.cashier_name || 'Staff').replace(/"/g, '""')}"`,
         `"${(o.payment_method || 'Cash').toUpperCase()}"`,
         isRet ? -itemsCount : itemsCount,
@@ -1887,6 +1891,27 @@ export default function SalesInvoicesLedgerView({
                             <span>{o.customer_phone}</span>
                           </div>
                         )}
+                        {o.customer_gst_number && (
+                          <div
+                            style={{
+                              marginTop: '3px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '1px 6px',
+                              borderRadius: '4px',
+                              background: 'rgba(99, 102, 241, 0.12)',
+                              border: '1px solid rgba(99, 102, 241, 0.3)',
+                              color: '#A5B4FC',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              fontFamily: 'monospace',
+                            }}
+                            title={`Customer GSTIN: ${o.customer_gst_number}`}
+                          >
+                            <span>GST: {o.customer_gst_number}</span>
+                          </div>
+                        )}
                         {o.notes && (
                           <div
                             style={{
@@ -2282,7 +2307,8 @@ export default function SalesInvoicesLedgerView({
                 if (storePhone) storeContactParts.push(`M-${storePhone}`);
                 const storeContactLine = storeContactParts.join('. ');
 
-                const customerDisplayName = selectedReceiptOrder.customer_name || (selectedReceiptOrder.customer_display_name && !selectedReceiptOrder.customer_display_name.startsWith('Customer (') ? selectedReceiptOrder.customer_display_name : '') || 'Dear Customer';
+                const customerReceiptName = selectedReceiptOrder.customer_name || (selectedReceiptOrder.customer_display_name && !selectedReceiptOrder.customer_display_name.startsWith('Customer (') ? selectedReceiptOrder.customer_display_name : '') || '';
+                const customerGstNumber = selectedReceiptOrder.customer_gst_number || '';
                 const isReceiptReturn = Boolean(
                   selectedReceiptOrder.is_return ||
                   selectedReceiptOrder.invoice_number?.startsWith('RET-') ||
@@ -2324,8 +2350,11 @@ export default function SalesInvoicesLedgerView({
                           {isReceiptReturn && selectedReceiptOrder.return_reference && (
                             <div><strong>Original Bill:</strong> #{selectedReceiptOrder.return_reference}</div>
                           )}
-                          <div>Name :- {customerDisplayName}</div>
+                          <div>Name :- {customerReceiptName}</div>
                           <div>Mobile No: {selectedReceiptOrder.customer_phone || ''}</div>
+                          {customerGstNumber ? (
+                            <div>Customer GSTIN : {customerGstNumber}</div>
+                          ) : null}
                           <div>GST NO : {storeGst}</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'right' }}>
