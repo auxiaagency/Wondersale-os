@@ -167,8 +167,6 @@ class StaffAuthViewSet(viewsets.ViewSet):
     def logout_action(self, request):
         member = get_current_staff(request)
         if member:
-            member.rotate_session_token()
-            member.save(update_fields=['session_token', 'updated_at'])
             AttendanceAuditLog.objects.create(
                 action='logout',
                 actor=member,
