@@ -42,7 +42,7 @@ import {
   ChevronsRight,
   Loader2,
 } from 'lucide-react';
-import { getSaleOrders, recordOrderDuePayment } from '../api';
+import { getSaleOrders, getSaleOrdersPage, getSaleOrdersLedgerSummary, recordOrderDuePayment } from '../api';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
 import TimelineRangeSelector from './TimelineRangeSelector';
 import {
@@ -77,12 +77,34 @@ export default function SalesInvoicesLedgerView({
   minDate = '2026-09-04',
 }) {
   const showBranchColumn = isCombined || activeStoreId === 'all' || activeStoreId.includes(',') || (stores && stores.length > 1);
+  // Server-side paginated rows for the table
   const [orders, setOrders] = useState([]);
+  // Total matching count (from backend pagination metadata)
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // KPI summary fetched from ledger-summary action (DB aggregation, filter-set aware)
+  const [kpiSummary, setKpiSummary] = useState({
+    orderCount: 0, salesCount: 0, returnsCount: 0,
+    grossTotal: 0, totalDiscount: 0, totalTax: 0,
+    totalUnits: 0, aov: 0, totalProfit: 0, profitMargin: 0,
+  });
+  const [kpiLoading, setKpiLoading] = useState(false);
+  // Cashier names from backend for the filter dropdown
+  const [cashierOptions, setCashierOptions] = useState([]);
+
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
+  // Debounced search to avoid firing on every keystroke
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchDebounceRef = useRef(null);
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setDebouncedSearch(value.trim()), 400);
+  };
+
   const [selectedTimelineRange, setSelectedTimelineRange] = useState(() => {
     if (timelineRange) return timelineRange;
     const now = new Date();
@@ -96,7 +118,7 @@ export default function SalesInvoicesLedgerView({
   });
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
   const [cashierFilter, setCashierFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'completed' | 'returned'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'completed' | 'returned' | 'dues'
   const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
 
   // Receipt Modal State
@@ -105,10 +127,15 @@ export default function SalesInvoicesLedgerView({
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
 
-  // Pagination
-  const LEDGER_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
+  // Pagination (server-side)
+  const LEDGER_PAGE_SIZE_OPTIONS = [50, 100, 250, 500];
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerPageSize, setLedgerPageSize] = useState(100);
+
+  // Derived from backend pagination metadata
+  const ledgerTotalPages = Math.max(1, Math.ceil(totalCount / ledgerPageSize));
+  const ledgerStartEntry = totalCount === 0 ? 0 : (ledgerPage - 1) * ledgerPageSize + 1;
+  const ledgerEndEntry = Math.min(ledgerPage * ledgerPageSize, totalCount);
 
   // Table Horizontal Drag-to-Scroll Refs & State
   const tableContainerRef = useRef(null);
@@ -204,8 +231,7 @@ export default function SalesInvoicesLedgerView({
     }
   };
 
-  // Fetch all orders for current active store
-  // Date boundary calculation based on selectedTimelineRange
+  // ─── Date bounds derived from timeline selector ────────────────────────────
   const dateRangeBounds = useMemo(() => {
     if (!selectedTimelineRange) return { start: '', end: '' };
     if (selectedTimelineRange.isAllTime || selectedTimelineRange.unit === 'all') {
@@ -217,39 +243,101 @@ export default function SalesInvoicesLedgerView({
     };
   }, [selectedTimelineRange]);
 
-  // Fetch orders for current active store and date window
-  const loadOrders = useCallback(async () => {
+  // ─── Build shared filter params sent to both list + summary endpoints ──────
+  const buildFilterParams = useCallback(() => {
+    const params = {};
+    if (activeStoreId) params.store = activeStoreId;
+    if (dateRangeBounds.start) params['created_at__gte'] = `${dateRangeBounds.start}T00:00:00`;
+    if (dateRangeBounds.end)   params['created_at__lte'] = `${dateRangeBounds.end}T23:59:59`;
+    if (debouncedSearch)       params.search = debouncedSearch;
+    if (paymentMethodFilter !== 'all') params.payment_method = paymentMethodFilter;
+    if (cashierFilter !== 'all')       params.cashier_name   = cashierFilter;
+    if (statusFilter !== 'all')        params.order_status   = statusFilter;
+    return params;
+  }, [activeStoreId, dateRangeBounds.start, dateRangeBounds.end, debouncedSearch, paymentMethodFilter, cashierFilter, statusFilter]);
+
+  // ─── Sorting map (backend ordering param) ─────────────────────────────────
+  const orderingParam = useMemo(() => {
+    if (sortBy === 'date_asc')    return 'created_at';
+    if (sortBy === 'amount_desc') return '-total_amount';
+    if (sortBy === 'amount_asc')  return 'total_amount';
+    return '-created_at'; // date_desc default
+  }, [sortBy]);
+
+  // ─── Fetch one page of orders from backend (server-side pagination) ────────
+  const loadOrders = useCallback(async (page = ledgerPage) => {
     try {
       setLoading(true);
       setError(null);
-
-      const params = {};
-      if (activeStoreId) {
-        params.store = activeStoreId;
-      }
-      if (dateRangeBounds.start) {
-        params['created_at__gte'] = `${dateRangeBounds.start}T00:00:00`;
-      }
-      if (dateRangeBounds.end) {
-        params['created_at__lte'] = `${dateRangeBounds.end}T23:59:59`;
-      }
-
-      // Fetch from API
-      const data = await getSaleOrders(params);
-      const list = Array.isArray(data) ? data : data?.results || [];
-      setOrders(list);
+      const params = {
+        ...buildFilterParams(),
+        page,
+        page_size: ledgerPageSize,
+        ordering: orderingParam,
+      };
+      const data = await getSaleOrdersPage(params);
+      // data = { count, total_pages, current_page, page_size, results }
+      setOrders(Array.isArray(data) ? data : (data?.results || []));
+      setTotalCount(data?.count ?? (Array.isArray(data) ? data.length : 0));
     } catch (err) {
       console.error('Failed to load sales orders:', err);
       setError('Unable to load orders. Please check your network connection.');
       setOrders([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  }, [activeStoreId, dateRangeBounds.start, dateRangeBounds.end]);
+  }, [buildFilterParams, ledgerPage, ledgerPageSize, orderingParam]);
+
+  // ─── Fetch KPI summary (aggregate totals) from backend ────────────────────
+  const loadKpiSummary = useCallback(async () => {
+    setKpiLoading(true);
+    try {
+      const params = buildFilterParams();
+      const data = await getSaleOrdersLedgerSummary(params);
+      const grossTotal = (data.net_total ?? data.gross_sales ?? 0);
+      const aovValue   = data.aov ?? 0;
+      setKpiSummary({
+        orderCount:    data.order_count    ?? 0,
+        salesCount:    data.sales_count    ?? 0,
+        returnsCount:  data.returns_count  ?? 0,
+        grossTotal:    grossTotal,
+        totalDiscount: data.total_discount ?? 0,
+        totalTax:      data.total_tax      ?? 0,
+        totalUnits:    0, // not computed server-side (item-level aggregation not in summary)
+        aov:           aovValue,
+        totalProfit:   0, // profit needs item cost data; computed from page rows only
+        profitMargin:  0,
+      });
+      // Update cashier filter dropdown from summary
+      if (Array.isArray(data.cashier_names)) {
+        setCashierOptions(data.cashier_names);
+      }
+    } catch (err) {
+      console.error('Failed to load ledger summary:', err);
+    } finally {
+      setKpiLoading(false);
+    }
+  }, [buildFilterParams]);
+
+  // ─── Trigger reload when filters change (reset to page 1) ─────────────────
+  const filterSig = useMemo(() =>
+    JSON.stringify([activeStoreId, dateRangeBounds, debouncedSearch, paymentMethodFilter, cashierFilter, statusFilter]),
+    [activeStoreId, dateRangeBounds, debouncedSearch, paymentMethodFilter, cashierFilter, statusFilter]
+  );
 
   useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+    setLedgerPage(1);
+    loadKpiSummary();
+    // loadOrders(1) called via the page effect below once ledgerPage resets
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterSig]);
+
+  // Re-fetch when page or page size or sort changes
+  useEffect(() => {
+    loadOrders(ledgerPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledgerPage, ledgerPageSize, orderingParam, filterSig]);
 
   // Synchronize date filter with Master Timeline Range if provided
   useEffect(() => {
@@ -271,116 +359,13 @@ export default function SalesInvoicesLedgerView({
     });
   }, [timelineRange]);
 
-  // Unique cashiers from loaded orders for cashier filter dropdown
-  const cashierOptions = useMemo(() => {
-    const set = new Map();
-    orders.forEach((o) => {
-      const name = o.cashier_name || (o.cashier ? `Staff #${o.cashier}` : null);
-      if (name && !set.has(name)) {
-        set.set(name, name);
-      }
-    });
-    return Array.from(set.values());
-  }, [orders]);
 
-
-
-  // Filtered and Sorted Orders List
-  const filteredOrders = useMemo(() => {
-    let list = [...orders];
-
-    // 1. Text Search Filter (Invoice, Customer Name, Phone, Cashier, Customer GSTIN)
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((o) => {
-        const inv = (o.invoice_number || '').toLowerCase();
-        const cName = (o.customer_name || o.customer_display_name || '').toLowerCase();
-        const cPhone = (o.customer_phone || '').toLowerCase();
-        const cGst = (o.customer_gst_number || '').toLowerCase();
-        const cashName = (o.cashier_name || '').toLowerCase();
-        const itemNames = (o.items || []).map((it) => (it.item_name || '').toLowerCase()).join(' ');
-        const notes = (o.notes || '').toLowerCase();
-
-        return (
-          inv.includes(q) ||
-          cName.includes(q) ||
-          cPhone.includes(q) ||
-          cGst.includes(q) ||
-          cashName.includes(q) ||
-          itemNames.includes(q) ||
-          notes.includes(q)
-        );
-      });
-    }
-
-    // 2. Date Boundary Filter
-    if (dateRangeBounds.start || dateRangeBounds.end) {
-      list = list.filter((o) => {
-        const d = (o.created_at || '').split('T')[0];
-        if (!d) return true;
-        if (dateRangeBounds.start && d < dateRangeBounds.start) return false;
-        if (dateRangeBounds.end && d > dateRangeBounds.end) return false;
-        return true;
-      });
-    }
-
-    // 3. Payment Method Filter
-    if (paymentMethodFilter !== 'all') {
-      if (paymentMethodFilter === 'partial') {
-        list = list.filter((o) => (o.payment_method || '').toLowerCase() === 'partial' || parseFloat(o.balance_due || 0) > 0);
-      } else {
-        list = list.filter((o) => (o.payment_method || '').toLowerCase() === paymentMethodFilter.toLowerCase());
-      }
-    }
-
-    // 4. Cashier Filter
-    if (cashierFilter !== 'all') {
-      list = list.filter((o) => (o.cashier_name || '') === cashierFilter);
-    }
-
-    // 5. Order Status Filter
-    if (statusFilter === 'completed') {
-      list = list.filter((o) => o.status === 'completed' && !o.is_return && (!o.balance_due || parseFloat(o.balance_due) <= 0));
-    } else if (statusFilter === 'returned') {
-      list = list.filter((o) => o.status === 'returned' || o.is_return || (o.invoice_number || '').startsWith('RET-'));
-    } else if (statusFilter === 'dues') {
-      list = list.filter((o) => parseFloat(o.balance_due || 0) > 0 || o.payment_method === 'partial');
-    }
-
-    // 6. Sorting
-    list.sort((a, b) => {
-      if (sortBy === 'date_desc') {
-        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-      }
-      if (sortBy === 'date_asc') {
-        return new Date(a.created_at || 0) - new Date(b.created_at || 0);
-      }
-      if (sortBy === 'amount_desc') {
-        return (parseFloat(b.total_amount) || 0) - (parseFloat(a.total_amount) || 0);
-      }
-      if (sortBy === 'amount_asc') {
-        return (parseFloat(a.total_amount) || 0) - (parseFloat(b.total_amount) || 0);
-      }
-      return 0;
-    });
-
-    return list;
-  }, [orders, searchQuery, dateRangeBounds, paymentMethodFilter, cashierFilter, statusFilter, sortBy]);
-
-  // Reset to page 1 whenever filters change
-  useEffect(() => {
-    setLedgerPage(1);
-  }, [filteredOrders]);
-
-  // Paginated slice of filteredOrders for the table only
-  const paginatedOrders = useMemo(() => {
-    const start = (ledgerPage - 1) * ledgerPageSize;
-    return filteredOrders.slice(start, start + ledgerPageSize);
-  }, [filteredOrders, ledgerPage, ledgerPageSize]);
-
-  const ledgerTotalPages = Math.max(1, Math.ceil(filteredOrders.length / ledgerPageSize));
-  const ledgerStartEntry = filteredOrders.length === 0 ? 0 : (ledgerPage - 1) * ledgerPageSize + 1;
-  const ledgerEndEntry = Math.min(ledgerPage * ledgerPageSize, filteredOrders.length);
+  // ─── In server-side mode the table shows the current page rows directly ────
+  // 'orders' IS the current page (already paginated by backend).
+  // 'filteredOrders' alias kept for backward compat with CSV export helpers below.
+  const filteredOrders = orders;
+  // 'paginatedOrders' IS the same as 'orders' (no extra client-side slicing needed)
+  const paginatedOrders = orders;
 
   // ─── Helper: compute gross profit for a single order ──────────────────────
   const computeOrderProfit = useCallback((o) => {
@@ -396,56 +381,12 @@ export default function SalesInvoicesLedgerView({
     return isRet ? -Math.abs(lineProfit) : lineProfit;
   }, []);
 
-  // Financial KPIs over filtered set (Returns correctly deducted to reflect Net Sales Turnover)
-  const kpiSummary = useMemo(() => {
-    let grossTotal = 0;
-    let totalDiscount = 0;
-    let totalTax = 0;
-    let totalUnits = 0;
-    let totalProfit = 0;
-    let salesCount = 0;
-    let returnsCount = 0;
 
-    filteredOrders.forEach((o) => {
-      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
-      const amt = parseFloat(o.total_amount) || 0;
-      const profit = computeOrderProfit(o);
-      const itemsCount = (o.items || []).reduce((sum, it) => sum + (parseInt(it.quantity, 10) || 0), 0);
 
-      if (isRet) {
-        grossTotal -= amt; // Returns deduct from sales turnover
-        returnsCount += 1;
-        totalUnits -= itemsCount;
-      } else {
-        grossTotal += amt;
-        salesCount += 1;
-        totalUnits += itemsCount;
-        totalDiscount += parseFloat(o.discount_amount) || 0;
-        totalTax += parseFloat(o.tax_amount) || 0;
-      }
+  // NOTE: kpiSummary is state set by loadKpiSummary() — DB-level aggregation over full filter set.
+  // cashierBreakdown and paymentMethodBreakdown below are computed from the current PAGE rows only
+  // (filteredOrders = current page). They update as you page through results.
 
-      totalProfit += profit;
-    });
-
-    const netUnits = Math.max(0, totalUnits);
-    // AOV calculated across sales orders, or filtered orders if only returns
-    const aovOrdersCount = salesCount > 0 ? salesCount : (filteredOrders.length || 1);
-    const aov = grossTotal > 0 && aovOrdersCount > 0 ? grossTotal / aovOrdersCount : 0;
-    const profitMargin = grossTotal > 0 ? (totalProfit / grossTotal) * 100 : 0;
-
-    return {
-      orderCount: filteredOrders.length,
-      salesCount,
-      returnsCount,
-      grossTotal: Math.round(grossTotal * 100) / 100,
-      totalDiscount: Math.round(totalDiscount * 100) / 100,
-      totalTax: Math.round(totalTax * 100) / 100,
-      totalUnits: netUnits,
-      aov: Math.round(aov * 100) / 100,
-      totalProfit: Math.round(totalProfit * 100) / 100,
-      profitMargin: Math.round(profitMargin * 100) / 100,
-    };
-  }, [filteredOrders, computeOrderProfit]);
 
   // ─── Per-cashier breakdown ──────────────────────────────────────────────────
   const cashierBreakdown = useMemo(() => {
@@ -600,21 +541,26 @@ export default function SalesInvoicesLedgerView({
   const [piePaymentHovered, setPiePaymentHovered] = useState(null);
 
   // Export to CSV (Enhanced with Profit, Cost, Cashier Summary, and Payment Method Attributions)
-  const handleExportCsv = () => {
-    if (filteredOrders.length === 0 || exportingCsv) return;
+  const handleExportCsv = async () => {
+    if (totalCount === 0 || exportingCsv) return;
     setExportingCsv(true);
-    setExportProgress(15);
+    setExportProgress(10);
 
     const progressTimer = setInterval(() => {
       setExportProgress((prev) => {
-        if (prev < 50) return prev + 15;
-        if (prev < 85) return prev + 8;
+        if (prev < 50) return prev + 12;
+        if (prev < 85) return prev + 6;
         return prev;
       });
-    }, 70);
+    }, 80);
 
-    setTimeout(() => {
-      try {
+    try {
+      // Fetch ALL matching records (no page/page_size = unpaginated list from backend)
+      const allData = await getSaleOrders({ ...buildFilterParams(), ordering: orderingParam });
+      const allOrders = Array.isArray(allData) ? allData : (allData?.results || []);
+
+      setExportProgress(60);
+
         // ── Section 1: Order-level ledger ──
     const headers = [
       'Invoice Number',
@@ -636,7 +582,7 @@ export default function SalesInvoicesLedgerView({
       'Status',
     ];
 
-    const rows = filteredOrders.map((o) => {
+    const rows = allOrders.map((o) => {
       const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
       const dt = new Date(o.created_at);
       const dStr = dt.toLocaleDateString('en-IN');
@@ -669,7 +615,7 @@ export default function SalesInvoicesLedgerView({
       ];
     });
 
-    // ── Section 2: Summary row ──
+    // ── Section 2: Summary row (from server-side aggregate) ──
     const summaryRows = [
       [],
       ['=== SUMMARY ==='],
@@ -677,13 +623,10 @@ export default function SalesInvoicesLedgerView({
       [`"Completed Sales"`, kpiSummary.salesCount],
       [`"Return Vouchers"`, kpiSummary.returnsCount],
       [`"Net Sales Turnover"`, kpiSummary.grossTotal.toFixed(2)],
-      [`"Total Gross Profit"`, kpiSummary.totalProfit.toFixed(2)],
-      [`"Overall Profit Margin"`, kpiSummary.profitMargin.toFixed(1) + '%'],
       [`"Total Discounts Given"`, kpiSummary.totalDiscount.toFixed(2)],
-      [`"Total Units Sold"`, kpiSummary.totalUnits],
       [`"Average Order Value"`, kpiSummary.aov.toFixed(2)],
       [],
-      ['=== CASHIER OVERALL PERFORMANCE ==='],
+      ['=== CASHIER OVERALL PERFORMANCE (current page) ==='],
       ['Cashier', 'Orders', 'Units Sold', 'Turnover', 'Gross Profit', 'Profit Margin %', 'Avg Order Value'],
       ...cashierBreakdown.map((c) => {
         const margin = c.turnover > 0 ? (c.profit / c.turnover) * 100 : 0;
@@ -699,7 +642,7 @@ export default function SalesInvoicesLedgerView({
         ];
       }),
       [],
-      ['=== PAYMENT METHOD BREAKDOWN (OVERALL) ==='],
+      ['=== PAYMENT METHOD BREAKDOWN (current page) ==='],
       ['Payment Method', 'Transactions Count', 'Amount Collected', 'Share %'],
       ...paymentMethodBreakdown.map((pm) => {
         const share = paymentMethodTotals > 0 ? ((Math.max(0, pm.amount) / paymentMethodTotals) * 100).toFixed(1) + '%' : '0.0%';
@@ -711,7 +654,7 @@ export default function SalesInvoicesLedgerView({
         ];
       }),
       [],
-      ['=== CASHIER PAYMENT METHOD BREAKDOWN (CASH & UPI ATTRIBUTION) ==='],
+      ['=== CASHIER PAYMENT METHOD BREAKDOWN (current page) ==='],
       ['Cashier', 'Total Collected', 'Cash Amount', 'Cash Share %', 'UPI Amount', 'UPI Share %', 'Card Amount', 'Card Share %', 'Pending Due', 'Other Amount'],
       ...cashierPaymentBreakdown.map((cp) => {
         const tot = cp.totalCollected > 0 ? cp.totalCollected : 1;
@@ -746,20 +689,20 @@ export default function SalesInvoicesLedgerView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales_ledger_with_profit_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `sales_ledger_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error('Failed to export sales ledger CSV:', err);
-      } finally {
-        clearInterval(progressTimer);
-        setTimeout(() => {
-          setExportingCsv(false);
-          setExportProgress(0);
-        }, 350);
-      }
-    }, 50);
+    } catch (err) {
+      console.error('Failed to export sales ledger CSV:', err);
+    } finally {
+      clearInterval(progressTimer);
+      setTimeout(() => {
+        setExportingCsv(false);
+        setExportProgress(0);
+      }, 350);
+    }
   };
+
 
   const copyInvoiceNumber = (inv, e) => {
     e?.stopPropagation();
@@ -1171,7 +1114,7 @@ export default function SalesInvoicesLedgerView({
               type="text"
               placeholder="Search by invoice #, customer name, phone, cashier, or items..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               style={{
                 width: '100%',
                 padding: '9px 12px 9px 36px',
@@ -1210,7 +1153,7 @@ export default function SalesInvoicesLedgerView({
             <button
               type="button"
               onClick={handleExportCsv}
-              disabled={filteredOrders.length === 0 || exportingCsv}
+              disabled={totalCount === 0 || exportingCsv}
               className="btn btn-secondary"
               style={{
                 position: 'relative',
@@ -1221,8 +1164,8 @@ export default function SalesInvoicesLedgerView({
                 fontSize: '0.80rem',
                 padding: '8px 14px',
                 height: '36px',
-                cursor: filteredOrders.length === 0 ? 'not-allowed' : exportingCsv ? 'wait' : 'pointer',
-                opacity: filteredOrders.length === 0 ? 0.5 : exportingCsv ? 0.85 : 1,
+                cursor: totalCount === 0 ? 'not-allowed' : exportingCsv ? 'wait' : 'pointer',
+                opacity: totalCount === 0 ? 0.5 : exportingCsv ? 0.85 : 1,
               }}
               title="Export filtered orders to CSV"
             >
@@ -1790,7 +1733,7 @@ export default function SalesInvoicesLedgerView({
                     </div>
                   </td>
                 </tr>
-              ) : filteredOrders.length === 0 ? (
+              ) : totalCount === 0 ? (
                 <tr>
                   <td colSpan={showBranchColumn ? 10 : 9} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted, #64748B)' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>

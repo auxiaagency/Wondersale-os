@@ -2733,6 +2733,10 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         if since:
             qs = qs.filter(created_at__gte=since)
 
+        until = self.request.query_params.get('created_at__lte')
+        if until:
+            qs = qs.filter(created_at__lte=until)
+
         phone = self.request.query_params.get('phone')
         if phone:
             qs = qs.filter(customer_phone__icontains=phone)
@@ -2742,8 +2746,43 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(invoice_number__icontains=search) |
                 Q(customer_phone__icontains=search) |
-                Q(customer_name__icontains=search)
+                Q(customer_name__icontains=search) |
+                Q(cashier_name__icontains=search)
             )
+
+        # Payment method filter (supports 'partial' alias for pending dues)
+        payment_method = self.request.query_params.get('payment_method', '').strip().lower()
+        if payment_method and payment_method != 'all':
+            if payment_method == 'partial':
+                qs = qs.filter(
+                    Q(payment_method='partial') | Q(balance_due__gt=Decimal('0.00'))
+                )
+            else:
+                qs = qs.filter(payment_method__iexact=payment_method)
+
+        # Order status filter: 'completed', 'returned', 'dues', 'partial'
+        order_status = self.request.query_params.get('order_status', '').strip().lower()
+        if order_status and order_status != 'all':
+            if order_status == 'completed':
+                qs = qs.filter(status='completed', is_return=False, balance_due__lte=Decimal('0.00'))
+            elif order_status in ('returned', 'refunded'):
+                qs = qs.filter(Q(status='returned') | Q(status='refunded') | Q(is_return=True))
+            elif order_status == 'dues':
+                qs = qs.filter(
+                    Q(balance_due__gt=Decimal('0.00')) | Q(payment_method='partial')
+                )
+
+        # Is-return flag filter
+        is_return_param = self.request.query_params.get('is_return', '').strip().lower()
+        if is_return_param in ('true', '1', 'yes'):
+            qs = qs.filter(is_return=True)
+        elif is_return_param in ('false', '0', 'no'):
+            qs = qs.filter(is_return=False)
+
+        # Cashier name filter
+        cashier_name = self.request.query_params.get('cashier_name', '').strip()
+        if cashier_name and cashier_name != 'all':
+            qs = qs.filter(cashier_name__iexact=cashier_name)
 
         current_shift = self.request.query_params.get('current_shift')
         if current_shift in ['true', 'True', '1']:
@@ -2810,7 +2849,17 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         if is_due in ['true', 'True', '1']:
             qs = qs.filter(balance_due__gt=Decimal('0.00'), is_fully_paid=False)
 
-        return qs.order_by('-created_at')
+        # Respect ordering param from frontend (whitelist to prevent arbitrary field injection)
+        ALLOWED_ORDERINGS = {
+            'created_at': 'created_at',
+            '-created_at': '-created_at',
+            'total_amount': 'total_amount',
+            '-total_amount': '-total_amount',
+        }
+        ordering = self.request.query_params.get('ordering', '-created_at')
+        safe_ordering = ALLOWED_ORDERINGS.get(ordering, '-created_at')
+
+        return qs.order_by(safe_ordering)
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -3010,6 +3059,76 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
                 'collected_by_name': tx.collected_by_name,
                 'created_at': tx.created_at,
             }
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='ledger-summary')
+    def ledger_summary(self, request):
+        """
+        Returns aggregate KPI totals for the current filter set (same params as list endpoint).
+        Used by the frontend to fetch KPI cards without loading all paginated rows.
+        Returns: order_count, sales_count, returns_count, gross_total, total_discount,
+                 total_tax, cashier_names (distinct list).
+        """
+        from django.db.models import Count, Sum, Case, When, IntegerField as DjIntField, DecimalField as DjDecField
+        qs = self.get_queryset()  # applies all filter params from query string
+
+        agg = qs.aggregate(
+            order_count=Count('id'),
+            sales_count=Count('id', filter=Q(is_return=False)),
+            returns_count=Count('id', filter=Q(is_return=True)),
+            gross_sales=Sum(
+                Case(
+                    When(is_return=False, then='total_amount'),
+                    default=0,
+                    output_field=DjDecField()
+                )
+            ),
+            gross_returns=Sum(
+                Case(
+                    When(is_return=True, then='total_amount'),
+                    default=0,
+                    output_field=DjDecField()
+                )
+            ),
+            total_discount=Sum(
+                Case(
+                    When(is_return=False, then='discount_amount'),
+                    default=0,
+                    output_field=DjDecField()
+                )
+            ),
+            total_tax=Sum(
+                Case(
+                    When(is_return=False, then='tax_amount'),
+                    default=0,
+                    output_field=DjDecField()
+                )
+            ),
+        )
+
+        gross_sales = float(agg['gross_sales'] or 0)
+        gross_returns = float(agg['gross_returns'] or 0)
+        net_total = gross_sales - gross_returns
+        order_count = agg['order_count'] or 0
+        sales_count = agg['sales_count'] or 0
+
+        # Distinct cashier names for filter dropdown
+        cashier_names = list(
+            qs.exclude(cashier_name='').exclude(cashier_name__isnull=True)
+            .values_list('cashier_name', flat=True).distinct().order_by('cashier_name')
+        )
+
+        return Response({
+            'order_count': order_count,
+            'sales_count': sales_count,
+            'returns_count': agg['returns_count'] or 0,
+            'net_total': round(net_total, 2),
+            'gross_sales': round(gross_sales, 2),
+            'gross_returns': round(gross_returns, 2),
+            'total_discount': round(float(agg['total_discount'] or 0), 2),
+            'total_tax': round(float(agg['total_tax'] or 0), 2),
+            'aov': round(net_total / sales_count, 2) if sales_count > 0 else 0,
+            'cashier_names': cashier_names,
         }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='dues-summary')

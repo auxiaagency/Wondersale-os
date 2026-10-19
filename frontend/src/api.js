@@ -1180,6 +1180,37 @@ export async function getSaleOrders(params = {}) {
   return res.json();
 }
 
+/**
+ * Fetch a single paginated page of sales orders.
+ * Passes page + page_size so the backend uses OptionalPageNumberPagination
+ * and returns { count, total_pages, current_page, page_size, next, previous, results }.
+ */
+export async function getSaleOrdersPage(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') query.append(k, v);
+  });
+  const url = `${API_BASE}/sales/?${query.toString()}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch sales page');
+  return res.json(); // { count, total_pages, current_page, page_size, results }
+}
+
+/**
+ * Fetch KPI aggregate totals for the current filter set from the
+ * ledger-summary action (no row serialization, DB-level aggregation only).
+ */
+export async function getSaleOrdersLedgerSummary(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') query.append(k, v);
+  });
+  const url = `${API_BASE}/sales/ledger-summary/${query.toString() ? `?${query.toString()}` : ''}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch ledger summary');
+  return res.json();
+}
+
 export async function getSaleOrderDetail(id) {
   const res = await fetch(`${API_BASE}/sales/${id}/`, {
     headers: getAuthHeaders(),
