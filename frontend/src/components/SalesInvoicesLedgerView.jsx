@@ -91,6 +91,9 @@ export default function SalesInvoicesLedgerView({
     totalUnits: 0, aov: 0, totalProfit: 0, profitMargin: 0,
   });
   const [kpiLoading, setKpiLoading] = useState(false);
+  // Full-filter cashier & payment breakdown aggregated across entire timeline
+  const [summaryCashierBreakdown, setSummaryCashierBreakdown] = useState([]);
+  const [summaryPaymentBreakdown, setSummaryPaymentBreakdown] = useState([]);
   // Cashier names from backend for the filter dropdown
   const [cashierOptions, setCashierOptions] = useState([]);
 
@@ -313,6 +316,13 @@ export default function SalesInvoicesLedgerView({
       if (Array.isArray(data.cashier_names)) {
         setCashierOptions(data.cashier_names);
       }
+      // Update full-filter cashier & payment method breakdowns
+      if (Array.isArray(data.cashier_breakdown)) {
+        setSummaryCashierBreakdown(data.cashier_breakdown);
+      }
+      if (Array.isArray(data.payment_method_breakdown)) {
+        setSummaryPaymentBreakdown(data.payment_method_breakdown);
+      }
     } catch (err) {
       console.error('Failed to load ledger summary:', err);
     } finally {
@@ -388,8 +398,11 @@ export default function SalesInvoicesLedgerView({
   // (filteredOrders = current page). They update as you page through results.
 
 
-  // ─── Per-cashier breakdown ──────────────────────────────────────────────────
+  // ─── Per-cashier breakdown (DB-aggregated across entire timeline with page fallback) ──
   const cashierBreakdown = useMemo(() => {
+    if (summaryCashierBreakdown && summaryCashierBreakdown.length > 0) {
+      return summaryCashierBreakdown;
+    }
     const map = {};
     filteredOrders.forEach((o) => {
       const name = o.cashier_name || 'Counter Staff';
@@ -397,7 +410,6 @@ export default function SalesInvoicesLedgerView({
         map[name] = { name, turnover: 0, profit: 0, orders: 0, units: 0 };
       }
       const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
-      // Returns subtract from turnover
       const amt = parseFloat(o.total_amount) || 0;
       map[name].turnover += isRet ? -amt : amt;
       map[name].profit   += computeOrderProfit(o);
@@ -407,7 +419,7 @@ export default function SalesInvoicesLedgerView({
       });
     });
     return Object.values(map).sort((a, b) => b.turnover - a.turnover);
-  }, [filteredOrders, computeOrderProfit]);
+  }, [summaryCashierBreakdown, filteredOrders, computeOrderProfit]);
 
   // ─── Per-payment-method breakdown & Cashier payment attribution ─────────────
   const PAYMENT_METHOD_CONFIG = useMemo(() => ({
@@ -419,6 +431,37 @@ export default function SalesInvoicesLedgerView({
   }), []);
 
   const { paymentMethodBreakdown, cashierPaymentBreakdown, paymentMethodTotals } = useMemo(() => {
+    // If we have full-timeline summary data from the backend, build from it
+    if (summaryPaymentBreakdown && summaryPaymentBreakdown.length > 0) {
+      const breakdownList = summaryPaymentBreakdown.filter((item) => Math.abs(item.amount) > 0);
+      const totalCollectedAll = breakdownList.reduce((sum, item) => sum + Math.max(0, item.amount), 0);
+
+      // Cashier payment breakdown from summaryCashierBreakdown
+      const cashierList = (summaryCashierBreakdown || []).map((c) => {
+        const m = c.methods || { cash: 0, upi: 0, card: 0, due: 0, other: 0 };
+        const total = (m.cash || 0) + (m.upi || 0) + (m.card || 0) + (m.due || 0) + (m.other || 0);
+        return {
+          name: c.name,
+          totalCollected: total > 0 ? total : c.turnover,
+          ordersCount: c.orders,
+          methods: {
+            cash: m.cash || 0,
+            upi: m.upi || 0,
+            card: m.card || 0,
+            due: m.due || 0,
+            other: m.other || 0,
+          },
+        };
+      }).sort((a, b) => b.totalCollected - a.totalCollected);
+
+      return {
+        paymentMethodBreakdown: breakdownList,
+        cashierPaymentBreakdown: cashierList,
+        paymentMethodTotals: totalCollectedAll,
+      };
+    }
+
+    // Fallback: Compute from current page rows if summary endpoint has not loaded yet
     const payMap = {
       cash: { id: 'cash', label: 'Cash', color: '#10B981', amount: 0, ordersCount: 0 },
       upi: { id: 'upi', label: 'UPI / QR', color: '#38BDF8', amount: 0, ordersCount: 0 },
@@ -451,10 +494,8 @@ export default function SalesInvoicesLedgerView({
       const totalAmt = parseFloat(o.total_amount) || 0;
       const rawMethod = (o.payment_method || 'cash').trim().toLowerCase();
 
-      // Track order count for cashier
       cashierMap[cName].ordersCount += 1;
 
-      // Calculate component breakdown
       let cashAmt = 0;
       let upiAmt = 0;
       let cardAmt = 0;
@@ -464,7 +505,6 @@ export default function SalesInvoicesLedgerView({
       if (rawMethod === 'split') {
         cashAmt = (parseFloat(o.split_cash_amount) || 0) * sign;
         upiAmt = (parseFloat(o.split_upi_amount) || 0) * sign;
-        // If split values are empty or sum is less than total, allocate remainder to upi or cash
         if (cashAmt === 0 && upiAmt === 0) {
           cashAmt = (totalAmt / 2) * sign;
           upiAmt = (totalAmt / 2) * sign;
@@ -494,7 +534,6 @@ export default function SalesInvoicesLedgerView({
         otherAmt = totalAmt * sign;
       }
 
-      // Aggregate into payment breakdown
       if (cashAmt !== 0) {
         payMap.cash.amount += cashAmt;
         payMap.cash.ordersCount += 1;
@@ -533,7 +572,7 @@ export default function SalesInvoicesLedgerView({
       cashierPaymentBreakdown: cashierList,
       paymentMethodTotals: totalCollectedAll,
     };
-  }, [filteredOrders]);
+  }, [summaryPaymentBreakdown, summaryCashierBreakdown, filteredOrders]);
 
   // Pie chart hover states
   const [pieCashierHovered, setPieCashierHovered] = useState(null);
@@ -863,7 +902,7 @@ export default function SalesInvoicesLedgerView({
         {/* Centre text */}
         <text x={cx} y={cy - 10} textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.7">{centerLabel}</text>
         <text x={cx} y={cy + 10} textAnchor="middle" fill="#F8FAFC" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
-          ₹{centerVal >= 1000 ? (centerVal / 1000).toFixed(1) + 'k' : centerVal.toFixed(0)}
+          {formatIndianCurrencyCompact(centerVal)}
         </text>
         {hovered && (
           <text x={cx} y={cy + 28} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="Inter, sans-serif">
@@ -909,7 +948,7 @@ export default function SalesInvoicesLedgerView({
         {/* Centre text */}
         <text x={cx} y={cy - 10} textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.7">{centerLabel}</text>
         <text x={cx} y={cy + 10} textAnchor="middle" fill="#F8FAFC" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
-          ₹{centerVal >= 1000 ? (centerVal / 1000).toFixed(1) + 'k' : centerVal.toFixed(0)}
+          {formatIndianCurrencyCompact(centerVal)}
         </text>
         {hovered && (
           <text x={cx} y={cy + 28} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="Inter, sans-serif">

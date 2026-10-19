@@ -3165,6 +3165,151 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             .values_list('cashier_name', flat=True).distinct().order_by('cashier_name')
         )
 
+        # Full-filter cashier & payment breakdown (DB-aggregated across whole timeline / filter set)
+        D0 = Decimal('0.00')
+        cashier_groups = qs.values('cashier_name').annotate(
+            orders_count=Count('id'),
+            turnover=Sum(
+                Case(
+                    When(~return_q, then='total_amount'),
+                    When(return_q, then=-F('total_amount')),
+                    default=D0,
+                    output_field=DjDecField()
+                )
+            ),
+            cash_collected=Sum(
+                Case(
+                    When(return_q, then=Case(
+                        When(payment_method='cash', then=-F('total_amount')),
+                        When(payment_method='split', then=-F('split_cash_amount')),
+                        default=D0,
+                        output_field=DjDecField()
+                    )),
+                    When(~return_q, then=Case(
+                        When(payment_method='cash', then=F('total_amount')),
+                        When(payment_method='split', then=F('split_cash_amount')),
+                        When(payment_method='partial', then=Case(
+                            When(initial_payment_method='cash', then=F('amount_paid')),
+                            When(initial_payment_method='', then=F('amount_paid')),
+                            default=D0,
+                            output_field=DjDecField()
+                        )),
+                        default=D0,
+                        output_field=DjDecField()
+                    )),
+                    default=D0,
+                    output_field=DjDecField()
+                )
+            ),
+            upi_collected=Sum(
+                Case(
+                    When(return_q, then=Case(
+                        When(payment_method__in=['upi', 'qr'], then=-F('total_amount')),
+                        When(payment_method='split', then=-F('split_upi_amount')),
+                        default=D0,
+                        output_field=DjDecField()
+                    )),
+                    When(~return_q, then=Case(
+                        When(payment_method__in=['upi', 'qr'], then=F('total_amount')),
+                        When(payment_method='split', then=F('split_upi_amount')),
+                        When(payment_method='partial', then=Case(
+                            When(initial_payment_method__in=['upi', 'qr'], then=F('amount_paid')),
+                            default=D0,
+                            output_field=DjDecField()
+                        )),
+                        default=D0,
+                        output_field=DjDecField()
+                    )),
+                    default=D0,
+                    output_field=DjDecField()
+                )
+            ),
+            card_collected=Sum(
+                Case(
+                    When(return_q, then=Case(
+                        When(payment_method__in=['card', 'vip_card'], then=-F('total_amount')),
+                        default=D0,
+                        output_field=DjDecField()
+                    )),
+                    When(~return_q, then=Case(
+                        When(payment_method__in=['card', 'vip_card'], then=F('total_amount')),
+                        When(payment_method='partial', then=Case(
+                            When(initial_payment_method__in=['card', 'vip_card'], then=F('amount_paid')),
+                            default=D0,
+                            output_field=DjDecField()
+                        )),
+                        default=D0,
+                        output_field=DjDecField()
+                    )),
+                    default=D0,
+                    output_field=DjDecField()
+                )
+            ),
+            due_collected=Sum(
+                Case(
+                    When(~return_q, then=F('balance_due')),
+                    When(return_q, then=-F('balance_due')),
+                    default=D0,
+                    output_field=DjDecField()
+                )
+            )
+        ).order_by('-turnover')
+
+        cashier_costs = {
+            row['sale_order__cashier_name']: row
+            for row in SaleOrderItem.objects.filter(sale_order__in=qs).values('sale_order__cashier_name').annotate(
+                cost=Sum(
+                    Case(
+                        When(sale_order__in=qs.filter(return_q), then=-(F('unit_cost_price') * F('quantity'))),
+                        default=F('unit_cost_price') * F('quantity'),
+                        output_field=DjDecField()
+                    )
+                ),
+                units=Sum('quantity')
+            )
+        }
+
+        cashier_breakdown = []
+        pay_totals = {'cash': 0.0, 'upi': 0.0, 'card': 0.0, 'due': 0.0, 'other': 0.0}
+
+        for cg in cashier_groups:
+            c_name = cg['cashier_name'] or 'Counter Staff'
+            c_turnover = float(cg['turnover'] or 0)
+            c_cost = float(cashier_costs.get(cg['cashier_name'], {}).get('cost') or 0)
+            c_profit = c_turnover - c_cost
+            c_units = int(cashier_costs.get(cg['cashier_name'], {}).get('units') or 0)
+            c_cash = float(cg['cash_collected'] or 0)
+            c_upi = float(cg['upi_collected'] or 0)
+            c_card = float(cg['card_collected'] or 0)
+            c_due = float(cg['due_collected'] or 0)
+
+            pay_totals['cash'] += c_cash
+            pay_totals['upi'] += c_upi
+            pay_totals['card'] += c_card
+            pay_totals['due'] += c_due
+
+            cashier_breakdown.append({
+                'name': c_name,
+                'orders': cg['orders_count'],
+                'turnover': round(c_turnover, 2),
+                'profit': round(c_profit, 2),
+                'units': c_units,
+                'methods': {
+                    'cash': round(c_cash, 2),
+                    'upi': round(c_upi, 2),
+                    'card': round(c_card, 2),
+                    'due': round(c_due, 2),
+                    'other': 0.0,
+                }
+            })
+
+        payment_method_breakdown = [
+            {'id': 'cash', 'label': 'Cash', 'color': '#10B981', 'amount': round(pay_totals['cash'], 2)},
+            {'id': 'upi', 'label': 'UPI / QR', 'color': '#38BDF8', 'amount': round(pay_totals['upi'], 2)},
+            {'id': 'card', 'label': 'Card / VIP Card', 'color': '#818CF8', 'amount': round(pay_totals['card'], 2)},
+            {'id': 'due', 'label': 'Pending Dues (Khata)', 'color': '#EC4899', 'amount': round(pay_totals['due'], 2)},
+        ]
+
         return Response({
             'order_count': order_count,
             'sales_count': sales_count,
@@ -3179,6 +3324,8 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             'profit_margin': profit_margin,
             'aov': round(net_total / sales_count, 2) if sales_count > 0 else 0,
             'cashier_names': cashier_names,
+            'cashier_breakdown': cashier_breakdown,
+            'payment_method_breakdown': payment_method_breakdown,
         }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='dues-summary')
