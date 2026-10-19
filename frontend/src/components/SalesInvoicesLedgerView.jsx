@@ -304,10 +304,10 @@ export default function SalesInvoicesLedgerView({
         grossTotal:    grossTotal,
         totalDiscount: data.total_discount ?? 0,
         totalTax:      data.total_tax      ?? 0,
-        totalUnits:    0, // not computed server-side (item-level aggregation not in summary)
+        totalUnits:    data.total_units    ?? 0,
         aov:           aovValue,
-        totalProfit:   0, // profit needs item cost data; computed from page rows only
-        profitMargin:  0,
+        totalProfit:   data.total_profit   ?? 0,
+        profitMargin:  data.profit_margin  ?? 0,
       });
       // Update cashier filter dropdown from summary
       if (Array.isArray(data.cashier_names)) {

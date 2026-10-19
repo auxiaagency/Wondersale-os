@@ -2788,10 +2788,11 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         # Order status filter: 'completed', 'returned', 'dues', 'partial'
         order_status = self.request.query_params.get('order_status', '').strip().lower()
         if order_status and order_status != 'all':
+            return_cond = Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')
             if order_status == 'completed':
-                qs = qs.filter(status='completed', is_return=False, balance_due__lte=Decimal('0.00'))
+                qs = qs.filter(status='completed', balance_due__lte=Decimal('0.00')).exclude(return_cond)
             elif order_status in ('returned', 'refunded'):
-                qs = qs.filter(Q(status='returned') | Q(status='refunded') | Q(is_return=True))
+                qs = qs.filter(return_cond)
             elif order_status == 'dues':
                 qs = qs.filter(
                     Q(balance_due__gt=Decimal('0.00')) | Q(payment_method='partial')
@@ -2800,9 +2801,9 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         # Is-return flag filter
         is_return_param = self.request.query_params.get('is_return', '').strip().lower()
         if is_return_param in ('true', '1', 'yes'):
-            qs = qs.filter(is_return=True)
+            qs = qs.filter(Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference=''))
         elif is_return_param in ('false', '0', 'no'):
-            qs = qs.filter(is_return=False)
+            qs = qs.exclude(Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference=''))
 
         # Cashier name filter
         cashier_name = self.request.query_params.get('cashier_name', '').strip()
@@ -3091,40 +3092,43 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         """
         Returns aggregate KPI totals for the current filter set (same params as list endpoint).
         Used by the frontend to fetch KPI cards without loading all paginated rows.
-        Returns: order_count, sales_count, returns_count, gross_total, total_discount,
-                 total_tax, cashier_names (distinct list).
+        Returns: order_count, sales_count, returns_count, net_total, gross_sales, gross_returns,
+                 total_discount, total_tax, total_units, total_profit, profit_margin, aov,
+                 cashier_names (distinct list).
         """
-        from django.db.models import Count, Sum, Case, When, IntegerField as DjIntField, DecimalField as DjDecField
+        from django.db.models import Count, Sum, Case, When, F, IntegerField as DjIntField, DecimalField as DjDecField
         qs = self.get_queryset()  # applies all filter params from query string
+
+        return_q = Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')
 
         agg = qs.aggregate(
             order_count=Count('id'),
-            sales_count=Count('id', filter=Q(is_return=False)),
-            returns_count=Count('id', filter=Q(is_return=True)),
+            sales_count=Count('id', filter=~return_q),
+            returns_count=Count('id', filter=return_q),
             gross_sales=Sum(
                 Case(
-                    When(is_return=False, then='total_amount'),
+                    When(~return_q, then='total_amount'),
                     default=0,
                     output_field=DjDecField()
                 )
             ),
             gross_returns=Sum(
                 Case(
-                    When(is_return=True, then='total_amount'),
+                    When(return_q, then='total_amount'),
                     default=0,
                     output_field=DjDecField()
                 )
             ),
             total_discount=Sum(
                 Case(
-                    When(is_return=False, then='discount_amount'),
+                    When(~return_q, then='discount_amount'),
                     default=0,
                     output_field=DjDecField()
                 )
             ),
             total_tax=Sum(
                 Case(
-                    When(is_return=False, then='tax_amount'),
+                    When(~return_q, then='tax_amount'),
                     default=0,
                     output_field=DjDecField()
                 )
@@ -3136,6 +3140,24 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         net_total = gross_sales - gross_returns
         order_count = agg['order_count'] or 0
         sales_count = agg['sales_count'] or 0
+
+        # Item-level aggregation for units and cost (across orders matching current filter)
+        order_ids = qs.values_list('id', flat=True)
+        return_order_ids = qs.filter(return_q).values_list('id', flat=True)
+        item_agg = SaleOrderItem.objects.filter(sale_order_id__in=order_ids).aggregate(
+            total_units=Sum('quantity'),
+            total_cost=Sum(
+                Case(
+                    When(sale_order_id__in=return_order_ids, then=-(F('unit_cost_price') * F('quantity'))),
+                    default=F('unit_cost_price') * F('quantity'),
+                    output_field=DjDecField()
+                )
+            ),
+        )
+        total_units = int(item_agg['total_units'] or 0)
+        total_cost = float(item_agg['total_cost'] or 0)
+        total_profit = net_total - total_cost
+        profit_margin = round((total_profit / net_total * 100), 1) if net_total > 0 else 0.0
 
         # Distinct cashier names for filter dropdown
         cashier_names = list(
@@ -3152,6 +3174,9 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             'gross_returns': round(gross_returns, 2),
             'total_discount': round(float(agg['total_discount'] or 0), 2),
             'total_tax': round(float(agg['total_tax'] or 0), 2),
+            'total_units': total_units,
+            'total_profit': round(total_profit, 2),
+            'profit_margin': profit_margin,
             'aov': round(net_total / sales_count, 2) if sales_count > 0 else 0,
             'cashier_names': cashier_names,
         }, status=status.HTTP_200_OK)
