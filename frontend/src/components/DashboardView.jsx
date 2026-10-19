@@ -462,6 +462,7 @@ export default function DashboardView({
   currentUser,
   selectedStore: propSelectedStore,
   onBackToLauncher,
+  onViewProduct,
 }) {
   // ── State ──
   const [stores, setStores] = useState([]);
@@ -1280,9 +1281,10 @@ export default function DashboardView({
   };
 
   // ── Row style for tables ──
-  const rowHover = (idx) => ({
+  const rowHover = (idx, clickable = false) => ({
     background: idx % 2 === 0 ? 'transparent' : 'var(--bg-surface-hover)',
     transition: 'background 0.12s ease',
+    cursor: clickable ? 'pointer' : 'default',
   });
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -2616,11 +2618,21 @@ export default function DashboardView({
                       : p.current_stock <= 5 ? 'critically_low'
                       : p.current_stock <= 15 ? 'low_stock' : 'healthy';
                     return (
-                      <tr key={p.item_id || i} className="dash-row" style={rowHover(i)}>
+                      <tr
+                        key={p.item_id || i}
+                        className="dash-row"
+                        style={rowHover(i, Boolean(onViewProduct && (p.item_id || p.id)))}
+                        onClick={() => {
+                          if (onViewProduct && (p.item_id || p.id)) {
+                            onViewProduct(p);
+                          }
+                        }}
+                        title={onViewProduct ? 'Click to inspect product details & inventory' : undefined}
+                      >
                         <TD style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '12px' }}>
                           {rank}
                         </TD>
-                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
+                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, color: onViewProduct ? 'var(--brand-primary, #60A5FA)' : 'inherit' }}>
                           {p.name}
                         </TD>
                         <TD mono muted style={{ fontSize: '11.5px' }}>{p.uid}</TD>
@@ -2697,9 +2709,19 @@ export default function DashboardView({
                     const status = (p.units_sold || 0) === 0 ? 'dead_stock'
                       : (p.units_sold || 0) <= 3 ? 'slow_moving' : 'moderate';
                     return (
-                      <tr key={p.item_id || i} className="dash-row" style={rowHover(i)}>
+                      <tr
+                        key={p.item_id || i}
+                        className="dash-row"
+                        style={rowHover(i, Boolean(onViewProduct && (p.item_id || p.id)))}
+                        onClick={() => {
+                          if (onViewProduct && (p.item_id || p.id)) {
+                            onViewProduct(p);
+                          }
+                        }}
+                        title={onViewProduct ? 'Click to inspect product details & inventory' : undefined}
+                      >
                         <TD style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '12px' }}>{rank}</TD>
-                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{p.name}</TD>
+                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, color: onViewProduct ? 'var(--brand-primary, #60A5FA)' : 'inherit' }}>{p.name}</TD>
                         <TD mono muted style={{ fontSize: '11.5px' }}>{p.uid}</TD>
                         <TD muted style={{ fontSize: '12px' }}>{p.primary_category_name || p.category_name || '—'}</TD>
                         <TD right mono style={{ fontWeight: 600 }}>{fmtNum(p.current_stock)}</TD>
@@ -2768,9 +2790,19 @@ export default function DashboardView({
                     const runoutColor = runout === null ? 'var(--text-muted)'
                       : runout <= 7 ? '#EF4444' : runout <= 30 ? '#F59E0B' : 'var(--color-success)';
                     return (
-                      <tr key={p.item_id || i} className="dash-row" style={rowHover(i)}>
+                      <tr
+                        key={p.item_id || i}
+                        className="dash-row"
+                        style={rowHover(i, Boolean(onViewProduct && (p.item_id || p.id)))}
+                        onClick={() => {
+                          if (onViewProduct && (p.item_id || p.id)) {
+                            onViewProduct(p);
+                          }
+                        }}
+                        title={onViewProduct ? 'Click to inspect product details & inventory' : undefined}
+                      >
                         <TD style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '12px' }}>{rank}</TD>
-                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{p.name}</TD>
+                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, color: onViewProduct ? 'var(--brand-primary, #60A5FA)' : 'inherit' }}>{p.name}</TD>
                         <TD muted style={{ fontSize: '12px' }}>{p.primary_category_name || p.category_name || '—'}</TD>
                         <TD right mono style={{ fontWeight: 600 }}>{fmtNum(p.units_sold)}</TD>
                         <TD right mono>{fmtCompact(p.revenue)}</TD>
@@ -2839,9 +2871,19 @@ export default function DashboardView({
                   {paginate(oosFiltered, oosPage).map((p, i) => {
                     const rank = (oosPage - 1) * PAGE_SIZE + i + 1;
                     return (
-                      <tr key={p.item_id || i} className="dash-row" style={rowHover(i)}>
+                      <tr
+                        key={p.item_id || i}
+                        className="dash-row"
+                        style={rowHover(i, Boolean(onViewProduct && (p.item_id || p.id)))}
+                        onClick={() => {
+                          if (onViewProduct && (p.item_id || p.id)) {
+                            onViewProduct(p);
+                          }
+                        }}
+                        title={onViewProduct ? 'Click to inspect product details & inventory' : undefined}
+                      >
                         <TD style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '12px' }}>{rank}</TD>
-                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{p.name}</TD>
+                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, color: onViewProduct ? 'var(--brand-primary, #60A5FA)' : 'inherit' }}>{p.name}</TD>
                         <TD mono muted style={{ fontSize: '11.5px' }}>{p.uid}</TD>
                         <TD muted style={{ fontSize: '12px' }}>{p.primary_category_name || p.category_name || '—'}</TD>
                         <TD right mono style={{
@@ -2959,9 +3001,19 @@ export default function DashboardView({
                       : days <= 7 ? '#F97316' : days <= 30 ? '#F59E0B'
                       : days <= 90 ? '#3B82F6' : 'var(--color-success)';
                     return (
-                      <tr key={p.item_id || i} className="dash-row" style={rowHover(i)}>
+                      <tr
+                        key={p.item_id || i}
+                        className="dash-row"
+                        style={rowHover(i, Boolean(onViewProduct && (p.item_id || p.id)))}
+                        onClick={() => {
+                          if (onViewProduct && (p.item_id || p.id)) {
+                            onViewProduct(p);
+                          }
+                        }}
+                        title={onViewProduct ? 'Click to inspect product details & inventory' : undefined}
+                      >
                         <TD style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: '12px' }}>{rank}</TD>
-                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{p.name}</TD>
+                        <TD style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600, color: onViewProduct ? 'var(--brand-primary, #60A5FA)' : 'inherit' }}>{p.name}</TD>
                         <TD mono muted style={{ fontSize: '11.5px' }}>{p.uid}</TD>
                         <TD muted style={{ fontSize: '12px' }}>{p.category_name || '—'}</TD>
                         <TD mono style={{ fontSize: '12.5px' }}>{p.expiry_date}</TD>
@@ -3197,7 +3249,22 @@ export default function DashboardView({
                         </TD>
 
                         {/* Product */}
-                        <TD style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
+                        <TD
+                          style={{
+                            maxWidth: 220,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontWeight: 600,
+                            cursor: onViewProduct && r.item ? 'pointer' : 'default',
+                            color: onViewProduct && r.item ? 'var(--brand-primary, #60A5FA)' : 'inherit',
+                          }}
+                          onClick={() => {
+                            if (onViewProduct && r.item) {
+                              onViewProduct({ id: r.item, name: r.item_name, uid: r.item_uid });
+                            }
+                          }}
+                          title={onViewProduct && r.item ? 'Click to inspect product details & inventory' : undefined}
+                        >
                           <div>{r.item_name || 'Damaged Product'}</div>
                           {r.section_name && (
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>

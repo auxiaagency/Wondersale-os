@@ -80,6 +80,17 @@ export default function FinancialAnalysisDashboard({
   const timelineRangeRef = useRef(timelineRange);
   const activeYearRef = useRef(year);
   const activeMonthRef = useRef(month);
+
+  // Initialize year/month from propTimelineRange if provided on mount
+  useState(() => {
+    if (propTimelineRange?.startDate) {
+      const [y, m, d] = propTimelineRange.startDate.split('-').map(Number);
+      if (y) { setActiveYear(y); activeYearRef.current = y; }
+      if (m) { setActiveMonth(m); activeMonthRef.current = m; }
+      if (d) setActiveDayNum(d);
+    }
+  });
+
   // Tracks whether the component has finished its initial mount render.
   // TimelineRangeSelector fires onChange on mount; we skip that first fire
   // so we don't double-fetch on load.
@@ -101,8 +112,9 @@ export default function FinancialAnalysisDashboard({
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
-  // Sync with prop changes if parent changes them
+  // Sync with prop changes if parent changes them after mount
   useEffect(() => {
+    if (!isMountedRef.current) return;
     if (propTimelineRange) {
       const cur = timelineRangeRef.current;
       if (

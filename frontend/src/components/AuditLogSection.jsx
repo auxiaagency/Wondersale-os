@@ -151,16 +151,28 @@ export default function AuditLogSection({
       if (timeFilter?.active) {
         if (timeFilter.startTime) params.start_time = timeFilter.startTime;
         if (timeFilter.endTime) params.end_time = timeFilter.endTime;
+      } else if (dateFilter !== 'all') {
+        const now = new Date();
+        if (dateFilter === 'today') {
+          const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          params.start_time = startOfDay.toISOString();
+        } else if (dateFilter === '7days') {
+          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          params.start_time = sevenDaysAgo.toISOString();
+        } else if (dateFilter === '30days') {
+          const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          params.start_time = thirtyDaysAgo.toISOString();
+        }
       }
 
       const data = await fetchAllStockMovements(params);
-      setMovements(Array.isArray(data) ? data : []);
+      setMovements(Array.isArray(data) ? data : (data?.results || []));
     } catch (err) {
       setError(err.message || 'Failed to load stock audit ledger.');
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, reasonFilter, staffFilter, filterStoreId, timeFilter]);
+  }, [searchQuery, reasonFilter, staffFilter, filterStoreId, timeFilter, dateFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

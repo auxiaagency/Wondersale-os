@@ -108,9 +108,22 @@ export default function CounterPayoutsLedgerView({
 
   // Sync external timeline changes
   useEffect(() => {
-    if (timelineRange) {
-      setSelectedTimelineRange(timelineRange);
-    }
+    if (!timelineRange) return;
+    setSelectedTimelineRange((prev) => {
+      if (
+        prev &&
+        prev.startDate === timelineRange.startDate &&
+        prev.endDate === timelineRange.endDate &&
+        prev.unit === timelineRange.unit &&
+        prev.count === timelineRange.count &&
+        prev.isAllTime === timelineRange.isAllTime &&
+        prev.granularity === timelineRange.granularity &&
+        prev.label === timelineRange.label
+      ) {
+        return prev;
+      }
+      return timelineRange;
+    });
   }, [timelineRange]);
 
   const handleTimelineChange = useCallback((newRange) => {

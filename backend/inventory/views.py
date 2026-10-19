@@ -2144,6 +2144,7 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = StockMovement.objects.select_related('item', 'item__store', 'performed_by', 'performed_by__role').all()
     serializer_class = StockMovementSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -2709,6 +2710,7 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
     """
     queryset = SaleOrder.objects.prefetch_related('items', 'items__item').select_related('store', 'customer', 'cashier').all()
     serializer_class = SaleOrderSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()

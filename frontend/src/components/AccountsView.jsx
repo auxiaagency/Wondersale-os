@@ -238,7 +238,21 @@ export default function AccountsView({
 
   const handleMasterTimelineRangeChange = useCallback((newRange) => {
     if (!newRange) return;
-    setMasterTimelineRange(newRange);
+    setMasterTimelineRange((prev) => {
+      if (
+        prev &&
+        prev.startDate === newRange.startDate &&
+        prev.endDate === newRange.endDate &&
+        prev.unit === newRange.unit &&
+        prev.count === newRange.count &&
+        prev.isAllTime === newRange.isAllTime &&
+        prev.granularity === newRange.granularity &&
+        prev.label === newRange.label
+      ) {
+        return prev;
+      }
+      return newRange;
+    });
     if (newRange.endDate) {
       const parts = newRange.endDate.split('-').map(Number);
       if (parts[0]) setSelectedYear(parts[0]);
@@ -309,10 +323,12 @@ export default function AccountsView({
     }
   }, [activeStoreQueryString, masterTimelineRange, selectedYear, selectedMonth, expenseCategoryFilter, expensePaymentMethodFilter, expenseSearchQuery, expenseTimeFilter, showToast]);
 
-  // Load data
+  // Load data - only fetch operating expenses when on the operating_expenses tab
   useEffect(() => {
-    loadExpenseData();
-  }, [loadExpenseData]);
+    if (activeTab === 'operating_expenses') {
+      loadExpenseData();
+    }
+  }, [activeTab, loadExpenseData]);
 
   // Derived filtered expenses based on time filter
   const displayedExpenses = useMemo(() => {

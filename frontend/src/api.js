@@ -152,25 +152,45 @@ export async function logoutStaff() {
 }
 
 export async function getStaffMe() {
-  const res = await fetch(`${STAFF_API}/auth/me/`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) {
-    if (res.status === 401) {
-      triggerSessionTermination();
-    } else {
-      localStorage.removeItem('wondersale_staff_id');
-      localStorage.removeItem('wondersale_staff_user');
-      localStorage.removeItem('wondersale_session_token');
+  try {
+    const res = await fetch(`${STAFF_API}/auth/me/`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        triggerSessionTermination();
+        return null;
+      }
+      // On 500, 502, 503, 504 (timeout) or transient server load:
+      // Do NOT wipe localStorage credentials! Return existing stored user if available.
+      const stored = localStorage.getItem('wondersale_staff_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          // ignore parse error
+        }
+      }
+      return null;
+    }
+    const data = await res.json();
+    localStorage.setItem('wondersale_staff_user', JSON.stringify(data));
+    if (data.session_token) {
+      localStorage.setItem('wondersale_session_token', data.session_token);
+    }
+    return data;
+  } catch (err) {
+    // Network dropout / connection timeout: preserve session
+    const stored = localStorage.getItem('wondersale_staff_user');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        // ignore parse error
+      }
     }
     return null;
   }
-  const data = await res.json();
-  localStorage.setItem('wondersale_staff_user', JSON.stringify(data));
-  if (data.session_token) {
-    localStorage.setItem('wondersale_session_token', data.session_token);
-  }
-  return data;
 }
 
 export async function revokeStaffSessions(id) {

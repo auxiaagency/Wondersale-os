@@ -205,6 +205,19 @@ export default function SalesInvoicesLedgerView({
   };
 
   // Fetch all orders for current active store
+  // Date boundary calculation based on selectedTimelineRange
+  const dateRangeBounds = useMemo(() => {
+    if (!selectedTimelineRange) return { start: '', end: '' };
+    if (selectedTimelineRange.isAllTime || selectedTimelineRange.unit === 'all') {
+      return { start: '', end: '' };
+    }
+    return {
+      start: selectedTimelineRange.startDate || '',
+      end: selectedTimelineRange.endDate || '',
+    };
+  }, [selectedTimelineRange]);
+
+  // Fetch orders for current active store and date window
   const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
@@ -213,6 +226,12 @@ export default function SalesInvoicesLedgerView({
       const params = {};
       if (activeStoreId) {
         params.store = activeStoreId;
+      }
+      if (dateRangeBounds.start) {
+        params['created_at__gte'] = `${dateRangeBounds.start}T00:00:00`;
+      }
+      if (dateRangeBounds.end) {
+        params['created_at__lte'] = `${dateRangeBounds.end}T23:59:59`;
       }
 
       // Fetch from API
@@ -226,7 +245,7 @@ export default function SalesInvoicesLedgerView({
     } finally {
       setLoading(false);
     }
-  }, [activeStoreId]);
+  }, [activeStoreId, dateRangeBounds.start, dateRangeBounds.end]);
 
   useEffect(() => {
     loadOrders();
@@ -234,9 +253,22 @@ export default function SalesInvoicesLedgerView({
 
   // Synchronize date filter with Master Timeline Range if provided
   useEffect(() => {
-    if (timelineRange) {
-      setSelectedTimelineRange(timelineRange);
-    }
+    if (!timelineRange) return;
+    setSelectedTimelineRange((prev) => {
+      if (
+        prev &&
+        prev.startDate === timelineRange.startDate &&
+        prev.endDate === timelineRange.endDate &&
+        prev.unit === timelineRange.unit &&
+        prev.count === timelineRange.count &&
+        prev.isAllTime === timelineRange.isAllTime &&
+        prev.granularity === timelineRange.granularity &&
+        prev.label === timelineRange.label
+      ) {
+        return prev;
+      }
+      return timelineRange;
+    });
   }, [timelineRange]);
 
   // Unique cashiers from loaded orders for cashier filter dropdown
@@ -251,17 +283,7 @@ export default function SalesInvoicesLedgerView({
     return Array.from(set.values());
   }, [orders]);
 
-  // Date boundary calculation based on selectedTimelineRange
-  const dateRangeBounds = useMemo(() => {
-    if (!selectedTimelineRange) return { start: '', end: '' };
-    if (selectedTimelineRange.isAllTime || selectedTimelineRange.unit === 'all') {
-      return { start: '', end: '' };
-    }
-    return {
-      start: selectedTimelineRange.startDate || '',
-      end: selectedTimelineRange.endDate || '',
-    };
-  }, [selectedTimelineRange]);
+
 
   // Filtered and Sorted Orders List
   const filteredOrders = useMemo(() => {

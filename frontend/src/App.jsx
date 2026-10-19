@@ -171,7 +171,7 @@ export default function App() {
     const verifySession = async () => {
       try {
         const staff = await getStaffMe();
-        if (!staff) {
+        if (!staff && !localStorage.getItem('wondersale_session_token')) {
           setCurrentUser(null);
         }
       } catch (err) {
@@ -733,6 +733,21 @@ export default function App() {
               selectedStore={selectedStore}
               onNavigate={handleNavigate}
               onBackToLauncher={() => handleNavigate('launcher')}
+              onViewProduct={(item) => {
+                const itemId = item.id || item.item_id;
+                if (!itemId) return;
+                fetchItem(itemId)
+                  .then((fullItem) => {
+                    setSelectedProductDetailItem(fullItem);
+                    setActiveView('inventory');
+                    setInventorySubTab('product_detail');
+                  })
+                  .catch(() => {
+                    setSelectedProductDetailItem(item);
+                    setActiveView('inventory');
+                    setInventorySubTab('product_detail');
+                  });
+              }}
             />
           )}
 
