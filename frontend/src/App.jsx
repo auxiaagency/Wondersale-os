@@ -139,10 +139,15 @@ export default function App() {
         if (staff) {
           setCurrentUser(staff);
         } else {
-          setCurrentUser(null);
+          // If server returned 401, triggerSessionTermination() cleared localStorage.
+          // Only clear currentUser if credentials no longer exist in storage.
+          const hasToken = localStorage.getItem('wondersale_session_token') || localStorage.getItem('wondersale_staff_id');
+          if (!hasToken) {
+            setCurrentUser(null);
+          }
         }
       } catch (e) {
-        console.warn('Session check failed', e);
+        console.warn('Session check failed due to network dropout; preserving cached user session.', e);
       } finally {
         setAuthChecking(false);
       }
@@ -171,11 +176,15 @@ export default function App() {
     const verifySession = async () => {
       try {
         const staff = await getStaffMe();
-        if (!staff && !localStorage.getItem('wondersale_session_token')) {
-          setCurrentUser(null);
+        if (!staff) {
+          // Only terminate session if token was actually purged (e.g. 401 unauthorized)
+          const hasToken = localStorage.getItem('wondersale_session_token') || localStorage.getItem('wondersale_staff_id');
+          if (!hasToken) {
+            setCurrentUser(null);
+          }
         }
       } catch (err) {
-        // Network dropout: do not force logout on offline
+        // Network dropout: do not force logout on offline or transient timeout
       }
     };
     const interval = setInterval(verifySession, 25000);

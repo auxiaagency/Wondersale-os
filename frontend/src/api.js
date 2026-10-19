@@ -325,14 +325,33 @@ export async function deleteStaffRole(id) {
   return true;
 }
 
-// ----------------- Inventory APIs -----------------
-
 export async function fetchStores() {
-  const res = await fetch(`${API_BASE}/stores/`, {
-    headers: getAuthHeaders(),
-  });
-  if (!res.ok) throw new Error('Failed to fetch stores');
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/stores/`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch stores');
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      try {
+        localStorage.setItem('wondersale_cached_stores', JSON.stringify(data));
+      } catch {
+        // storage quota edge case
+      }
+    }
+    return data;
+  } catch (err) {
+    // If network drops or times out, fall back to cached stores if available
+    const cached = localStorage.getItem('wondersale_cached_stores');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // ignore parse error
+      }
+    }
+    throw err;
+  }
 }
 
 export async function createStore(data) {
