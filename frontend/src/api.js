@@ -840,6 +840,20 @@ export async function fetchAllStockMovements(params = {}) {
   return res.json();
 }
 
+export async function fetchStockMovementsSummary(params = {}) {
+  const url = new URL(`${window.location.origin}${API_BASE}/stock-movements/audit-summary/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch stock audit summary');
+  return res.json();
+}
+
 export function getBarcodeUrl(id, download = false) {
   return `${API_BASE}/items/${id}/barcode/${download ? '?download=1' : ''}`;
 }
@@ -1068,6 +1082,32 @@ export async function getCounterPayouts(params = {}) {
   const url = `${API_BASE}/counter-payouts/${query.toString() ? `?${query.toString()}` : ''}`;
   const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch counter payouts');
+  return res.json();
+}
+
+export async function getCounterPayoutsPage(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      query.append(key, val);
+    }
+  });
+  const url = `${API_BASE}/counter-payouts/${query.toString() ? `?${query.toString()}` : ''}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch paginated counter payouts');
+  return res.json();
+}
+
+export async function getCounterPayoutsSummary(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      query.append(key, val);
+    }
+  });
+  const url = `${API_BASE}/counter-payouts/payout-summary/${query.toString() ? `?${query.toString()}` : ''}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch counter payouts summary');
   return res.json();
 }
 
@@ -1592,6 +1632,8 @@ export async function getRegisterShifts(params = {}) {
   if (params.is_discrepancy_settled !== undefined) query.append('is_discrepancy_settled', params.is_discrepancy_settled);
   if (params.start_time) query.append('start_time', params.start_time);
   if (params.end_time) query.append('end_time', params.end_time);
+  if (params.page) query.append('page', params.page);
+  if (params.page_size) query.append('page_size', params.page_size);
 
   const url = `${API_BASE}/register-shifts/${query.toString() ? `?${query.toString()}` : ''}`;
   const res = await fetch(url, { headers: getAuthHeaders() });

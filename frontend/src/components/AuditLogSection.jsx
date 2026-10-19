@@ -25,7 +25,7 @@ import {
   ChevronsRight,
   Loader2,
 } from 'lucide-react';
-import { fetchAllStockMovements, fetchEmployees } from '../api';
+import { fetchAllStockMovements, fetchStockMovementsSummary, fetchEmployees } from '../api';
 import { SkeletonAuditRows } from './Skeleton';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
 
@@ -118,10 +118,17 @@ export default function AuditLogSection({
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
 
-  // Pagination
+  // Server-side Pagination
   const AUDIT_PAGE_SIZE_OPTIONS = [50, 100, 250, 500, 1000];
   const [auditPage, setAuditPage] = useState(1);
   const [auditPageSize, setAuditPageSize] = useState(100);
+  const [totalCount, setTotalCount] = useState(0);
+  const [summaryMetrics, setSummaryMetrics] = useState({
+    total_entries: 0,
+    total_inward: 0,
+    total_outward: 0,
+    total_damaged: 0,
+  });
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -138,48 +145,82 @@ export default function AuditLogSection({
     }
   }, [selectedStore]);
 
-  const loadMovements = useCallback(async () => {
+  const buildFilterParams = useCallback(() => {
+    const params = {};
+    if (searchQuery.trim()) params.search = searchQuery.trim();
+    if (reasonFilter) params.reason = reasonFilter;
+    if (staffFilter) params.staff = staffFilter;
+    if (filterStoreId) params.store = filterStoreId;
+    if (timeFilter?.active) {
+      if (timeFilter.startTime) params.start_time = timeFilter.startTime;
+      if (timeFilter.endTime) params.end_time = timeFilter.endTime;
+    } else if (dateFilter !== 'all') {
+      const now = new Date();
+      if (dateFilter === 'today') {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        params.start_time = startOfDay.toISOString();
+      } else if (dateFilter === '7days') {
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        params.start_time = sevenDaysAgo.toISOString();
+      } else if (dateFilter === '30days') {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        params.start_time = thirtyDaysAgo.toISOString();
+      }
+    }
+    return params;
+  }, [searchQuery, reasonFilter, staffFilter, filterStoreId, timeFilter, dateFilter]);
+
+  const loadMovements = useCallback(async (targetPage = auditPage) => {
     setLoading(true);
     setError('');
-    setAuditPage(1); // reset to first page on reload
     try {
-      const params = {};
-      if (searchQuery.trim()) params.search = searchQuery.trim();
-      if (reasonFilter) params.reason = reasonFilter;
-      if (staffFilter) params.staff = staffFilter;
-      if (filterStoreId) params.store = filterStoreId;
-      if (timeFilter?.active) {
-        if (timeFilter.startTime) params.start_time = timeFilter.startTime;
-        if (timeFilter.endTime) params.end_time = timeFilter.endTime;
-      } else if (dateFilter !== 'all') {
-        const now = new Date();
-        if (dateFilter === 'today') {
-          const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          params.start_time = startOfDay.toISOString();
-        } else if (dateFilter === '7days') {
-          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          params.start_time = sevenDaysAgo.toISOString();
-        } else if (dateFilter === '30days') {
-          const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          params.start_time = thirtyDaysAgo.toISOString();
-        }
-      }
+      const baseParams = buildFilterParams();
+      const pageParams = {
+        ...baseParams,
+        page: targetPage,
+        page_size: auditPageSize,
+      };
 
-      const data = await fetchAllStockMovements(params);
-      setMovements(Array.isArray(data) ? data : (data?.results || []));
+      const data = await fetchAllStockMovements(pageParams);
+      if (data && typeof data === 'object' && Array.isArray(data.results)) {
+        setMovements(data.results);
+        setTotalCount(data.count || 0);
+      } else {
+        const list = Array.isArray(data) ? data : (data?.results || []);
+        setMovements(list);
+        setTotalCount(list.length);
+      }
     } catch (err) {
       setError(err.message || 'Failed to load stock audit ledger.');
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, reasonFilter, staffFilter, filterStoreId, timeFilter, dateFilter]);
+  }, [buildFilterParams, auditPage, auditPageSize]);
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const baseParams = buildFilterParams();
+      const data = await fetchStockMovementsSummary(baseParams);
+      if (data) {
+        setSummaryMetrics({
+          total_entries: data.total_entries || 0,
+          total_inward: data.total_inward || 0,
+          total_outward: data.total_outward || 0,
+          total_damaged: data.total_damaged || 0,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load audit summary:', err);
+    }
+  }, [buildFilterParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       loadMovements();
+      loadSummary();
     }, 200);
     return () => clearTimeout(timer);
-  }, [loadMovements]);
+  }, [loadMovements, loadSummary]);
 
   // Persistent staff list so options don't vanish on filter
   const [allStaffList, setAllStaffList] = useState([]);
@@ -234,68 +275,18 @@ export default function AuditLogSection({
     });
   }, [movements]);
 
-  // Client-side date, exact minute time period, and staff filtering
-  const filteredMovements = useMemo(() => {
-    let list = movements;
+  // Direct server results for current page
+  const filteredMovements = movements;
+  const paginatedMovements = movements;
 
-    if (staffFilter) {
-      const sf = staffFilter.toLowerCase().trim();
-      list = list.filter((m) => {
-        if (sf === 'owner' || sf === 'admin' || sf === 'owner / admin') {
-          return (
-            !m.performed_by_id ||
-            (m.performed_by_role || '').toLowerCase().includes('owner') ||
-            (m.performed_by_name || '').toLowerCase().includes('owner') ||
-            (m.performed_by_name || '').toLowerCase().includes('admin')
-          );
-        }
-        return (
-          String(m.performed_by_id) === staffFilter ||
-          String(m.performed_by_staff_id || '').toLowerCase() === sf ||
-          String(m.performed_by_name || '').toLowerCase().includes(sf) ||
-          String(m.performed_by_role || '').toLowerCase().includes(sf)
-        );
-      });
-    }
+  const auditTotalPages = Math.max(1, Math.ceil(totalCount / auditPageSize));
+  const auditStartEntry = totalCount === 0 ? 0 : (auditPage - 1) * auditPageSize + 1;
+  const auditEndEntry = Math.min(auditPage * auditPageSize, totalCount);
 
-    if (timeFilter?.active) {
-      list = filterLogsByTimeRange(list, timeFilter, ['created_at']);
-    } else if (dateFilter !== 'all') {
-      const now = Date.now();
-      list = list.filter((m) => {
-        if (!m.created_at) return true;
-        const mTime = new Date(m.created_at).getTime();
-        const diffHours = (now - mTime) / (1000 * 60 * 60);
-
-        if (dateFilter === 'today') return diffHours <= 24;
-        if (dateFilter === '7days') return diffHours <= 24 * 7;
-        if (dateFilter === '30days') return diffHours <= 24 * 30;
-        return true;
-      });
-    }
-
-    return list;
-  }, [movements, staffFilter, dateFilter, timeFilter]);
-
-  // Reset to page 1 whenever filters change
-  useEffect(() => {
-    setAuditPage(1);
-  }, [filteredMovements]);
-
-  // Paginated slice of filtered movements
-  const paginatedMovements = useMemo(() => {
-    const start = (auditPage - 1) * auditPageSize;
-    return filteredMovements.slice(start, start + auditPageSize);
-  }, [filteredMovements, auditPage, auditPageSize]);
-
-  const auditTotalPages = Math.max(1, Math.ceil(filteredMovements.length / auditPageSize));
-  const auditStartEntry = filteredMovements.length === 0 ? 0 : (auditPage - 1) * auditPageSize + 1;
-  const auditEndEntry = Math.min(auditPage * auditPageSize, filteredMovements.length);
-
-  // Handle Export to CSV according to active filters & time period
-  const handleExportCsv = () => {
+  // Handle Export to CSV with full filtered records
+  const handleExportCsv = async () => {
     if (exportingCsv) return;
-    if (!filteredMovements || filteredMovements.length === 0) {
+    if (totalCount === 0) {
       alert('No audit movements found to export with the currently selected filters.');
       return;
     }
@@ -311,81 +302,78 @@ export default function AuditLogSection({
       });
     }, 80);
 
-    setTimeout(() => {
-      try {
-        const headers = [
-          'Date & Time',
-          'Product Name',
-          'Product UID',
-          'Movement Reason',
-          'Stock Change (Units)',
-          'Current Balance',
-          'Performed By',
-          'Role',
-          'Store Branch',
-          'Audit Note',
+    try {
+      const baseParams = buildFilterParams();
+      const data = await fetchAllStockMovements(baseParams);
+      const allMovements = Array.isArray(data) ? data : (data?.results || []);
+
+      const headers = [
+        'Date & Time',
+        'Product Name',
+        'Product UID',
+        'Movement Reason',
+        'Stock Change (Units)',
+        'Current Balance',
+        'Performed By',
+        'Role',
+        'Store Branch',
+        'Audit Note',
+      ];
+
+      const rows = allMovements.map((m) => {
+        const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '—';
+        const reasonLabel = REASON_METAS[m.reason]?.label || m.reason || 'Audit Movement';
+        const changeStr = m.change > 0 ? `+${m.change}` : String(m.change);
+        const perfName = m.performed_by_name || m.performed_by?.name || 'Owner / Admin';
+        const perfRole = m.performed_by_role || m.performed_by?.role_name || m.performed_by?.designation || (m.performed_by_id ? 'Staff' : 'Owner');
+        const storeName = m.store_name || m.item?.store?.name || m.item_store_name || (selectedStore ? 'Store #' + selectedStore : 'Store');
+
+        return [
+          `"${dt}"`,
+          `"${(m.item_name || 'Unknown Product').replace(/"/g, '""')}"`,
+          `"${(m.item_uid || '').replace(/"/g, '""')}"`,
+          `"${reasonLabel.replace(/"/g, '""')}"`,
+          changeStr,
+          m.item_current_quantity !== undefined && m.item_current_quantity !== null ? m.item_current_quantity : '',
+          `"${perfName.replace(/"/g, '""')}"`,
+          `"${perfRole.replace(/"/g, '""')}"`,
+          `"${storeName.replace(/"/g, '""')}"`,
+          `"${(m.note || '').replace(/"/g, '""')}"`,
         ];
+      });
 
-        const rows = filteredMovements.map((m) => {
-          const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '—';
-          const reasonMeta = REASON_METAS[m.reason] || {};
-          const reasonLabel = reasonMeta.label || m.reason_display || m.reason || 'Stock Movement';
-          const changeStr = m.change > 0 ? `+${m.change}` : String(m.change);
-          const perfName = m.performed_by_name || 'Owner / Admin';
-          const perfRole = m.performed_by_role || 'Owner';
-          const storeName = m.store_name || (stores.find((s) => String(s.id) === String(m.store_id))?.name) || 'All Stores';
+      clearInterval(progressTimer);
+      setExportProgress(100);
 
-          return [
-            `"${dt.replace(/"/g, '""')}"`,
-            `"${(m.item_name || 'Unknown Product').replace(/"/g, '""')}"`,
-            `"${(m.item_uid || '').replace(/"/g, '""')}"`,
-            `"${reasonLabel.replace(/"/g, '""')}"`,
-            changeStr,
-            m.item_current_quantity !== undefined && m.item_current_quantity !== null ? m.item_current_quantity : '',
-            `"${perfName.replace(/"/g, '""')}"`,
-            `"${perfRole.replace(/"/g, '""')}"`,
-            `"${storeName.replace(/"/g, '""')}"`,
-            `"${(m.note || '').replace(/"/g, '""')}"`,
-          ];
-        });
-
-        clearInterval(progressTimer);
-        setExportProgress(100);
-
-        const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const dateTag = new Date().toISOString().split('T')[0];
-        const staffTag = staffFilter ? `_staff_${staffFilter}` : '';
-        const reasonTag = reasonFilter ? `_${reasonFilter}` : '';
-        a.download = `stock_movement_audit_ledger_${dateTag}${staffTag}${reasonTag}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } finally {
-        clearInterval(progressTimer);
-        setTimeout(() => {
-          setExportingCsv(false);
-          setExportProgress(0);
-        }, 350);
-      }
-    }, 50);
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateTag = new Date().toISOString().split('T')[0];
+      const staffTag = staffFilter ? `_staff_${staffFilter}` : '';
+      const reasonTag = reasonFilter ? `_${reasonFilter}` : '';
+      a.download = `stock_movement_audit_ledger_${dateTag}${staffTag}${reasonTag}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+    } finally {
+      clearInterval(progressTimer);
+      setTimeout(() => {
+        setExportingCsv(false);
+        setExportProgress(0);
+      }, 350);
+    }
   };
 
-  // Aggregate Metrics
-  const totalEntries = filteredMovements.length;
-  const totalInward = filteredMovements
-    .filter((m) => m.change > 0)
-    .reduce((sum, m) => sum + m.change, 0);
-  const totalOutward = filteredMovements
-    .filter((m) => m.change < 0)
-    .reduce((sum, m) => sum + Math.abs(m.change), 0);
-  const totalDamaged = filteredMovements
-    .filter((m) => m.reason === 'damage')
-    .reduce((sum, m) => sum + Math.abs(m.change), 0);
+  // Aggregate Metrics from DB Summary
+  const totalEntries = summaryMetrics.total_entries || totalCount;
+  const totalInward = summaryMetrics.total_inward;
+  const totalOutward = summaryMetrics.total_outward;
+  const totalDamaged = summaryMetrics.total_damaged;
 
   return (
     <div className="audit-section-root">
@@ -1045,7 +1033,7 @@ export default function AuditLogSection({
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
               Showing <strong style={{ color: 'var(--text-primary)' }}>{auditStartEntry}–{auditEndEntry}</strong> of{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>{filteredMovements.length.toLocaleString('en-IN')}</strong> entries
+              <strong style={{ color: 'var(--text-primary)' }}>{totalCount.toLocaleString('en-IN')}</strong> entries
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>Rows per page:</span>

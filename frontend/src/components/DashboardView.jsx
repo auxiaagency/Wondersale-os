@@ -21,6 +21,7 @@ import {
   settleRegisterDiscrepancy,
   getDuesSummary,
   getSaleOrders,
+  getSaleOrdersPage,
   recordOrderDuePayment,
   fetchBrokenItemReports,
   markBrokenItemNoFine,
@@ -809,7 +810,7 @@ export default function DashboardView({
       const storeParam = store !== 'all' ? store : undefined;
       const [summaryRes, ordersRes] = await Promise.all([
         getDuesSummary({ store: storeParam }),
-        getSaleOrders({ is_due: 'true', store: storeParam }),
+        getSaleOrdersPage({ is_due: 'true', store: storeParam, page: 1, page_size: 100, ordering: '-created_at' }),
       ]);
       setDuesSummary(summaryRes);
       const list = Array.isArray(ordersRes) ? ordersRes : (ordersRes?.results || []);

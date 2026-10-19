@@ -33,7 +33,7 @@ import {
   Calendar,
   Filter,
 } from 'lucide-react';
-import { getCounterPayouts, deleteCounterPayout } from '../api';
+import { getCounterPayouts, getCounterPayoutsPage, getCounterPayoutsSummary, deleteCounterPayout } from '../api';
 import TimelineRangeSelector from './TimelineRangeSelector';
 
 export const COUNTER_PAYOUT_CATEGORIES = [
@@ -96,10 +96,11 @@ export default function CounterPayoutsLedgerView({
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
 
-  // Pagination
+  // Server-side Pagination
   const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
 
   // Table Drag-to-Scroll Refs
   const tableContainerRef = useRef(null);
@@ -134,129 +135,128 @@ export default function CounterPayoutsLedgerView({
     }
   }, [onTimelineRangeChange]);
 
-  // Load Payouts from API
-  const loadPayouts = useCallback(async () => {
+  // Map frontend sortBy to backend ordering param
+  const orderingParam = useMemo(() => {
+    if (sortBy === 'date_asc') return 'paid_at';
+    if (sortBy === 'amount_desc') return '-amount';
+    if (sortBy === 'amount_asc') return 'amount';
+    return '-paid_at';
+  }, [sortBy]);
+
+  // Build query filter params for backend
+  const buildFilterParams = useCallback(() => {
+    const params = {};
+    if (activeStoreId && activeStoreId !== 'all') {
+      params.store_id = activeStoreId;
+    }
+    if (categoryFilter && categoryFilter !== 'all') {
+      params.category = categoryFilter;
+    }
+    if (paymentMethodFilter && paymentMethodFilter !== 'all') {
+      params.payment_method = paymentMethodFilter;
+    }
+    if (selectedTimelineRange) {
+      if (!selectedTimelineRange.isAllTime && selectedTimelineRange.startDate) {
+        params.start_date = selectedTimelineRange.startDate;
+      }
+      if (!selectedTimelineRange.isAllTime && selectedTimelineRange.endDate) {
+        params.end_date = selectedTimelineRange.endDate;
+      }
+    }
+    return params;
+  }, [activeStoreId, categoryFilter, paymentMethodFilter, selectedTimelineRange]);
+
+  // Debounced search query trigger
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Load Payouts from API with server-side pagination
+  const loadPayouts = useCallback(async (targetPage = page) => {
     setLoading(true);
     setError(null);
     try {
-      const params = {};
-      if (activeStoreId && activeStoreId !== 'all') {
-        params.store_id = activeStoreId;
+      const baseParams = buildFilterParams();
+      if (debouncedSearch.trim()) {
+        baseParams.search = debouncedSearch.trim();
       }
-      if (categoryFilter && categoryFilter !== 'all') {
-        params.category = categoryFilter;
-      }
-      if (paymentMethodFilter && paymentMethodFilter !== 'all') {
-        params.payment_method = paymentMethodFilter;
-      }
-      if (selectedTimelineRange) {
-        if (!selectedTimelineRange.isAllTime && selectedTimelineRange.startDate) {
-          params.start_date = selectedTimelineRange.startDate;
-        }
-        if (!selectedTimelineRange.isAllTime && selectedTimelineRange.endDate) {
-          params.end_date = selectedTimelineRange.endDate;
-        }
-      }
+      const pageParams = {
+        ...baseParams,
+        page: targetPage,
+        page_size: pageSize,
+        ordering: orderingParam,
+      };
 
-      const res = await getCounterPayouts(params);
-      const list = Array.isArray(res) ? res : (res?.results || []);
-      setPayouts(list);
+      const res = await getCounterPayoutsPage(pageParams);
+      if (res && typeof res === 'object' && Array.isArray(res.results)) {
+        setPayouts(res.results);
+        setTotalCount(res.count || 0);
+      } else {
+        const list = Array.isArray(res) ? res : [];
+        setPayouts(list);
+        setTotalCount(list.length);
+      }
     } catch (err) {
       console.error('Failed to load counter payouts:', err);
       setError(err?.message || 'Failed to load counter payouts');
     } finally {
       setLoading(false);
     }
-  }, [activeStoreId, categoryFilter, paymentMethodFilter, selectedTimelineRange]);
+  }, [buildFilterParams, debouncedSearch, page, pageSize, orderingParam]);
 
   useEffect(() => {
     loadPayouts();
   }, [loadPayouts]);
 
-  // Client-side filtering & sorting
-  const filteredPayouts = useMemo(() => {
-    let result = [...payouts];
+  // Aliases for seamless rendering
+  const filteredPayouts = payouts;
 
-    // Search query across Voucher #, Payee, Staff Name, Reason, LR/Receipt #
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      result = result.filter((p) => {
-        return (
-          (p.payout_number && p.payout_number.toLowerCase().includes(q)) ||
-          (p.paid_to && p.paid_to.toLowerCase().includes(q)) ||
-          (p.paid_by_name && p.paid_by_name.toLowerCase().includes(q)) ||
-          (p.reason && p.reason.toLowerCase().includes(q)) ||
-          (p.receipt_number && p.receipt_number.toLowerCase().includes(q)) ||
-          (p.store_name && p.store_name.toLowerCase().includes(q))
-        );
-      });
+  // Load KPI Metrics via database aggregation
+  const [metrics, setMetrics] = useState({
+    totalDisbursed: 0,
+    count: 0,
+    cashTotal: 0,
+    digitalTotal: 0,
+    topCatLabel: 'None',
+    topCatAmt: 0,
+  });
+
+  const loadMetrics = useCallback(async () => {
+    try {
+      const baseParams = buildFilterParams();
+      if (debouncedSearch.trim()) {
+        baseParams.search = debouncedSearch.trim();
+      }
+      const summary = await getCounterPayoutsSummary(baseParams);
+      if (summary) {
+        const topCatMeta = COUNTER_PAYOUT_CATEGORIES.find((c) => c.id === summary.top_category);
+        setMetrics({
+          totalDisbursed: summary.total_disbursed || 0,
+          count: summary.total_count || 0,
+          cashTotal: summary.cash_total || 0,
+          digitalTotal: summary.digital_total || 0,
+          topCatLabel: topCatMeta ? topCatMeta.label : (summary.top_category || 'None'),
+          topCatAmt: summary.top_category_amount || 0,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load payout metrics summary:', err);
     }
+  }, [buildFilterParams, debouncedSearch]);
 
-    // Sort
-    result.sort((a, b) => {
-      const dateA = new Date(a.paid_at || a.created_at).getTime();
-      const dateB = new Date(b.paid_at || b.created_at).getTime();
-      const amtA = parseFloat(a.amount) || 0;
-      const amtB = parseFloat(b.amount) || 0;
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
 
-      if (sortBy === 'date_asc') return dateA - dateB;
-      if (sortBy === 'amount_desc') return amtB - amtA;
-      if (sortBy === 'amount_asc') return amtA - amtB;
-      return dateB - dateA; // default date_desc
-    });
+  // Total pages derived from backend count
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-    return result;
-  }, [payouts, searchQuery, sortBy]);
-
-  // Aggregate Metrics
-  const metrics = useMemo(() => {
-    let totalDisbursed = 0;
-    let cashTotal = 0;
-    let digitalTotal = 0;
-    const categoryTotals = {};
-
-    filteredPayouts.forEach((p) => {
-      const amt = parseFloat(p.amount) || 0;
-      totalDisbursed += amt;
-      const pm = (p.payment_method || '').toLowerCase();
-      if (pm === 'cash') {
-        cashTotal += amt;
-      } else {
-        digitalTotal += amt;
-      }
-
-      const cat = p.category || 'other';
-      categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
-    });
-
-    // Top Category
-    let topCat = null;
-    let topCatAmt = 0;
-    Object.entries(categoryTotals).forEach(([cat, val]) => {
-      if (val > topCatAmt) {
-        topCatAmt = val;
-        topCat = cat;
-      }
-    });
-
-    const topCategoryMeta = COUNTER_PAYOUT_CATEGORIES.find((c) => c.id === topCat);
-
-    return {
-      totalDisbursed,
-      count: filteredPayouts.length,
-      cashTotal,
-      digitalTotal,
-      topCatLabel: topCategoryMeta ? topCategoryMeta.label : (topCat || 'None'),
-      topCatAmt,
-    };
-  }, [filteredPayouts]);
-
-  // Pagination slicing
-  const totalPages = Math.max(1, Math.ceil(filteredPayouts.length / pageSize));
-  const paginatedPayouts = useMemo(() => {
-    const startIdx = (page - 1) * pageSize;
-    return filteredPayouts.slice(startIdx, startIdx + pageSize);
-  }, [filteredPayouts, page, pageSize]);
+  // Current page records from backend
+  const paginatedPayouts = payouts;
 
   // Drag-to-Scroll Handlers
   const handleTableMouseDown = (e) => {
@@ -290,98 +290,107 @@ export default function CounterPayoutsLedgerView({
   };
 
   // Export to CSV
-  const handleExportCsv = () => {
-    if (filteredPayouts.length === 0 || exportingCsv) return;
+  const handleExportCsv = async () => {
+    if (totalCount === 0 || exportingCsv) return;
     setExportingCsv(true);
-    setExportProgress(20);
+    setExportProgress(15);
 
     const timer = setInterval(() => {
       setExportProgress((prev) => (prev < 80 ? prev + 15 : prev));
     }, 70);
 
-    setTimeout(() => {
-      try {
-        const headers = [
-          'Voucher Number',
-          'Date',
-          'Time',
-          'Branch / Store',
-          'Register Shift',
-          'Paid To (Payee)',
-          'Paid By (Cashier/Staff)',
-          'Category',
-          'Payment Method',
-          'Amount',
-          'Bill / LR Reference',
-          'Reason / Purpose',
-        ];
-
-        const rows = filteredPayouts.map((p) => {
-          const dt = new Date(p.paid_at || p.created_at);
-          const dStr = dt.toLocaleDateString('en-IN');
-          const tStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-          const amt = parseFloat(p.amount) || 0;
-          const shiftStr = p.register_shift_number
-            ? `${p.register_shift_number}${p.is_post_close ? ' (Post-Close)' : ''}`
-            : p.register_shift
-            ? `Shift #${p.register_shift}`
-            : 'Unassigned';
-
-          return [
-            `"${p.payout_number || ''}"`,
-            `"${dStr}"`,
-            `"${tStr}"`,
-            `"${(p.store_name || 'Main Branch').replace(/"/g, '""')}"`,
-            `"${shiftStr.replace(/"/g, '""')}"`,
-            `"${(p.paid_to || '').replace(/"/g, '""')}"`,
-            `"${(p.paid_by_name || 'Cashier').replace(/"/g, '""')}"`,
-            `"${(p.category_display || p.category || '').replace(/"/g, '""')}"`,
-            `"${(p.payment_method_display || p.payment_method || '').toUpperCase()}"`,
-            amt.toFixed(2),
-            `"${(p.receipt_number || '').replace(/"/g, '""')}"`,
-            `"${(p.reason || '').replace(/"/g, '""')}"`,
-          ];
-        });
-
-        // Summary row
-        rows.push([
-          '"TOTAL"',
-          '""',
-          '""',
-          '""',
-          '""',
-          '""',
-          '""',
-          '""',
-          metrics.totalDisbursed.toFixed(2),
-          '""',
-          `"${metrics.count} Payout Vouchers Total"`,
-          '""',
-        ]);
-
-        const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
-        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        const now = new Date();
-        const dateTag = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-        link.download = `Counter_Payouts_Ledger_${dateTag}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        console.error('Failed to export CSV:', err);
-      } finally {
-        clearInterval(timer);
-        setExportProgress(100);
-        setTimeout(() => {
-          setExportingCsv(false);
-          setExportProgress(0);
-        }, 300);
+    try {
+      const exportParams = {
+        ...buildFilterParams(),
+        ordering: orderingParam,
+      };
+      if (debouncedSearch.trim()) {
+        exportParams.search = debouncedSearch.trim();
       }
-    }, 250);
+
+      const res = await getCounterPayouts(exportParams);
+      const allRows = Array.isArray(res) ? res : (res?.results || []);
+
+      const headers = [
+        'Voucher Number',
+        'Date',
+        'Time',
+        'Branch / Store',
+        'Register Shift',
+        'Paid To (Payee)',
+        'Paid By (Cashier/Staff)',
+        'Category',
+        'Payment Method',
+        'Amount',
+        'Bill / LR Reference',
+        'Reason / Purpose',
+      ];
+
+      const rows = allRows.map((p) => {
+        const dt = new Date(p.paid_at || p.created_at);
+        const dStr = dt.toLocaleDateString('en-IN');
+        const tStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        const amt = parseFloat(p.amount) || 0;
+        const shiftStr = p.register_shift_number
+          ? `${p.register_shift_number}${p.is_post_close ? ' (Post-Close)' : ''}`
+          : p.register_shift
+          ? `Shift #${p.register_shift}`
+          : 'Unassigned';
+
+        return [
+          `"${p.payout_number || ''}"`,
+          `"${dStr}"`,
+          `"${tStr}"`,
+          `"${(p.store_name || 'Main Branch').replace(/"/g, '""')}"`,
+          `"${shiftStr.replace(/"/g, '""')}"`,
+          `"${(p.paid_to || '').replace(/"/g, '""')}"`,
+          `"${(p.paid_by_name || 'Cashier').replace(/"/g, '""')}"`,
+          `"${(p.category_display || p.category || '').replace(/"/g, '""')}"`,
+          `"${(p.payment_method_display || p.payment_method || '').toUpperCase()}"`,
+          amt.toFixed(2),
+          `"${(p.receipt_number || '').replace(/"/g, '""')}"`,
+          `"${(p.reason || '').replace(/"/g, '""')}"`,
+        ];
+      });
+
+      // Summary row
+      rows.push([
+        '"TOTAL"',
+        '""',
+        '""',
+        '""',
+        '""',
+        '""',
+        '""',
+        '""',
+        metrics.totalDisbursed.toFixed(2),
+        '""',
+        `"${metrics.count || allRows.length} Payout Vouchers Total"`,
+        '""',
+      ]);
+
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const now = new Date();
+      const dateTag = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      link.download = `Counter_Payouts_Ledger_${dateTag}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+    } finally {
+      clearInterval(timer);
+      setExportProgress(100);
+      setTimeout(() => {
+        setExportingCsv(false);
+        setExportProgress(0);
+      }, 300);
+    }
   };
 
   const handleCopyVoucher = (payoutNumber) => {
@@ -632,7 +641,7 @@ export default function CounterPayoutsLedgerView({
             <button
               type="button"
               onClick={handleExportCsv}
-              disabled={filteredPayouts.length === 0 || exportingCsv}
+              disabled={totalCount === 0 || exportingCsv}
               className="btn btn-secondary"
               style={{
                 position: 'relative',
@@ -643,8 +652,8 @@ export default function CounterPayoutsLedgerView({
                 fontSize: '0.80rem',
                 padding: '8px 14px',
                 height: '36px',
-                cursor: filteredPayouts.length === 0 ? 'not-allowed' : exportingCsv ? 'wait' : 'pointer',
-                opacity: filteredPayouts.length === 0 ? 0.5 : exportingCsv ? 0.85 : 1,
+                cursor: totalCount === 0 ? 'not-allowed' : exportingCsv ? 'wait' : 'pointer',
+                opacity: totalCount === 0 ? 0.5 : exportingCsv ? 0.85 : 1,
               }}
               title="Export filtered counter payouts to CSV"
             >
@@ -1124,8 +1133,8 @@ export default function CounterPayoutsLedgerView({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-              Showing {filteredPayouts.length === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
-              {Math.min(page * pageSize, filteredPayouts.length)} of {filteredPayouts.length} entries
+              Showing {totalCount === 0 ? 0 : (page - 1) * pageSize + 1} to{' '}
+              {Math.min(page * pageSize, totalCount)} of {totalCount} entries
             </span>
 
             <select

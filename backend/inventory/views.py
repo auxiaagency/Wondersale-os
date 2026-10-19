@@ -2220,7 +2220,30 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
         if end_time:
             qs = qs.filter(created_at__lte=end_time)
 
+        ordering = self.request.query_params.get('ordering')
+        if ordering in ('created_at', '-created_at', 'change', '-change'):
+            return qs.order_by(ordering)
         return qs.order_by('-created_at')
+
+    @action(detail=False, methods=['get'], url_path='audit-summary')
+    def audit_summary(self, request):
+        """
+        Database-level aggregation of audit movements for rapid KPI summary cards.
+        """
+        qs = self.get_queryset()
+        from django.db.models import Sum, Count, Case, When, F
+        stats = qs.aggregate(
+            total_entries=Count('id'),
+            total_inward=Sum(Case(When(change__gt=0, then=F('change')), default=0)),
+            total_outward=Sum(Case(When(change__lt=0, then=-F('change')), default=0)),
+            total_damaged=Sum(Case(When(reason='damage', change__lt=0, then=-F('change')), default=0)),
+        )
+        return Response({
+            'total_entries': stats['total_entries'] or 0,
+            'total_inward': stats['total_inward'] or 0,
+            'total_outward': stats['total_outward'] or 0,
+            'total_damaged': stats['total_damaged'] or 0,
+        }, status=status.HTTP_200_OK)
 
 
 class BrokenItemReportViewSet(viewsets.ModelViewSet):
@@ -2231,6 +2254,7 @@ class BrokenItemReportViewSet(viewsets.ModelViewSet):
     queryset = BrokenItemReport.objects.select_related('item', 'store', 'section', 'reported_by', 'stock_movement').all()
     serializer_class = BrokenItemReportSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -2422,6 +2446,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     """
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -3783,6 +3808,7 @@ class CounterPayoutViewSet(viewsets.ModelViewSet):
     """
     queryset = CounterPayout.objects.select_related('store', 'paid_by').all()
     serializer_class = CounterPayoutSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -3826,7 +3852,44 @@ class CounterPayoutViewSet(viewsets.ModelViewSet):
                     end_time = end_time.replace(hour=23, minute=59, second=59, microsecond=999999)
                 qs = qs.filter(paid_at__lte=end_time)
 
-        return qs.order_by('-paid_at', '-created_at')
+        ordering = self.request.query_params.get('ordering')
+        order_field_map = {
+            'paid_at': 'paid_at',
+            '-paid_at': '-paid_at',
+            'amount': 'amount',
+            '-amount': '-amount',
+            'created_at': 'created_at',
+            '-created_at': '-created_at',
+        }
+        order_by_field = order_field_map.get(ordering, '-paid_at')
+        return qs.order_by(order_by_field, '-created_at')
+
+    @action(detail=False, methods=['get'], url_path='payout-summary')
+    def payout_summary(self, request):
+        """
+        Database-level aggregation of counter payouts for summary cards and breakdown charts.
+        """
+        qs = self.get_queryset()
+        from django.db.models import Sum, Count, Case, When, F
+        stats = qs.aggregate(
+            total_count=Count('id'),
+            total_disbursed=Sum('amount'),
+            cash_total=Sum(Case(When(payment_method__iexact='cash', then=F('amount')), default=Decimal('0.00'))),
+            digital_total=Sum(Case(When(~Q(payment_method__iexact='cash'), then=F('amount')), default=Decimal('0.00'))),
+        )
+        cat_breakdown = list(qs.values('category').annotate(cat_total=Sum('amount')).order_by('-cat_total'))
+        top_cat = cat_breakdown[0]['category'] if cat_breakdown else None
+        top_cat_amt = float(cat_breakdown[0]['cat_total']) if cat_breakdown else 0.0
+
+        return Response({
+            'total_count': stats['total_count'] or 0,
+            'total_disbursed': float(stats['total_disbursed'] or 0),
+            'cash_total': float(stats['cash_total'] or 0),
+            'digital_total': float(stats['digital_total'] or 0),
+            'category_breakdown': cat_breakdown,
+            'top_category': top_cat,
+            'top_category_amount': top_cat_amt,
+        }, status=status.HTTP_200_OK)
 
     def perform_create(self, serializer):
         request = self.request
@@ -3866,6 +3929,7 @@ class DailyRegisterShiftViewSet(viewsets.ModelViewSet):
     """
     queryset = DailyRegisterShift.objects.select_related('store', 'cashier', 'closed_by').all()
     serializer_class = DailyRegisterShiftSerializer
+    pagination_class = OptionalPageNumberPagination
 
     def get_staff_from_request(self, request):
         staff = getattr(request, 'staff_member', None)
