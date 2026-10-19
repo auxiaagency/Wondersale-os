@@ -235,6 +235,7 @@ export default function BillingView({
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
   const [editSplitCash, setEditSplitCash] = useState('');
   const [editSplitUpi, setEditSplitUpi] = useState('');
+  const [editDiscountAmount, setEditDiscountAmount] = useState('0');
   const [editPaymentNotes, setEditPaymentNotes] = useState('');
   const [isSavingPaymentMethod, setIsSavingPaymentMethod] = useState(false);
   const [paymentUpdateError, setPaymentUpdateError] = useState('');
@@ -1357,6 +1358,7 @@ export default function BillingView({
     setEditPaymentMethod(order.payment_method || 'cash');
     setEditSplitCash(order.split_cash_amount ? String(order.split_cash_amount) : '');
     setEditSplitUpi(order.split_upi_amount ? String(order.split_upi_amount) : '');
+    setEditDiscountAmount(order.discount_amount ? String(parseFloat(order.discount_amount) || 0) : '0');
     setEditPaymentNotes(order.notes || '');
     setPaymentUpdateError('');
     setEditAddItemSearch('');
@@ -1390,6 +1392,19 @@ export default function BillingView({
       }
       target.quantity = newQty;
       target.total_price = parseFloat((target.unit_selling_price * newQty).toFixed(2));
+      copy[idx] = target;
+      return copy;
+    });
+  };
+
+  const handleEditItemPriceChange = (idx, newPrice) => {
+    const parsedPrice = Math.max(0, parseFloat(newPrice) || 0);
+    setEditOrderItems((prev) => {
+      const copy = [...prev];
+      const target = { ...copy[idx] };
+      if (!target) return prev;
+      target.unit_selling_price = parsedPrice;
+      target.total_price = parseFloat((parsedPrice * target.quantity).toFixed(2));
       copy[idx] = target;
       return copy;
     });
@@ -1445,11 +1460,12 @@ export default function BillingView({
     try {
       const newSubtotal = editOrderItems.reduce((sum, it) => sum + (it.unit_selling_price * it.quantity), 0);
       const taxAmt = parseFloat(editingOrderForPayment.tax_amount || 0);
-      const discAmt = parseFloat(editingOrderForPayment.discount_amount || 0);
+      const discAmt = Math.max(0, parseFloat(editDiscountAmount) || 0);
       const computedTotal = Math.max(0, newSubtotal + taxAmt - discAmt);
 
       const patchData = {
         payment_method: editPaymentMethod,
+        discount_amount: discAmt.toFixed(2),
         notes: editPaymentNotes,
         items: editOrderItems.map((it) => ({
           item_id: it.item_id,
@@ -9525,8 +9541,8 @@ export default function BillingView({
       {editingOrderForPayment && (() => {
         const editNewSubtotal = editOrderItems.reduce((sum, it) => sum + (it.unit_selling_price * it.quantity), 0);
         const editTaxAmount = parseFloat(editingOrderForPayment.tax_amount || 0);
-        const editDiscountAmount = parseFloat(editingOrderForPayment.discount_amount || 0);
-        const editNewTotal = Math.max(0, editNewSubtotal + editTaxAmount - editDiscountAmount);
+        const parsedEditDiscount = Math.max(0, parseFloat(editDiscountAmount) || 0);
+        const editNewTotal = Math.max(0, editNewSubtotal + editTaxAmount - parsedEditDiscount);
         const editOriginalTotal = parseFloat(editingOrderForPayment.total_amount || 0);
         const editDiff = editNewTotal - editOriginalTotal;
         const totalUnitsInBill = editOrderItems.reduce((sum, it) => sum + it.quantity, 0);
@@ -9736,8 +9752,29 @@ export default function BillingView({
                                 </span>
                               )}
                             </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                              ₹{item.unit_selling_price.toFixed(2)}
+                            <td style={{ padding: '8px 10px', textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 700 }}>₹</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.unit_selling_price}
+                                  onChange={(e) => handleEditItemPriceChange(idx, e.target.value)}
+                                  className="form-input"
+                                  title="Edit item rate / price"
+                                  style={{
+                                    width: '74px',
+                                    textAlign: 'right',
+                                    fontSize: '0.78rem',
+                                    padding: '3px 6px',
+                                    fontWeight: 700,
+                                    fontFamily: 'monospace',
+                                    height: '28px',
+                                    borderRadius: 'var(--radius-xs, 4px)',
+                                  }}
+                                />
+                              </div>
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'var(--bg-surface)', padding: '2px 6px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
@@ -9896,6 +9933,61 @@ export default function BillingView({
                         ))}
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Financial Summary & Bill Discount Control */}
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.80rem' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Items Subtotal: </span>
+                      <strong style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>₹{editNewSubtotal.toFixed(2)}</strong>
+                    </div>
+                    {editTaxAmount > 0 && (
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Tax: </span>
+                        <strong style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>+₹{editTaxAmount.toFixed(2)}</strong>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Bill Discount (₹):
+                    </label>
+                    <div style={{ position: 'relative', width: '110px' }}>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editDiscountAmount}
+                        onChange={(e) => setEditDiscountAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="form-input"
+                        style={{
+                          width: '100%',
+                          height: '32px',
+                          padding: '4px 8px',
+                          fontSize: '0.82rem',
+                          fontWeight: 800,
+                          fontFamily: 'monospace',
+                          color: '#F59E0B',
+                          borderColor: 'rgba(245, 158, 11, 0.4)',
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 

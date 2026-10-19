@@ -1807,6 +1807,19 @@ class SaleOrderSerializer(serializers.ModelSerializer):
                 # D. Update Financials
                 old_total = instance.total_amount
                 instance.subtotal = new_subtotal
+
+                # Allow updating discount_amount if supplied in request
+                if 'discount_amount' in validated_data:
+                    instance.discount_amount = Decimal(str(validated_data['discount_amount'])).quantize(Decimal('0.01'))
+                elif 'discount_amount' in self.initial_data:
+                    instance.discount_amount = Decimal(str(self.initial_data['discount_amount'])).quantize(Decimal('0.01'))
+
+                # Allow updating tax_amount if supplied in request
+                if 'tax_amount' in validated_data:
+                    instance.tax_amount = Decimal(str(validated_data['tax_amount'])).quantize(Decimal('0.01'))
+                elif 'tax_amount' in self.initial_data:
+                    instance.tax_amount = Decimal(str(self.initial_data['tax_amount'])).quantize(Decimal('0.01'))
+
                 new_total = max(Decimal('0.00'), new_subtotal + (instance.tax_amount or Decimal('0.00')) - (instance.discount_amount or Decimal('0.00'))).quantize(Decimal('0.01'))
                 instance.total_amount = new_total
                 total_diff = new_total - old_total
@@ -1876,8 +1889,8 @@ class SaleOrderSerializer(serializers.ModelSerializer):
                 instance.split_cash_amount = Decimal('0.00')
                 instance.split_upi_amount = Decimal('0.00')
                 if new_payment_method == SaleOrder.PAYMENT_CASH:
-                    raw_paid = validated_data.get('amount_paid', instance.amount_paid)
-                    if raw_paid and Decimal(str(raw_paid)) >= instance.total_amount:
+                    raw_paid = validated_data.get('amount_paid', self.initial_data.get('amount_paid'))
+                    if raw_paid is not None and Decimal(str(raw_paid)) >= instance.total_amount:
                         instance.amount_paid = Decimal(str(raw_paid)).quantize(Decimal('0.01'))
                         instance.change_returned = (instance.amount_paid - instance.total_amount).quantize(Decimal('0.01'))
                     else:

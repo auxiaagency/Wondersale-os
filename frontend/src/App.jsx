@@ -290,6 +290,7 @@ export default function App() {
   // Filters for inventory
   const [inventorySubTab, setInventorySubTab] = useState('management'); // 'management', 'add_item', 'add_category', 'suppliers', 'sections', 'audit_log', 'product_detail'
   const [selectedProductDetailItem, setSelectedProductDetailItem] = useState(null);
+  const [productDetailReturnView, setProductDetailReturnView] = useState('inventory');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStore, setSelectedStore] = useState(() => {
     return localStorage.getItem('wondersale_logged_in_store') || '';
@@ -748,13 +749,15 @@ export default function App() {
                 fetchItem(itemId)
                   .then((fullItem) => {
                     setSelectedProductDetailItem(fullItem);
-                    setActiveView('inventory');
+                    setProductDetailReturnView('dashboard');
                     setInventorySubTab('product_detail');
+                    handleNavigate('inventory');
                   })
                   .catch(() => {
                     setSelectedProductDetailItem(item);
-                    setActiveView('inventory');
+                    setProductDetailReturnView('dashboard');
                     setInventorySubTab('product_detail');
+                    handleNavigate('inventory');
                   });
               }}
             />
@@ -1446,8 +1449,15 @@ export default function App() {
               stores={stores}
               suppliers={suppliers}
               onBack={() => {
-                setInventorySubTab('management');
-                setSelectedProductDetailItem(null);
+                if (productDetailReturnView === 'dashboard') {
+                  setSelectedProductDetailItem(null);
+                  setInventorySubTab('management');
+                  setProductDetailReturnView('inventory');
+                  handleNavigate('dashboard');
+                } else {
+                  setInventorySubTab('management');
+                  setSelectedProductDetailItem(null);
+                }
               }}
               onUpdateItem={(updatedItem) => {
                 handleItemUpdated(updatedItem);

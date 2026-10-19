@@ -278,3 +278,73 @@ class RegisterShiftManagementTests(TestCase):
         order_invoices = [o['invoice_number'] for o in order_list]
         self.assertIn('INV-CASH-A', order_invoices)
         self.assertNotIn('INV-CASH-B', order_invoices)
+
+    def test_edit_sale_order_item_rate_and_discount_in_open_shift(self):
+        """Verify modifying line item selling price and bill discount in open shift preserves audit integrity."""
+        from inventory.models import Item, SaleOrderItem, StockMovement
+
+        # Open shift
+        open_res = self.client.post('/api/inventory/register-shifts/open-shift/', {
+            'store': self.store.id,
+            'opening_cash': '1000.00',
+        }, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+        self.assertEqual(open_res.status_code, status.HTTP_201_CREATED)
+
+        item = Item.objects.create(
+            name='Test Cream',
+            store=self.store,
+            selling_price=Decimal('200.00'),
+            cost_price=Decimal('100.00'),
+            quantity=10
+        )
+
+        # Initial sale: 2 units @ ₹200 = ₹400
+        order = SaleOrder.objects.create(
+            invoice_number='INV-DISC-TEST',
+            store=self.store,
+            cashier=self.cashier,
+            subtotal=Decimal('400.00'),
+            tax_amount=Decimal('0.00'),
+            discount_amount=Decimal('0.00'),
+            total_amount=Decimal('400.00'),
+            amount_paid=Decimal('400.00'),
+            payment_method='cash',
+            status='completed'
+        )
+        SaleOrderItem.objects.create(
+            sale_order=order,
+            item=item,
+            item_name=item.name,
+            quantity=2,
+            unit_selling_price=Decimal('200.00'),
+            total_price=Decimal('400.00')
+        )
+        StockMovement.objects.create(
+            item=item,
+            change=-2,
+            reason=StockMovement.REASON_SALE,
+            note=f"POS Sale #{order.invoice_number}"
+        )
+
+        # Update order: change rate from ₹200 to ₹180, and add ₹30 discount
+        # New expected subtotal = 2 * 180 = 360, total = 360 - 30 = 330
+        patch_res = self.client.patch(f'/api/inventory/sales/{order.id}/', {
+            'payment_method': 'cash',
+            'discount_amount': '30.00',
+            'notes': 'Given price discount on cream',
+            'items': [
+                {
+                    'item_id': item.id,
+                    'quantity': 2,
+                    'unit_selling_price': '180.00',
+                }
+            ]
+        }, format='json', HTTP_X_STAFF_ID=self.cashier.staff_id)
+
+        self.assertEqual(patch_res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertEqual(order.subtotal, Decimal('360.00'))
+        self.assertEqual(order.discount_amount, Decimal('30.00'))
+        self.assertEqual(order.total_amount, Decimal('330.00'))
+        self.assertEqual(order.amount_paid, Decimal('330.00'))
+
