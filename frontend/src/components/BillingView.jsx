@@ -70,6 +70,7 @@ import {
   getSaleOrders,
   updateSaleOrder,
   deleteSaleOrder,
+  updateOrderCustomer,
   lookupSaleOrderForReturn,
 } from '../api';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
@@ -227,6 +228,10 @@ export default function BillingView({
   const [payoutsTimeFilter, setPayoutsTimeFilter] = useState(null);
   const [shiftsHistoryTimeFilter, setShiftsHistoryTimeFilter] = useState(null);
   const [editingOrderForPayment, setEditingOrderForPayment] = useState(null);
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [isCustomerChanged, setIsCustomerChanged] = useState(false);
+  const [customerEditError, setCustomerEditError] = useState('');
   const [orderToDelete, setOrderToDelete] = useState(null);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
   const [editOrderItems, setEditOrderItems] = useState([]);
@@ -1363,6 +1368,11 @@ export default function BillingView({
     setPaymentUpdateError('');
     setEditAddItemSearch('');
     setIsEditAddItemDropdownOpen(false);
+    // Customer edit state — initialized from current order values
+    setEditCustomerPhone(order.customer_phone || '');
+    setEditCustomerName(order.customer_name || '');
+    setIsCustomerChanged(false);
+    setCustomerEditError('');
 
     // Initial items copy
     const mapped = (order.items || []).map((soi) => ({
@@ -1455,6 +1465,7 @@ export default function BillingView({
       return;
     }
     setPaymentUpdateError('');
+    setCustomerEditError('');
     setIsSavingPaymentMethod(true);
 
     try {
@@ -1485,7 +1496,22 @@ export default function BillingView({
         patchData.split_upi_amount = upiVal.toFixed(2);
       }
 
+      // Step 1: Save items / payment method changes
       const updated = await updateSaleOrder(editingOrderForPayment.id, patchData);
+
+      // Step 2: If customer phone/name changed, call the dedicated update-customer endpoint
+      if (isCustomerChanged) {
+        const newPhone = editCustomerPhone.trim().replace(/\D/g, '');
+        if (newPhone.length !== 10) {
+          throw new Error('Customer phone must be exactly 10 digits.');
+        }
+        // This endpoint handles FK swap, ghost cleanup, and stats reversal atomically
+        await updateOrderCustomer(updated.id, {
+          customer_phone: newPhone,
+          customer_name: editCustomerName.trim(),
+        });
+      }
+
       showNotification('success', `Invoice #${editingOrderForPayment.invoice_number} updated! (New Total: ₹${parseFloat(updated.total_amount || computedTotal).toFixed(2)})`);
       setEditingOrderForPayment(null);
       await Promise.all([
@@ -9700,8 +9726,110 @@ export default function BillingView({
                   </div>
                 </div>
 
+                {/* ===== Customer Edit Section ===== */}
+                <div
+                  style={{
+                    borderRadius: 'var(--radius-lg)',
+                    border: `1px solid ${isCustomerChanged ? 'rgba(59, 130, 246, 0.45)' : 'var(--border-subtle)'}`,
+                    background: isCustomerChanged ? 'rgba(59, 130, 246, 0.04)' : 'rgba(255,255,255,0.02)',
+                    padding: '14px 16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    transition: 'border-color 0.2s, background 0.2s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Customer Details
+                    </label>
+                    {isCustomerChanged && (
+                      <span style={{ fontSize: '0.70rem', fontWeight: 700, color: '#3B82F6', background: 'rgba(59,130,246,0.12)', padding: '2px 8px', borderRadius: '20px' }}>
+                        Modified
+                      </span>
+                    )}
+                  </div>
+
+                  {editingOrderForPayment.payment_method === 'vip_card' && (
+                    <div style={{ fontSize: '0.74rem', color: '#F59E0B', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 'var(--radius-sm)', padding: '6px 10px' }}>
+                      ⚠️ VIP card orders cannot have their customer reassigned. Only items and payment notes can be changed.
+                    </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {/* Phone */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                        Mobile Number
+                      </label>
+                      <input
+                        id="edit-order-customer-phone"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={10}
+                        value={editCustomerPhone}
+                        disabled={editingOrderForPayment.payment_method === 'vip_card'}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setEditCustomerPhone(digits);
+                          setIsCustomerChanged(true);
+                          setCustomerEditError('');
+                        }}
+                        placeholder="10-digit mobile no."
+                        className="form-input"
+                        style={{
+                          fontSize: '0.84rem',
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          height: '36px',
+                          letterSpacing: '1px',
+                          opacity: editingOrderForPayment.payment_method === 'vip_card' ? 0.45 : 1,
+                        }}
+                      />
+                    </div>
+
+                    {/* Name */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                        Customer Name <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span>
+                      </label>
+                      <input
+                        id="edit-order-customer-name"
+                        type="text"
+                        value={editCustomerName}
+                        disabled={editingOrderForPayment.payment_method === 'vip_card'}
+                        onChange={(e) => {
+                          setEditCustomerName(e.target.value);
+                          setIsCustomerChanged(true);
+                          setCustomerEditError('');
+                        }}
+                        placeholder="Customer name"
+                        className="form-input"
+                        style={{
+                          fontSize: '0.84rem',
+                          height: '36px',
+                          opacity: editingOrderForPayment.payment_method === 'vip_card' ? 0.45 : 1,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {customerEditError && (
+                    <div style={{ fontSize: '0.74rem', color: '#EF4444', marginTop: '2px' }}>
+                      {customerEditError}
+                    </div>
+                  )}
+
+                  {isCustomerChanged && editCustomerPhone !== editingOrderForPayment.customer_phone && (
+                    <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-sm)', padding: '5px 10px' }}>
+                      ℹ️ Phone change will reassign this order to {editCustomerPhone.length === 10 ? `customer ${editCustomerPhone}` : 'a new customer'}. If the previous customer was auto-created by this order alone, it will be removed.
+                    </div>
+                  )}
+                </div>
+
                 {/* Section: Items in Bill */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       Items in Bill ({editOrderItems.length} Products &bull; {totalUnitsInBill} Units)

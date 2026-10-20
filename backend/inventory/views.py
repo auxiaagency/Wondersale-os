@@ -77,6 +77,7 @@ from .serializers import (
     ProcessReturnSerializer,
     AIDescriptionBatchJobSerializer,
     BrokenItemReportSerializer,
+    OrderCustomerUpdateSerializer,
     generate_next_return_number,
     generate_next_payout_number,
 )
@@ -3086,6 +3087,154 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
                 'created_at': tx.created_at,
             }
         }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['patch'], url_path='update-customer')
+    def update_customer(self, request, pk=None):
+        """
+        Safely re-assigns the Customer on a SaleOrder to a different phone number.
+
+        Logic:
+        - Validates the order is in an open shift (immutability guard).
+        - If phone is unchanged, only updates customer_name on the order and Customer record.
+        - If phone changes:
+            1. Looks up / creates the new Customer record.
+            2. Reverses the order's financial contribution from the old Customer.
+            3. Deletes the old Customer if it was a "ghost" (auto-created by this order alone,
+               no VIP card, no other orders).
+            4. Adds the order's contribution to the new Customer.
+            5. Updates order.customer FK, order.customer_phone, order.customer_name.
+        - VIP card payment orders are blocked (card debit is permanently tied to original customer).
+        All writes are wrapped in a single atomic transaction with row-level locks.
+        """
+        from django.db import transaction as db_transaction
+        from .serializers import SaleOrderSerializer as _SaleOrderSerializer
+        from .models import Customer as _Customer
+
+        order = self.get_object()
+
+        # --- Gate 1: shift immutability ---
+        serializer_check = SaleOrderSerializer(order, context={'request': request})
+        if not serializer_check.get_is_editable(order):
+            return Response(
+                {'error': 'This invoice belongs to a closed register shift and is permanently locked/immutable.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # --- Gate 2: return/exchange orders are always locked ---
+        if (
+            (order.invoice_number and order.invoice_number.startswith('RET-'))
+            or order.return_reference
+            or order.status == 'refunded'
+        ):
+            return Response(
+                {'error': 'Return / refund invoices cannot have their customer changed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # --- Gate 3: VIP card orders cannot be re-assigned ---
+        if order.payment_method == SaleOrder.PAYMENT_VIP_CARD:
+            return Response(
+                {
+                    'error': (
+                        'VIP card orders cannot have their customer changed — '
+                        'the card debit is permanently tied to the original customer. '
+                        'Delete and recreate the order if the wrong customer was selected.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # --- Validate incoming payload ---
+        input_serializer = OrderCustomerUpdateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        new_phone = input_serializer.validated_data['customer_phone']   # already cleaned 10-digit str
+        new_name = input_serializer.validated_data.get('customer_name', '').strip()
+
+        old_phone = order.customer_phone
+
+        with db_transaction.atomic():
+            # ----------------------------------------------------------------
+            # CASE A: Phone unchanged — name-only update
+            # ----------------------------------------------------------------
+            if new_phone == old_phone:
+                if new_name:
+                    order.customer_name = new_name
+                    order.save(update_fields=['customer_name', 'updated_at'])
+
+                    # Mirror the name onto the linked Customer record if it exists
+                    if order.customer_id:
+                        _Customer.objects.filter(pk=order.customer_id).update(name=new_name)
+
+                return Response(
+                    SaleOrderSerializer(order, context={'request': request}).data,
+                    status=status.HTTP_200_OK
+                )
+
+            # ----------------------------------------------------------------
+            # CASE B: Phone changed — full customer re-assignment
+            # ----------------------------------------------------------------
+
+            # Lock old customer with select_for_update to prevent concurrent mutation
+            old_customer = None
+            if order.customer_id:
+                old_customer = _Customer.objects.select_for_update().filter(pk=order.customer_id).first()
+
+            # Resolve or create new customer (also locked)
+            new_customer, was_created = _Customer.objects.select_for_update().get_or_create(
+                phone=new_phone,
+                defaults={
+                    'name': new_name,
+                    'store': order.store,
+                }
+            )
+
+            # --- Reverse old customer's stats ---
+            if old_customer is not None:
+                old_customer.total_spent = max(
+                    Decimal('0.00'),
+                    (old_customer.total_spent or Decimal('0.00')) - (order.total_amount or Decimal('0.00'))
+                ).quantize(Decimal('0.01'))
+                old_customer.total_purchases_count = max(
+                    0, (old_customer.total_purchases_count or 1) - 1
+                )
+                old_customer.save(update_fields=['total_spent', 'total_purchases_count', 'updated_at'])
+
+                # Delete ghost customers: auto-created by this order alone, no other orders, no VIP card
+                other_orders_count = SaleOrder.objects.filter(
+                    customer=old_customer
+                ).exclude(pk=order.pk).count()
+                is_ghost = (other_orders_count == 0 and not old_customer.vip_card_uid)
+                if is_ghost:
+                    old_customer.delete()
+
+            # --- Update new customer's stats ---
+            if new_name and not new_customer.name:
+                new_customer.name = new_name
+            elif new_name:
+                # If a name was explicitly supplied, update it
+                new_customer.name = new_name
+
+            new_customer.total_purchases_count = (new_customer.total_purchases_count or 0) + 1
+            new_customer.total_spent = (
+                (new_customer.total_spent or Decimal('0.00')) + (order.total_amount or Decimal('0.00'))
+            ).quantize(Decimal('0.01'))
+            if not new_customer.last_purchase_date:
+                new_customer.last_purchase_date = order.created_at or timezone.now()
+            if not new_customer.store_id:
+                new_customer.store = order.store
+            new_customer.save()
+
+            # --- Patch order fields ---
+            order.customer = new_customer
+            order.customer_phone = new_phone
+            order.customer_name = new_name or new_customer.name
+            order.save(update_fields=['customer', 'customer_phone', 'customer_name', 'updated_at'])
+
+        return Response(
+            SaleOrderSerializer(order, context={'request': request}).data,
+            status=status.HTTP_200_OK
+        )
+
 
     @action(detail=False, methods=['get'], url_path='ledger-summary')
     def ledger_summary(self, request):

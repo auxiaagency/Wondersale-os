@@ -3,7 +3,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from inventory.models import Store, Item, Category, SaleOrder, SaleOrderItem, CounterPayout, DailyRegisterShift
+from inventory.models import Store, Item, Category, SaleOrder, SaleOrderItem, CounterPayout, DailyRegisterShift, Customer
 from staff.models import StaffRole, StaffMember
 
 
@@ -458,3 +458,266 @@ class RegisterShiftManagementTests(TestCase):
             serializer.data['is_editable'],
             "Legacy order without FK should be editable if cashier's shift is open and order is within shift window"
         )
+
+
+class UpdateOrderCustomerTests(TestCase):
+    """
+    Tests for PATCH /api/inventory/sales/{id}/update-customer/
+    Covers: name-only update, phone re-assignment to existing customer,
+    phone re-assignment to new customer (ghost cleanup), ghost NOT deleted when
+    old customer has other orders, VIP card order blocked, closed shift blocked,
+    return order blocked, invalid phone format rejected.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.store = Store.objects.create(name='Test Branch', city='Test City')
+        self.role = StaffRole.objects.create(name='Cashier', cashier_role='cashier')
+        self.cashier = StaffMember.objects.create(
+            staff_id='CUST_TEST_CASHIER',
+            name='Test Cashier',
+            role=self.role,
+            store=self.store,
+        )
+        # Open shift so orders are editable
+        self.shift = DailyRegisterShift.objects.create(
+            shift_number='REG-CUST-001',
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            opening_cash=Decimal('500.00'),
+            status='open',
+        )
+
+    def _make_customer(self, phone, name=''):
+        return Customer.objects.create(
+            phone=phone,
+            name=name,
+            store=self.store,
+            total_purchases_count=1,
+            total_spent=Decimal('500.00'),
+        )
+
+    def _make_order(self, customer, invoice_num='INV-CUST-001', payment_method='cash', status='completed', **kwargs):
+        return SaleOrder.objects.create(
+            invoice_number=invoice_num,
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            customer=customer,
+            customer_phone=customer.phone,
+            customer_name=customer.name,
+            subtotal=Decimal('500.00'),
+            total_amount=Decimal('500.00'),
+            amount_paid=Decimal('500.00'),
+            payment_method=payment_method,
+            status=status,
+            register_shift=self.shift,
+            **kwargs,
+        )
+
+    def _url(self, order_id):
+        return f'/api/inventory/sales/{order_id}/update-customer/'
+
+    # ------------------------------------------------------------------
+    # Test 1: Name-only change (phone unchanged)
+    # ------------------------------------------------------------------
+    def test_name_only_change_updates_order_and_customer(self):
+        cust = self._make_customer('9000000001', name='Old Name')
+        order = self._make_order(cust)
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000001',
+            'customer_name': 'New Name',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        cust.refresh_from_db()
+        self.assertEqual(order.customer_name, 'New Name')
+        self.assertEqual(cust.name, 'New Name')
+        # Stats must be unchanged for name-only update
+        self.assertEqual(cust.total_purchases_count, 1)
+        self.assertEqual(cust.total_spent, Decimal('500.00'))
+
+    # ------------------------------------------------------------------
+    # Test 2: Phone changed to existing customer — stats transferred
+    # ------------------------------------------------------------------
+    def test_phone_change_to_existing_customer_transfers_stats(self):
+        old_cust = self._make_customer('9000000002')
+        # Give old_cust a second unrelated order so it is NOT a ghost and survives the re-assign
+        SaleOrder.objects.create(
+            invoice_number='INV-OTHER-CUST2',
+            store=self.store,
+            cashier=self.cashier,
+            customer=old_cust,
+            customer_phone=old_cust.phone,
+            subtotal=Decimal('100.00'),
+            total_amount=Decimal('100.00'),
+            amount_paid=Decimal('100.00'),
+            payment_method='cash',
+            status='completed',
+            register_shift=self.shift,
+        )
+        old_cust.total_purchases_count = 2
+        old_cust.total_spent = Decimal('600.00')
+        old_cust.save()
+
+        new_cust = Customer.objects.create(
+            phone='9000000003', name='Existing Customer', store=self.store,
+            total_purchases_count=2, total_spent=Decimal('1000.00'),
+        )
+        order = self._make_order(old_cust, invoice_num='INV-CUST-002')
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000003',
+            'customer_name': 'Existing Customer',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        # Order now points to new customer
+        self.assertEqual(order.customer_id, new_cust.id)
+        self.assertEqual(order.customer_phone, '9000000003')
+        # Old customer stats reversed (500 deducted, count decremented by 1)
+        old_cust.refresh_from_db()
+        self.assertEqual(old_cust.total_purchases_count, 1)
+        self.assertEqual(old_cust.total_spent, Decimal('100.00'))
+        # New customer stats incremented
+        new_cust.refresh_from_db()
+        self.assertEqual(new_cust.total_purchases_count, 3)
+        self.assertEqual(new_cust.total_spent, Decimal('1500.00'))
+
+    # ------------------------------------------------------------------
+    # Test 3: Phone changed to new number — new Customer created, old ghost deleted
+    # ------------------------------------------------------------------
+    def test_phone_change_to_new_number_creates_customer_and_deletes_ghost(self):
+        old_cust = self._make_customer('9000000004')
+        old_cust_id = old_cust.id
+        order = self._make_order(old_cust, invoice_num='INV-CUST-003')
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000005',
+            'customer_name': 'Brand New Person',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        # New customer was created and linked
+        new_cust = Customer.objects.filter(phone='9000000005').first()
+        self.assertIsNotNone(new_cust)
+        self.assertEqual(order.customer_id, new_cust.id)
+        self.assertEqual(new_cust.total_purchases_count, 1)
+        self.assertEqual(new_cust.total_spent, Decimal('500.00'))
+        # Old ghost customer must be deleted
+        self.assertFalse(Customer.objects.filter(pk=old_cust_id).exists())
+
+    # ------------------------------------------------------------------
+    # Test 4: Old customer has other orders — NOT deleted after re-assign
+    # ------------------------------------------------------------------
+    def test_old_customer_not_deleted_when_has_other_orders(self):
+        old_cust = self._make_customer('9000000006')
+        # Create a second, unrelated order on the same customer
+        SaleOrder.objects.create(
+            invoice_number='INV-OTHER-001',
+            store=self.store,
+            cashier=self.cashier,
+            customer=old_cust,
+            customer_phone=old_cust.phone,
+            subtotal=Decimal('200.00'),
+            total_amount=Decimal('200.00'),
+            amount_paid=Decimal('200.00'),
+            payment_method='cash',
+            status='completed',
+            register_shift=self.shift,
+        )
+        order = self._make_order(old_cust, invoice_num='INV-CUST-004')
+        old_cust.total_purchases_count = 2
+        old_cust.total_spent = Decimal('700.00')
+        old_cust.save()
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000007',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        # Old customer should still exist
+        self.assertTrue(Customer.objects.filter(phone='9000000006').exists())
+
+    # ------------------------------------------------------------------
+    # Test 5: VIP card order — phone change blocked
+    # ------------------------------------------------------------------
+    def test_vip_card_order_customer_change_blocked(self):
+        cust = self._make_customer('9000000008')
+        order = self._make_order(cust, invoice_num='INV-CUST-005', payment_method='vip_card')
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000009',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('VIP card', res.data['error'])
+
+    # ------------------------------------------------------------------
+    # Test 6: Closed shift order — blocked
+    # ------------------------------------------------------------------
+    def test_closed_shift_order_is_locked(self):
+        # Close the shift
+        self.shift.status = 'closed'
+        self.shift.save(update_fields=['status', 'updated_at'])
+
+        cust = self._make_customer('9000000010')
+        order = self._make_order(cust, invoice_num='INV-CUST-006')
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000011',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('locked', res.data['error'].lower())
+
+    # ------------------------------------------------------------------
+    # Test 7: Return/refund invoice — blocked
+    # ------------------------------------------------------------------
+    def test_return_invoice_customer_change_blocked(self):
+        cust = self._make_customer('9000000012')
+        order = SaleOrder.objects.create(
+            invoice_number='RET-CUST-001',
+            store=self.store,
+            cashier=self.cashier,
+            customer=cust,
+            customer_phone=cust.phone,
+            subtotal=Decimal('500.00'),
+            total_amount=Decimal('500.00'),
+            amount_paid=Decimal('0.00'),
+            payment_method='cash',
+            status='refunded',
+            return_reference='INV-ORIG-001',
+            register_shift=self.shift,
+        )
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '9000000013',
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        # Error can come from immutability gate (return orders have is_editable=False)
+        # or from the explicit return-invoice check — both are correct guards.
+        err_lower = res.data['error'].lower()
+        self.assertTrue(
+            'refund' in err_lower or 'return' in err_lower or 'locked' in err_lower,
+            f"Expected a refund/return/locked error but got: {res.data['error']}"
+        )
+
+    # ------------------------------------------------------------------
+    # Test 8: Invalid phone (9 digits) — validation error
+    # ------------------------------------------------------------------
+    def test_invalid_phone_returns_400(self):
+        cust = self._make_customer('9000000014')
+        order = self._make_order(cust, invoice_num='INV-CUST-007')
+
+        res = self.client.patch(self._url(order.id), {
+            'customer_phone': '900000',  # too short
+        }, format='json')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

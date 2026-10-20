@@ -1625,6 +1625,8 @@ class SaleOrderSerializer(serializers.ModelSerializer):
             'store_gst_number',
             'store_details',
             'customer_display_name',
+            'customer_phone',   # changed via dedicated update-customer endpoint only
+            'customer_name',    # changed via dedicated update-customer endpoint only
             'balance_due',
             'is_fully_paid',
             'is_editable',
@@ -1927,10 +1929,9 @@ class SaleOrderSerializer(serializers.ModelSerializer):
 
             if 'notes' in validated_data:
                 instance.notes = validated_data['notes']
-            if 'customer_name' in validated_data and validated_data['customer_name'] is not None:
-                instance.customer_name = validated_data['customer_name']
-            if 'customer_phone' in validated_data and validated_data['customer_phone']:
-                instance.customer_phone = validated_data['customer_phone']
+            # NOTE: customer_phone and customer_name are intentionally NOT updated here.
+            # They must be changed only via the dedicated PATCH update-customer/ endpoint,
+            # which correctly handles Customer FK re-assignment, stats reversal, and ghost cleanup.
 
             instance.save()
             return instance
@@ -1968,6 +1969,23 @@ class CheckoutItemInputSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, required=True)
     unit_price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
     discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, default=Decimal('0.00'))
+
+
+class OrderCustomerUpdateSerializer(serializers.Serializer):
+    """
+    Validates the payload for the update-customer/ action on SaleOrderViewSet.
+    Only accepts a new phone + optional name — all business logic lives in the view action.
+    """
+    customer_phone = serializers.CharField(max_length=30)
+    customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
+
+    def validate_customer_phone(self, value):
+        clean = value.strip().replace(' ', '').replace('-', '')
+        if not clean.isdigit() or len(clean) != 10:
+            raise serializers.ValidationError(
+                "Customer phone must be exactly 10 digits (numbers only, no spaces or dashes)."
+            )
+        return clean
 
 
 class CheckoutSerializer(serializers.Serializer):

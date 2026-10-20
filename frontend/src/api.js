@@ -1324,6 +1324,36 @@ export async function deleteSaleOrder(id) {
   return data;
 }
 
+/**
+ * Re-assigns the customer on a sale order to a new phone number.
+ * Calls the dedicated PATCH update-customer/ endpoint which handles:
+ * - Customer FK swap with stats reversal on old customer
+ * - Ghost customer cleanup (if old customer had no other orders + no VIP card)
+ * - New customer creation / lookup and stats increment
+ * @param {number} orderId
+ * @param {{ customer_phone: string, customer_name?: string }} data
+ */
+export async function updateOrderCustomer(orderId, data) {
+  const res = await fetch(`${API_BASE}/sales/${orderId}/update-customer/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errMsg =
+      typeof resData === 'string'
+        ? resData
+        : resData.detail ||
+          resData.error ||
+          (resData.customer_phone ? resData.customer_phone.join(', ') : null) ||
+          (resData.non_field_errors ? resData.non_field_errors.join(', ') : null) ||
+          'Failed to update order customer.';
+    throw new Error(errMsg);
+  }
+  return resData;
+}
+
 export async function lookupSaleOrderForReturn(invoiceNumber) {
   const res = await fetch(`${API_BASE}/sales/lookup-for-return/?invoice_number=${encodeURIComponent(invoiceNumber)}`, {
     headers: getAuthHeaders(),
