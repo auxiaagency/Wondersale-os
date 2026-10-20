@@ -1646,17 +1646,40 @@ class SaleOrderSerializer(serializers.ModelSerializer):
         )
 
     def get_is_editable(self, obj):
+        # Returns/exchanges/refunds are permanently locked to preserve audit trail
         if (obj.invoice_number and obj.invoice_number.startswith('RET-')) or obj.return_reference or obj.status == 'refunded':
             return False
+
         from .models import DailyRegisterShift
-        open_shift = DailyRegisterShift.objects.filter(
-            store=obj.store,
-            status=DailyRegisterShift.STATUS_OPEN
-        ).order_by('-opened_at').first()
+        from datetime import timedelta
+
+        # Primary path: order has direct shift FK (new orders after this migration)
+        if obj.register_shift_id:
+            return obj.register_shift.status == DailyRegisterShift.STATUS_OPEN
+
+        # Legacy path: no FK set — infer editability from cashier-scoped open shift
+        # Scope by cashier first (per-cashier shifts), then fall back to store-wide
+        open_shift = None
+        if obj.cashier_id:
+            open_shift = DailyRegisterShift.objects.filter(
+                store=obj.store,
+                cashier=obj.cashier,
+                status=DailyRegisterShift.STATUS_OPEN
+            ).order_by('-opened_at').first()
+
+        if not open_shift:
+            # Fallback: store-wide open shift (e.g. cashier_name match only, or unassigned shift)
+            open_shift = DailyRegisterShift.objects.filter(
+                store=obj.store,
+                status=DailyRegisterShift.STATUS_OPEN
+            ).order_by('-opened_at').first()
+
         if not open_shift:
             return False
-        # Only orders created on or after the current open shift's opened_at are editable
-        return obj.created_at >= open_shift.opened_at
+
+        # 60-second buffer handles clock skew / edge cases at shift boundary
+        editable_from = open_shift.opened_at - timedelta(seconds=60)
+        return obj.created_at >= editable_from
 
     def update(self, instance, validated_data):
         from django.db import transaction
@@ -2403,6 +2426,7 @@ class CheckoutSerializer(serializers.Serializer):
                 change_returned=change_returned,
                 status=order_status,
                 notes=notes,
+                register_shift=open_shift,
             )
 
             # ---------------- 7. Cash Drawer Payout vs Inflow Handling ----------------

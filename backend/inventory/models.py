@@ -1324,6 +1324,16 @@ class SaleOrder(models.Model):
         help_text="Flag indicating whether inventory stock was decremented for this past bill."
     )
 
+    # --- Register Shift linkage ---
+    register_shift = models.ForeignKey(
+        'DailyRegisterShift',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='orders',
+        help_text="Register shift during which this sale was processed. Null for legacy orders created before this field was added."
+    )
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Sale Order'

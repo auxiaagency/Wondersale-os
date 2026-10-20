@@ -348,3 +348,113 @@ class RegisterShiftManagementTests(TestCase):
         self.assertEqual(order.total_amount, Decimal('330.00'))
         self.assertEqual(order.amount_paid, Decimal('330.00'))
 
+    def test_same_shift_bills_are_editable_closed_shift_bills_are_locked(self):
+        """
+        Bills created during the current open shift must be editable (is_editable=True).
+        Bills from a closed shift must be permanently locked (is_editable=False).
+        Return/exchange invoices are always locked regardless of shift status.
+        """
+        from inventory.serializers import SaleOrderSerializer
+
+        # --- Open a shift for this cashier ---
+        shift = DailyRegisterShift.objects.create(
+            shift_number='REG-LOCK-TEST-001',
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            opening_cash=Decimal('1000.00'),
+            status='open',
+        )
+
+        # Bill created during the open shift (stamped with FK)
+        order_in_shift = SaleOrder.objects.create(
+            invoice_number='INV-LOCK-001',
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            customer_phone='9876543210',
+            subtotal=Decimal('600.00'),
+            total_amount=Decimal('600.00'),
+            amount_paid=Decimal('600.00'),
+            payment_method='cash',
+            status='completed',
+            register_shift=shift,
+        )
+
+        serializer = SaleOrderSerializer(order_in_shift)
+        self.assertTrue(
+            serializer.data['is_editable'],
+            "Bill in the same open shift must be editable"
+        )
+
+        # Return/exchange invoices must always be locked
+        return_order = SaleOrder.objects.create(
+            invoice_number='RET-LOCK-001',
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            customer_phone='9876543210',
+            subtotal=Decimal('600.00'),
+            total_amount=Decimal('600.00'),
+            amount_paid=Decimal('0.00'),
+            payment_method='cash',
+            status='refunded',
+            return_reference='INV-LOCK-001',
+            register_shift=shift,
+        )
+        ret_serializer = SaleOrderSerializer(return_order)
+        self.assertFalse(
+            ret_serializer.data['is_editable'],
+            "Return/refund invoice must always be locked"
+        )
+
+        # Close the shift
+        shift.status = 'closed'
+        shift.save(update_fields=['status', 'updated_at'])
+
+        # Refresh the order — shift is now closed, must be locked
+        order_in_shift.refresh_from_db()
+        serializer2 = SaleOrderSerializer(order_in_shift)
+        self.assertFalse(
+            serializer2.data['is_editable'],
+            "Bill from a closed shift must be permanently locked"
+        )
+
+    def test_legacy_order_without_fk_falls_back_to_cashier_scoped_shift(self):
+        """
+        Legacy orders (register_shift=None) must still be editable when
+        the cashier has a current open shift that covers the order's created_at.
+        """
+        from inventory.serializers import SaleOrderSerializer
+        from django.utils import timezone as dj_timezone
+        from datetime import timedelta
+
+        shift = DailyRegisterShift.objects.create(
+            shift_number='REG-LEGACY-001',
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            opening_cash=Decimal('500.00'),
+            status='open',
+        )
+
+        # Legacy order: no register_shift FK, created_at is after shift opened
+        legacy_order = SaleOrder.objects.create(
+            invoice_number='INV-LEGACY-001',
+            store=self.store,
+            cashier=self.cashier,
+            cashier_name=self.cashier.name,
+            customer_phone='9876543211',
+            subtotal=Decimal('300.00'),
+            total_amount=Decimal('300.00'),
+            amount_paid=Decimal('300.00'),
+            payment_method='cash',
+            status='completed',
+            register_shift=None,  # simulating legacy order without FK
+        )
+
+        serializer = SaleOrderSerializer(legacy_order)
+        self.assertTrue(
+            serializer.data['is_editable'],
+            "Legacy order without FK should be editable if cashier's shift is open and order is within shift window"
+        )
