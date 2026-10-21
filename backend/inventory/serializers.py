@@ -1027,6 +1027,11 @@ class CounterPayoutSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
+    def validate_amount(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Payout amount must be greater than zero.")
+        return value
+
     def create(self, validated_data):
         if not validated_data.get('payout_number'):
             validated_data['payout_number'] = generate_next_payout_number(validated_data.get('store'))

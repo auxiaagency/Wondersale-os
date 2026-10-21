@@ -526,6 +526,48 @@ class InventoryAPITests(TestCase):
         self.assertEqual(res.data['potential_revenue'], 12000.00)
         self.assertEqual(res.data['potential_profit'], 6000.00)
 
+    def test_counter_payout_edit_in_place(self):
+        """Test editing a CounterPayout modifies the record in-place without creating a new entry."""
+        from inventory.models import CounterPayout
+
+        payout = CounterPayout.objects.create(
+            payout_number="PAY-20261021-0001",
+            store=self.store,
+            amount=Decimal("450.00"),
+            paid_to="Vendor A",
+            category="stock_purchase",
+            payment_method="cash",
+            reason="Purchased packing tape",
+            receipt_number="BILL-101",
+        )
+        initial_id = payout.id
+        initial_count = CounterPayout.objects.count()
+
+        url = reverse('counter-payout-detail', kwargs={'pk': payout.id})
+        update_data = {
+            "paid_to": "Vendor B",
+            "amount": "520.00",
+            "category": "freight_delivery",
+            "reason": "Corrected: Freight transport",
+            "receipt_number": "LR-999"
+        }
+
+        res = self.client.patch(url, update_data, format='json')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        # Verify no new entry was created
+        self.assertEqual(CounterPayout.objects.count(), initial_count)
+
+        # Verify in-place update of same ID and payout_number
+        payout.refresh_from_db()
+        self.assertEqual(payout.id, initial_id)
+        self.assertEqual(payout.payout_number, "PAY-20261021-0001")
+        self.assertEqual(payout.paid_to, "Vendor B")
+        self.assertEqual(payout.amount, Decimal("520.00"))
+        self.assertEqual(payout.category, "freight_delivery")
+        self.assertEqual(payout.reason, "Corrected: Freight transport")
+        self.assertEqual(payout.receipt_number, "LR-999")
+
 
 
 

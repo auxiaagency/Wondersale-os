@@ -32,8 +32,10 @@ import {
   Loader2,
   Calendar,
   Filter,
+  Edit2,
+  Save,
 } from 'lucide-react';
-import { getCounterPayouts, getCounterPayoutsPage, getCounterPayoutsSummary, deleteCounterPayout } from '../api';
+import { getCounterPayouts, getCounterPayoutsPage, getCounterPayoutsSummary, updateCounterPayout, deleteCounterPayout } from '../api';
 import TimelineRangeSelector from './TimelineRangeSelector';
 
 export const COUNTER_PAYOUT_CATEGORIES = [
@@ -92,6 +94,18 @@ export default function CounterPayoutsLedgerView({
 
   // Modal States
   const [selectedPayoutForSlip, setSelectedPayoutForSlip] = useState(null);
+  const [editingPayout, setEditingPayout] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    paid_to: '',
+    amount: '',
+    payment_method: 'cash',
+    category: 'other',
+    reason: '',
+    receipt_number: '',
+    paid_at: '',
+  });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState(null);
   const [copiedVoucher, setCopiedVoucher] = useState(null);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
@@ -251,6 +265,87 @@ export default function CounterPayoutsLedgerView({
   useEffect(() => {
     loadMetrics();
   }, [loadMetrics]);
+
+  // Edit Payout In-Place Handlers
+  const handleOpenEdit = useCallback((payout) => {
+    setEditError(null);
+    setEditingPayout(payout);
+
+    // Format paid_at for datetime-local input (YYYY-MM-DDTHH:mm)
+    let formattedPaidAt = '';
+    if (payout.paid_at) {
+      const dt = new Date(payout.paid_at);
+      if (!isNaN(dt.getTime())) {
+        const year = dt.getFullYear();
+        const month = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        const hours = String(dt.getHours()).padStart(2, '0');
+        const minutes = String(dt.getMinutes()).padStart(2, '0');
+        formattedPaidAt = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
+    }
+
+    setEditFormData({
+      paid_to: payout.paid_to || '',
+      amount: payout.amount !== undefined ? String(payout.amount) : '',
+      payment_method: payout.payment_method || 'cash',
+      category: payout.category || 'other',
+      reason: payout.reason || '',
+      receipt_number: payout.receipt_number || '',
+      paid_at: formattedPaidAt,
+    });
+  }, []);
+
+  const handleSaveEdit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!editingPayout) return;
+
+    const parsedAmount = parseFloat(editFormData.amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setEditError('Please enter a valid payout amount greater than zero.');
+      return;
+    }
+    if (!editFormData.paid_to.trim()) {
+      setEditError('Payee name is required.');
+      return;
+    }
+
+    setEditSubmitting(true);
+    setEditError(null);
+
+    try {
+      const payload = {
+        paid_to: editFormData.paid_to.trim(),
+        amount: parsedAmount.toFixed(2),
+        payment_method: editFormData.payment_method,
+        category: editFormData.category,
+        reason: editFormData.reason.trim(),
+        receipt_number: editFormData.receipt_number.trim(),
+      };
+
+      if (editFormData.paid_at) {
+        payload.paid_at = new Date(editFormData.paid_at).toISOString();
+      }
+
+      const updatedRecord = await updateCounterPayout(editingPayout.id, payload);
+
+      // Update in-place in local payouts list without disrupting pagination or order
+      setPayouts((prevList) =>
+        prevList.map((item) => (item.id === editingPayout.id ? { ...item, ...updatedRecord } : item))
+      );
+
+      // Refresh KPI metrics to reflect updated amounts or categories
+      loadMetrics();
+
+      // Close modal
+      setEditingPayout(null);
+    } catch (err) {
+      console.error('Failed to update counter payout:', err);
+      setEditError(err?.message || 'Failed to save changes to payout entry');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   // Total pages derived from backend count
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -840,7 +935,7 @@ export default function CounterPayoutsLedgerView({
                 <th style={{ padding: '12px 16px' }}>Ref / Challan</th>
                 <th style={{ padding: '12px 16px' }}>Mode</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>Amount</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Voucher Slip</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1090,25 +1185,48 @@ export default function CounterPayoutsLedgerView({
                         {currencySymbol} {parseFloat(p.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
 
-                      {/* Actions: Print Slip */}
+                      {/* Actions: Edit & Print Slip */}
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPayoutForSlip(p)}
-                          className="btn btn-secondary"
-                          style={{
-                            padding: '5px 9px',
-                            fontSize: '0.74rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            cursor: 'pointer',
-                          }}
-                          title="View & Print 80mm Payout Voucher Slip"
-                        >
-                          <Printer size={13} />
-                          <span>Slip</span>
-                        </button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(p)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '5px 9px',
+                              fontSize: '0.74rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer',
+                              backgroundColor: 'var(--bg-surface-hover, rgba(255,255,255,0.06))',
+                              border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
+                              color: 'var(--text-primary)',
+                            }}
+                            title="Edit this counter payout voucher"
+                          >
+                            <Edit2 size={12} style={{ color: '#3B82F6' }} />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPayoutForSlip(p)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: '5px 9px',
+                              fontSize: '0.74rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              cursor: 'pointer',
+                            }}
+                            title="View & Print 80mm Payout Voucher Slip"
+                          >
+                            <Printer size={12} />
+                            <span>Slip</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1421,6 +1539,483 @@ export default function CounterPayoutsLedgerView({
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT COUNTER PAYOUT MODAL */}
+      {editingPayout && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !editSubmitting) {
+              setEditingPayout(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--card-bg, #111827)',
+              border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '560px',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: 'var(--bg-surface-hover, rgba(255, 255, 255, 0.03))',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#3B82F6',
+                  }}
+                >
+                  <Edit2 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.02rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Edit Counter Payout
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontWeight: 700,
+                        fontSize: '0.78rem',
+                        color: '#EF4444',
+                      }}
+                    >
+                      {editingPayout.payout_number}
+                    </span>
+                    {editingPayout.store_name && (
+                      <span
+                        style={{
+                          fontSize: '0.72rem',
+                          color: '#60A5FA',
+                          backgroundColor: 'rgba(59, 130, 246, 0.12)',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        {editingPayout.store_name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => !editSubmitting && setEditingPayout(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted, #94A3B8)',
+                  cursor: editSubmitting ? 'not-allowed' : 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form Body */}
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <div
+                style={{
+                  padding: '20px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                }}
+              >
+                {/* Notice if payout belongs to shift */}
+                {editingPayout.register_shift_number && (
+                  <div
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                      border: '1px solid rgba(16, 185, 129, 0.2)',
+                      fontSize: '0.78rem',
+                      color: 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <Clock size={15} style={{ color: '#10B981', flexShrink: 0 }} />
+                    <span>
+                      Tagged to <strong>{editingPayout.register_shift_number}</strong>. Updating this entry will edit the record in place.
+                    </span>
+                  </div>
+                )}
+
+                {editError && (
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      color: '#EF4444',
+                      fontSize: '0.80rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                    <span>{editError}</span>
+                  </div>
+                )}
+
+                {/* Amount and Payee in 2 columns */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  {/* Amount Field */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Amount ({currencySymbol}) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      value={editFormData.amount}
+                      onChange={(e) => setEditFormData({ ...editFormData, amount: e.target.value })}
+                      placeholder="0.00"
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-input, #0B0E17)',
+                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                        color: '#EF4444',
+                        fontWeight: 700,
+                        fontSize: '0.96rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Payee Name */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Paid To (Receiver) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.paid_to}
+                      onChange={(e) => setEditFormData({ ...editFormData, paid_to: e.target.value })}
+                      placeholder="e.g. Ramesh, Driver, Supplier"
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-input, #0B0E17)',
+                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.86rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Category & Payment Method */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  {/* Category */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Expense Category *
+                    </label>
+                    <select
+                      value={editFormData.category}
+                      onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-input, #0B0E17)',
+                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.82rem',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      {COUNTER_PAYOUT_CATEGORIES.filter((c) => c.id !== 'all').map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Payment Mode *
+                    </label>
+                    <select
+                      value={editFormData.payment_method}
+                      onChange={(e) => setEditFormData({ ...editFormData, payment_method: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-input, #0B0E17)',
+                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.82rem',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      {PAYMENT_METHODS.filter((m) => m.id !== 'all').map((pm) => (
+                        <option key={pm.id} value={pm.id}>
+                          {pm.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Receipt / Voucher Number & Payment Date */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  {/* Bill / LR Number */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Receipt / Bill / LR #
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.receipt_number}
+                      onChange={(e) => setEditFormData({ ...editFormData, receipt_number: e.target.value })}
+                      placeholder="e.g. INV-1049, LR-882"
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-input, #0B0E17)',
+                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.84rem',
+                        fontFamily: 'monospace',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Payment Datetime */}
+                  <div>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      Date &amp; Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={editFormData.paid_at}
+                      onChange={(e) => setEditFormData({ ...editFormData, paid_at: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--bg-input, #0B0E17)',
+                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.82rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Reason / Notes */}
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '0.76rem',
+                      fontWeight: 600,
+                      color: 'var(--text-secondary)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Reason / Particulars
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editFormData.reason}
+                    onChange={(e) => setEditFormData({ ...editFormData, reason: e.target.value })}
+                    placeholder="Enter detailed description of why this payout was issued..."
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--bg-input, #0B0E17)',
+                      border: '1px solid var(--border-color, rgba(255, 255, 255, 0.14))',
+                      color: 'var(--text-primary)',
+                      fontSize: '0.84rem',
+                      outline: 'none',
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div
+                style={{
+                  padding: '14px 20px',
+                  borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '10px',
+                  backgroundColor: 'var(--bg-surface-hover, rgba(255, 255, 255, 0.03))',
+                }}
+              >
+                <button
+                  type="button"
+                  disabled={editSubmitting}
+                  onClick={() => setEditingPayout(null)}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '0.82rem',
+                    cursor: editSubmitting ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="btn btn-primary"
+                  style={{
+                    padding: '8px 20px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+                    borderColor: '#2563EB',
+                    color: '#FFFFFF',
+                    cursor: editSubmitting ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {editSubmitting ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={14} />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

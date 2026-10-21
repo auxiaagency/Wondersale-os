@@ -1129,6 +1129,28 @@ export async function createCounterPayout(data) {
   return resData;
 }
 
+export async function updateCounterPayout(id, data) {
+  const res = await fetch(`${API_BASE}/counter-payouts/${id}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  const resData = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      resData.detail ||
+      resData.amount?.[0] ||
+      resData.paid_to?.[0] ||
+      (typeof resData === 'object'
+        ? Object.entries(resData)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join('; ')
+        : 'Failed to update counter payout');
+    throw new Error(msg);
+  }
+  return resData;
+}
+
 export async function deleteCounterPayout(id) {
   const res = await fetch(`${API_BASE}/counter-payouts/${id}/`, {
     method: 'DELETE',
