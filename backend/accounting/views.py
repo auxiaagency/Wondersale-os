@@ -293,3 +293,283 @@ class SectionMonthlyGoalViewSet(viewsets.ModelViewSet):
             return Response({'detail': f'This goal period is locked and cannot be updated.'}, status=status.HTTP_400_BAD_REQUEST)
         return super().update(request, *args, **kwargs)
 
+
+class OwnerExpenseRecordViewSet(viewsets.ModelViewSet):
+    """
+    Centralized Expense, Purchase & Delivery Tracking ViewSet.
+    Accessible to any authenticated staff who has the 'accounting' module permission.
+    Supports:
+      - Creating expenses/orders with PDF/image bill attachments
+      - In-place editing of expenses
+      - Quick payment settlement (full or partial)
+      - Delivery / arrival confirmation ('delivered', 'in_transit', etc.)
+      - Summary KPI counts & amounts
+    """
+    from .models import OwnerExpenseRecord
+    from .serializers import OwnerExpenseRecordSerializer
+    queryset = OwnerExpenseRecord.objects.select_related('store', 'recorded_by', 'received_by', 'last_updated_by').all()
+    serializer_class = OwnerExpenseRecordSerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        staff = get_current_staff(request)
+        if not staff:
+            self.permission_denied(request, message="Authentication required.")
+        if staff.is_owner:
+            return
+        allowed = (staff.role.allowed_modules or []) if staff.role else []
+        if 'accounting' not in allowed:
+            self.permission_denied(request, message="Permission denied. Requires Accounts module access.")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+
+        # Optional Store filtering (if multi-branch user specifies)
+        store_param = self.request.query_params.get('store') or self.request.query_params.get('store_id')
+        store_list = self.request.query_params.getlist('store') or self.request.query_params.getlist('stores')
+        target_ids = parse_store_filter_ids(store_param, store_list)
+        if target_ids is not None:
+            qs = qs.filter(Q(store_id__in=target_ids) | Q(store__isnull=True))
+
+        # Status filter ('unpaid', 'partial', 'paid')
+        status_param = self.request.query_params.get('status')
+        if status_param and status_param != 'all':
+            qs = qs.filter(status=status_param)
+
+        # Delivery status filter ('pending', 'in_transit', 'delivered', 'not_applicable')
+        delivery_status_param = self.request.query_params.get('delivery_status')
+        if delivery_status_param and delivery_status_param != 'all':
+            qs = qs.filter(delivery_status=delivery_status_param)
+
+        # Category filter
+        category_param = self.request.query_params.get('category')
+        if category_param and category_param != 'all':
+            qs = qs.filter(category=category_param)
+
+        # Overdue filter
+        overdue_param = self.request.query_params.get('overdue')
+        if overdue_param in ['true', '1', True]:
+            qs = qs.filter(due_date__lt=timezone.now().date()).exclude(status='paid')
+
+        # Date range filtering
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            sd = parse_date(str(start_date)[:10])
+            if sd:
+                qs = qs.filter(expense_date__gte=sd)
+        if end_date:
+            ed = parse_date(str(end_date)[:10])
+            if ed:
+                qs = qs.filter(expense_date__lte=ed)
+
+        # Text search (title, vendor_name, record_number, payment_reference)
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search) |
+                Q(vendor_name__icontains=search) |
+                Q(record_number__icontains=search) |
+                Q(payment_reference__icontains=search) |
+                Q(delivery_notes__icontains=search)
+            )
+
+        return qs
+
+    def perform_create(self, serializer):
+        staff = get_current_staff(self.request)
+        instance = serializer.save(
+            recorded_by=staff,
+            recorded_by_name=staff.name if staff else '',
+            last_updated_by=staff,
+            last_updated_by_name=staff.name if staff else ''
+        )
+        self._handle_attachments(instance)
+
+    def perform_update(self, serializer):
+        staff = get_current_staff(self.request)
+        instance = serializer.save(
+            last_updated_by=staff,
+            last_updated_by_name=staff.name if staff else ''
+        )
+        self._handle_attachments(instance)
+
+    def _handle_attachments(self, instance):
+        from .models import ExpenseAttachment
+        uploaded_files = self.request.FILES.getlist('attachments') or self.request.FILES.getlist('attachments[]')
+        for f in uploaded_files:
+            file_name = f.name
+            file_type = getattr(f, 'content_type', '')
+            file_size = getattr(f, 'size', 0)
+            ExpenseAttachment.objects.create(
+                expense_record=instance,
+                file=f,
+                file_name=file_name,
+                file_type=file_type,
+                file_size=file_size,
+            )
+
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """
+        Returns top aggregate statistics for the header KPI cards.
+        """
+        qs = self.get_queryset()
+        from .models import OwnerExpenseRecord
+
+        now = timezone.now()
+        current_month = now.month
+        current_year = now.year
+
+        # Aggregates across the filtered queryset
+        totals = qs.aggregate(
+            total_expense=Sum('total_amount'),
+            total_paid=Sum('paid_amount'),
+            total_records=Count('id'),
+        )
+        total_exp = totals['total_expense'] or Decimal('0.00')
+        total_pd = totals['total_paid'] or Decimal('0.00')
+        total_outstanding = max(Decimal('0.00'), total_exp - total_pd)
+
+        # Unpaid count (unpaid or partial)
+        unpaid_count = qs.filter(status__in=[OwnerExpenseRecord.STATUS_UNPAID, OwnerExpenseRecord.STATUS_PARTIAL]).count()
+        paid_count = qs.filter(status=OwnerExpenseRecord.STATUS_PAID).count()
+
+        # Overdue count
+        overdue_count = qs.filter(
+            due_date__lt=now.date()
+        ).filter(
+            status__in=[OwnerExpenseRecord.STATUS_UNPAID, OwnerExpenseRecord.STATUS_PARTIAL]
+        ).count()
+
+        # Shipments pending arrival count
+        pending_delivery_count = qs.filter(
+            delivery_status__in=[OwnerExpenseRecord.DELIVERY_PENDING, OwnerExpenseRecord.DELIVERY_SHIPPED]
+        ).count()
+
+        # Paid in current month
+        paid_this_month = qs.filter(
+            payment_date__year=current_year,
+            payment_date__month=current_month
+        ).aggregate(sum=Sum('paid_amount'))['sum'] or Decimal('0.00')
+
+        return Response({
+            'total_expense': total_exp,
+            'total_paid': total_pd,
+            'total_outstanding': total_outstanding,
+            'unpaid_count': unpaid_count,
+            'paid_count': paid_count,
+            'overdue_count': overdue_count,
+            'pending_delivery_count': pending_delivery_count,
+            'paid_this_month': paid_this_month,
+            'total_records': totals['total_records'] or 0,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='mark-paid')
+    def mark_paid(self, request, pk=None):
+        """
+        Settle or add payment for an expense entry in-place.
+        Payload:
+          paid_amount (Decimal)
+          payment_method (str)
+          payment_account (str)
+          payment_date (date)
+          payment_reference (str)
+          payment_notes (str)
+        """
+        instance = self.get_object()
+        staff = get_current_staff(request)
+
+        add_amount = request.data.get('amount') or request.data.get('paid_amount')
+        is_full = request.data.get('full_payment', False)
+
+        if is_full:
+            instance.paid_amount = instance.total_amount
+        elif add_amount is not None:
+            try:
+                amt = Decimal(str(add_amount))
+                # Check if payload means 'total new paid amount' or 'increment'
+                is_additive = request.data.get('is_additive', False)
+                if is_additive:
+                    instance.paid_amount = min(instance.total_amount, instance.paid_amount + amt)
+                else:
+                    instance.paid_amount = min(instance.total_amount, amt)
+            except Exception:
+                return Response({'detail': 'Invalid payment amount specified.'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            instance.paid_amount = instance.total_amount
+
+        if 'payment_method' in request.data:
+            instance.payment_method = request.data.get('payment_method')
+        if 'payment_account' in request.data:
+            instance.payment_account = request.data.get('payment_account', '')
+        if 'payment_reference' in request.data:
+            instance.payment_reference = request.data.get('payment_reference', '')
+        if 'payment_notes' in request.data:
+            instance.payment_notes = request.data.get('payment_notes', '')
+
+        p_date = request.data.get('payment_date')
+        if p_date:
+            pd = parse_date(str(p_date)[:10])
+            if pd:
+                instance.payment_date = pd
+        elif not instance.payment_date:
+            instance.payment_date = timezone.now().date()
+
+        instance.last_updated_by = staff
+        instance.last_updated_by_name = staff.name if staff else ''
+        instance.save()
+
+        from .serializers import OwnerExpenseRecordSerializer
+        return Response(OwnerExpenseRecordSerializer(instance, context={'request': request}).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='update-delivery')
+    def update_delivery(self, request, pk=None):
+        """
+        Update shipment / arrival status (e.g. Employee marks delivered when goods arrive).
+        Payload:
+          delivery_status ('pending', 'in_transit', 'delivered', 'not_applicable')
+          delivery_notes (str)
+        """
+        instance = self.get_object()
+        staff = get_current_staff(request)
+
+        new_status = request.data.get('delivery_status')
+        if new_status:
+            instance.delivery_status = new_status
+            if new_status == 'delivered':
+                instance.received_at = timezone.now()
+                instance.received_by = staff
+                instance.received_by_name = staff.name if staff else ''
+            elif new_status in ['pending', 'in_transit']:
+                instance.received_at = None
+                instance.received_by = None
+                instance.received_by_name = ''
+
+        if 'delivery_notes' in request.data:
+            instance.delivery_notes = request.data.get('delivery_notes', '')
+
+        instance.last_updated_by = staff
+        instance.last_updated_by_name = staff.name if staff else ''
+        instance.save()
+
+        from .serializers import OwnerExpenseRecordSerializer
+        return Response(OwnerExpenseRecordSerializer(instance, context={'request': request}).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['delete'], url_path='attachments/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        """
+        Delete a single attachment from an expense record.
+        """
+        instance = self.get_object()
+        from .models import ExpenseAttachment
+        att = ExpenseAttachment.objects.filter(expense_record=instance, id=attachment_id).first()
+        if not att:
+            return Response({'detail': 'Attachment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        att.delete()
+        from .serializers import OwnerExpenseRecordSerializer
+        return Response(OwnerExpenseRecordSerializer(instance, context={'request': request}).data, status=status.HTTP_200_OK)
+
+
+

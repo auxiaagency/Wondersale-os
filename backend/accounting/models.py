@@ -253,3 +253,314 @@ class SectionMonthlyGoal(models.Model):
             return True
         return False
 
+
+class OwnerExpenseRecord(models.Model):
+    """
+    Centralized Expense, Purchase & Shipment Tracking Ledger.
+    Accessible to authorized staff (e.g. Accounts access).
+    Completely isolated from store accounting P&L/operating balances.
+    Tracks:
+      - Expense / Stock Order / Bill details
+      - Payment status (Unpaid, Partial, Paid)
+      - Delivery / Shipment status (Pending, Shipped, Delivered, Not Applicable)
+      - Bill attachment (Image / PDF)
+    """
+    STATUS_UNPAID = 'unpaid'
+    STATUS_PARTIAL = 'partial'
+    STATUS_PAID = 'paid'
+    STATUS_CHOICES = [
+        (STATUS_UNPAID, 'Unpaid / Outstanding'),
+        (STATUS_PARTIAL, 'Partially Paid'),
+        (STATUS_PAID, 'Fully Paid'),
+    ]
+
+    DELIVERY_PENDING = 'pending'
+    DELIVERY_SHIPPED = 'in_transit'
+    DELIVERY_DELIVERED = 'delivered'
+    DELIVERY_NA = 'not_applicable'
+    DELIVERY_CHOICES = [
+        (DELIVERY_PENDING, 'Awaiting Shipment / Arrival'),
+        (DELIVERY_SHIPPED, 'In Transit / Dispatched'),
+        (DELIVERY_DELIVERED, 'Received / Delivered'),
+        (DELIVERY_NA, 'Not Applicable'),
+    ]
+
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer / NEFT'),
+        ('upi', 'UPI / QR Scan'),
+        ('cheque', 'Cheque'),
+        ('card', 'Debit / Credit Card'),
+        ('other', 'Other'),
+    ]
+
+    CATEGORY_CHOICES = [
+        ('stock_order', 'Stock / Inventory Order'),
+        ('raw_materials', 'Raw Materials / Goods'),
+        ('store_supplies', 'Store & Packaging Supplies'),
+        ('rent', 'Store Rent & Lease'),
+        ('utilities', 'Electricity, Water & Utilities'),
+        ('repairs', 'Repairs & Maintenance'),
+        ('logistics', 'Freight, Courier & Logistics'),
+        ('marketing', 'Marketing & Promotion'),
+        ('salary', 'Staff Salaries / Advance'),
+        ('equipment', 'Tools, Machinery & Equipment'),
+        ('personal', 'Owner Personal Expense'),
+        ('other', 'Other Expense'),
+    ]
+
+    record_number = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        help_text="Unique sequence code, e.g. EXP-REC-202610-0001"
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text="Title or description of purchase/expense"
+    )
+    category = models.CharField(
+        max_length=50,
+        choices=CATEGORY_CHOICES,
+        default='other',
+        db_index=True
+    )
+    vendor_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Supplier, vendor, payee or transporter name"
+    )
+    total_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Total bill / invoice amount in ₹"
+    )
+    paid_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Amount paid so far in ₹"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_UNPAID,
+        db_index=True
+    )
+
+    # Delivery & Shipment tracking
+    delivery_status = models.CharField(
+        max_length=30,
+        choices=DELIVERY_CHOICES,
+        default=DELIVERY_NA,
+        db_index=True,
+        help_text="Shipment / physical delivery arrival status"
+    )
+    received_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when shipment arrived and was confirmed delivered"
+    )
+    received_by = models.ForeignKey(
+        'staff.StaffMember',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='received_expense_records'
+    )
+    received_by_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default=''
+    )
+    delivery_notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="Tracking number, courier details, or package inspection notes"
+    )
+
+    # Payment details
+    payment_method = models.CharField(
+        max_length=30,
+        choices=PAYMENT_METHOD_CHOICES,
+        blank=True,
+        default=''
+    )
+    payment_account = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Source account (e.g. HDFC Current A/C, Cash Box, GPay)"
+    )
+    payment_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date payment was settled"
+    )
+    payment_reference = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="UTR, Cheque number, Transaction ID or receipt ref"
+    )
+    payment_notes = models.TextField(
+        blank=True,
+        default=''
+    )
+
+    # Bill / invoice document attachment (JPG, PNG, PDF, etc.)
+    bill_file = models.FileField(
+        upload_to='expense_ledger_bills/%Y/%m/',
+        null=True,
+        blank=True,
+        help_text="Uploaded invoice, photo or PDF bill"
+    )
+
+    # Scheduling & Association
+    expense_date = models.DateField(
+        default=timezone.now,
+        db_index=True,
+        help_text="Date purchase was ordered or expense incurred"
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Payment due date (triggers overdue badge if unpaid)"
+    )
+    store = models.ForeignKey(
+        'inventory.Store',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='owner_expense_records',
+        help_text="Optional branch tag for filtering"
+    )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text="General notes or product order checklist"
+    )
+
+    # Auditing / tracking
+    recorded_by = models.ForeignKey(
+        'staff.StaffMember',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='recorded_owner_expense_records'
+    )
+    recorded_by_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default=''
+    )
+    last_updated_by = models.ForeignKey(
+        'staff.StaffMember',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_owner_expense_records'
+    )
+    last_updated_by_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default=''
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-expense_date', '-created_at']
+        verbose_name = 'Expense Ledger Record'
+        verbose_name_plural = 'Expense Ledger Records'
+
+    @property
+    def outstanding_amount(self) -> Decimal:
+        diff = self.total_amount - self.paid_amount
+        return max(Decimal('0.00'), diff)
+
+    def save(self, *args, **kwargs):
+        # Auto-compute status based on amounts
+        if self.paid_amount >= self.total_amount and self.total_amount > Decimal('0.00'):
+            self.status = self.STATUS_PAID
+        elif self.paid_amount > Decimal('0.00'):
+            self.status = self.STATUS_PARTIAL
+        else:
+            self.status = self.STATUS_UNPAID
+
+        # Auto-generate record sequence code if empty
+        if not self.record_number:
+            from datetime import date
+            today = self.expense_date or date.today()
+            prefix = f"REC-{today.strftime('%Y%m')}-"
+            last_record = OwnerExpenseRecord.objects.filter(
+                record_number__startswith=prefix
+            ).order_by('-record_number').first()
+
+            if last_record and last_record.record_number:
+                try:
+                    last_num = int(last_record.record_number.split('-')[-1])
+                    seq = last_num + 1
+                except (ValueError, IndexError):
+                    seq = 1
+            else:
+                seq = 1
+            self.record_number = f"{prefix}{seq:04d}"
+
+        if self.recorded_by and not self.recorded_by_name:
+            self.recorded_by_name = self.recorded_by.name
+
+        super().save(*args, **kwargs)
+
+
+class ExpenseAttachment(models.Model):
+    """
+    Multiple Bill / Document Attachments for an Expense Record.
+    Supports photos (JPG, PNG, WebP) and PDFs simultaneously.
+    """
+    expense_record = models.ForeignKey(
+        OwnerExpenseRecord,
+        on_delete=models.CASCADE,
+        related_name='attachments'
+    )
+    file = models.FileField(
+        upload_to='expense_ledger_bills/%Y/%m/',
+        help_text="Uploaded document or photo file"
+    )
+    file_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default=''
+    )
+    file_type = models.CharField(
+        max_length=50,
+        blank=True,
+        default=''
+    )
+    file_size = models.PositiveIntegerField(
+        default=0,
+        help_text="File size in bytes"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at', 'id']
+        verbose_name = 'Expense Attachment'
+        verbose_name_plural = 'Expense Attachments'
+
+    def save(self, *args, **kwargs):
+        if self.file and not self.file_name:
+            import os
+            self.file_name = os.path.basename(self.file.name)
+        if self.file and hasattr(self.file, 'size') and not self.file_size:
+            try:
+                self.file_size = self.file.size
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
+
+
+

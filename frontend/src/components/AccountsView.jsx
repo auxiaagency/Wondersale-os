@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import FinancialAnalysisDashboard from './FinancialAnalysisDashboard';
 import SalesInvoicesLedgerView from './SalesInvoicesLedgerView';
 import CounterPayoutsLedgerView from './CounterPayoutsLedgerView';
+import OwnerExpenseLedger from './OwnerExpenseLedger';
 import TimelineRangeSelector, { calculateDatesForDuration } from './TimelineRangeSelector';
+
 import {
   fetchOperatingExpenses,
   fetchOperatingExpenseSummary,
@@ -888,11 +890,46 @@ export default function AccountsView({
           <Receipt size={16} />
           Counter Payouts Ledger
         </button>
+
+        <button
+          onClick={() => setActiveTab('owner_ledger')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 18px',
+            borderRadius: '9px',
+            border: 'none',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'owner_ledger' ? '#8B5CF6' : 'transparent',
+            color: activeTab === 'owner_ledger' ? '#FFFFFF' : 'var(--text-secondary, #94A3B8)',
+            boxShadow: activeTab === 'owner_ledger' ? '0 2px 8px rgba(139, 92, 246, 0.4)' : 'none',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <CreditCard size={16} />
+          Expense &amp; Delivery Ledger
+        </button>
       </div>
+
+      {/* ========================================================================= */}
+      {/* VIEW: OWNER / PERSONAL EXPENSE & PURCHASE LEDGER                         */}
+      {/* ========================================================================= */}
+      {activeTab === 'owner_ledger' && (
+        <OwnerExpenseLedger
+          currentUser={currentUser}
+          stores={stores}
+          timelineRange={masterTimelineRange}
+          onTimelineRangeChange={handleMasterTimelineRangeChange}
+        />
+      )}
 
       {/* ========================================================================= */}
       {/* VIEW 0: FINANCIAL OVERVIEW & ANALYSIS DASHBOARD (PRIMARY DEFAULT VIEW)    */}
       {/* ========================================================================= */}
+
       {activeTab === 'analysis' && (
         <FinancialAnalysisDashboard
           key={`${activeStoreQueryString}-${analysisRefreshKey}`}

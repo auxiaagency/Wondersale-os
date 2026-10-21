@@ -615,4 +615,119 @@ class StakeholdersDisablingIntegrationTests(TestCase):
         self.assertEqual(analysis_with_sh['summary']['final_retained_net_profit'], 5000.00)
 
 
+class OwnerExpenseLedgerTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.store = Store.objects.create(name='Flagship Branch', city='Capital City', enable_gst=False)
+        self.owner_role = StaffRole.objects.create(name='Store Owner', is_owner=True)
+        self.accounts_role = StaffRole.objects.create(
+            name='Accounts Officer',
+            is_owner=False,
+            allowed_modules=['accounting']
+        )
+        self.cashier_role = StaffRole.objects.create(
+            name='Cashier Floor',
+            is_owner=False,
+            allowed_modules=['billing']
+        )
+
+        self.owner = StaffMember.objects.create(
+            staff_id='OWNER99',
+            name='Chief Owner',
+            role=self.owner_role,
+            store=self.store
+        )
+        self.accountant = StaffMember.objects.create(
+            staff_id='ACCT01',
+            name='Arthur Accountant',
+            role=self.accounts_role,
+            store=self.store
+        )
+        self.cashier = StaffMember.objects.create(
+            staff_id='CASH99',
+            name='Carl Cashier',
+            role=self.cashier_role,
+            store=self.store
+        )
+
+    def test_owner_expense_permission_checks(self):
+        # 1. Cashier (no accounting permission) should get 403 Forbidden
+        self.client.defaults['HTTP_X_STAFF_ID'] = self.cashier.staff_id
+        res = self.client.get('/api/accounting/owner-expenses/')
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 2. Accountant (with accounting permission) should get 200 OK
+        self.client.defaults['HTTP_X_STAFF_ID'] = self.accountant.staff_id
+        res = self.client.get('/api/accounting/owner-expenses/')
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_owner_expense_crud_payment_and_delivery_lifecycle(self):
+        self.client.defaults['HTTP_X_STAFF_ID'] = self.accountant.staff_id
+
+        # 1. Create a stock order expense with pending arrival
+        payload = {
+            'title': '500x Premium Silk Shirts Shipment',
+            'category': 'stock_order',
+            'vendor_name': 'Imperial Fabric Mills',
+            'total_amount': '75000.00',
+            'paid_amount': '0.00',
+            'expense_date': '2026-10-15',
+            'due_date': '2026-10-30',
+            'delivery_status': 'in_transit',
+            'delivery_notes': 'Dispatched via SafeExpress Tracking #SE-99124',
+        }
+        res_create = self.client.post('/api/accounting/owner-expenses/', payload, format='json')
+        self.assertEqual(res_create.status_code, status.HTTP_201_CREATED)
+        rec_id = res_create.data['id']
+        self.assertTrue(res_create.data['record_number'].startswith('REC-202610-'))
+        self.assertEqual(res_create.data['status'], 'unpaid')
+        self.assertEqual(float(res_create.data['outstanding_amount']), 75000.00)
+        self.assertEqual(res_create.data['delivery_status'], 'in_transit')
+
+        # 2. Check summary cards
+        res_sum = self.client.get('/api/accounting/owner-expenses/summary/')
+        self.assertEqual(res_sum.status_code, status.HTTP_200_OK)
+        self.assertEqual(float(res_sum.data['total_outstanding']), 75000.00)
+        self.assertEqual(res_sum.data['unpaid_count'], 1)
+        self.assertEqual(res_sum.data['pending_delivery_count'], 1)
+
+        # 3. Partial Payment of ₹30,000
+        pay_payload = {
+            'paid_amount': '30000.00',
+            'is_additive': True,
+            'payment_method': 'bank_transfer',
+            'payment_account': 'HDFC Corporate Account',
+            'payment_reference': 'UTR-HDFC-9921',
+        }
+        res_pay1 = self.client.post(f'/api/accounting/owner-expenses/{rec_id}/mark-paid/', pay_payload, format='json')
+        self.assertEqual(res_pay1.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_pay1.data['status'], 'partial')
+        self.assertEqual(float(res_pay1.data['paid_amount']), 30000.00)
+        self.assertEqual(float(res_pay1.data['outstanding_amount']), 45000.00)
+
+        # 4. Confirm Arrival / Delivery by Staff
+        delivery_payload = {
+            'delivery_status': 'delivered',
+            'delivery_notes': 'Cartons arrived in showroom, inspected and verified by Arthur.',
+        }
+        res_deliv = self.client.post(f'/api/accounting/owner-expenses/{rec_id}/update-delivery/', delivery_payload, format='json')
+        self.assertEqual(res_deliv.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_deliv.data['delivery_status'], 'delivered')
+        self.assertEqual(res_deliv.data['received_by_name'], 'Arthur Accountant')
+
+        # 5. Full Final Settlement
+        res_pay2 = self.client.post(f'/api/accounting/owner-expenses/{rec_id}/mark-paid/', {'full_payment': True}, format='json')
+        self.assertEqual(res_pay2.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_pay2.data['status'], 'paid')
+        self.assertEqual(float(res_pay2.data['outstanding_amount']), 0.00)
+
+        # 6. Verify summary shows 0 outstanding
+        res_sum2 = self.client.get('/api/accounting/owner-expenses/summary/')
+        self.assertEqual(float(res_sum2.data['total_outstanding']), 0.00)
+        self.assertEqual(res_sum2.data['unpaid_count'], 0)
+        self.assertEqual(res_sum2.data['paid_count'], 1)
+        self.assertEqual(res_sum2.data['pending_delivery_count'], 0)
+
+
+
 

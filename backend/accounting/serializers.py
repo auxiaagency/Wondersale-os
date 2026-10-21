@@ -114,3 +114,119 @@ class SectionMonthlyGoalSerializer(serializers.ModelSerializer):
         return round((actual / target) * 100, 1)
 
 
+class ExpenseAttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        from .models import ExpenseAttachment
+        model = ExpenseAttachment
+        fields = [
+            'id',
+            'file',
+            'file_url',
+            'file_name',
+            'file_type',
+            'file_size',
+            'uploaded_at',
+        ]
+        read_only_fields = ['id', 'file_url', 'file_name', 'file_type', 'file_size', 'uploaded_at']
+
+    def get_file_url(self, obj):
+        if obj.file:
+            return obj.file.url
+        return None
+
+
+class OwnerExpenseRecordSerializer(serializers.ModelSerializer):
+    store_name = serializers.CharField(source='store.name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    delivery_status_display = serializers.CharField(source='get_delivery_status_display', read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    outstanding_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    bill_file_url = serializers.SerializerMethodField()
+    attachments = ExpenseAttachmentSerializer(many=True, read_only=True)
+    is_overdue = serializers.SerializerMethodField()
+
+    class Meta:
+        from .models import OwnerExpenseRecord
+        model = OwnerExpenseRecord
+        fields = [
+            'id',
+            'record_number',
+            'title',
+            'category',
+            'category_display',
+            'vendor_name',
+            'total_amount',
+            'paid_amount',
+            'outstanding_amount',
+            'status',
+            'status_display',
+            'delivery_status',
+            'delivery_status_display',
+            'received_at',
+            'received_by',
+            'received_by_name',
+            'delivery_notes',
+            'payment_method',
+            'payment_method_display',
+            'payment_account',
+            'payment_date',
+            'payment_reference',
+            'payment_notes',
+            'bill_file',
+            'bill_file_url',
+            'attachments',
+            'expense_date',
+            'due_date',
+            'is_overdue',
+            'store',
+            'store_name',
+            'notes',
+            'recorded_by',
+            'recorded_by_name',
+            'last_updated_by',
+            'last_updated_by_name',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'record_number',
+            'status',
+            'outstanding_amount',
+            'attachments',
+            'created_at',
+            'updated_at',
+        ]
+
+    def get_bill_file_url(self, obj):
+        if obj.bill_file:
+            # Return root-relative URL (e.g. /media/...) so frontend proxy handles it transparently
+            return obj.bill_file.url
+        return None
+
+    def get_is_overdue(self, obj):
+        if obj.status != 'paid' and obj.due_date:
+            from django.utils import timezone
+            return obj.due_date < timezone.now().date()
+        return False
+
+    def validate(self, attrs):
+        total = attrs.get('total_amount', getattr(self.instance, 'total_amount', Decimal('0.00')))
+        paid = attrs.get('paid_amount', getattr(self.instance, 'paid_amount', Decimal('0.00')))
+
+        if total < Decimal('0.00'):
+            raise serializers.ValidationError({"total_amount": "Total amount cannot be negative."})
+        if paid < Decimal('0.00'):
+            raise serializers.ValidationError({"paid_amount": "Paid amount cannot be negative."})
+        if paid > total and total > Decimal('0.00'):
+            # Allow equal or partial, but prevent accidental overpayment inputs beyond total
+            attrs['paid_amount'] = total
+
+        return attrs
+
+
+
+

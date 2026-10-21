@@ -4,11 +4,14 @@ from .views import (
     OperatingExpenseViewSet,
     MonthlyFinancialAnalysisView,
     SectionMonthlyGoalViewSet,
+    OwnerExpenseRecordViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'operating-expenses', OperatingExpenseViewSet, basename='operating-expense')
 router.register(r'section-goals', SectionMonthlyGoalViewSet, basename='section-goal')
+router.register(r'owner-expenses', OwnerExpenseRecordViewSet, basename='owner-expense')
+
 
 urlpatterns = [
     path('', include(router.urls)),

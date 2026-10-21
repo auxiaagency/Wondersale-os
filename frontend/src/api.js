@@ -3267,6 +3267,125 @@ export async function commitHistoricalBatch(payload) {
   return data;
 }
 
+// =========================================================================
+// OWNER / PERSONAL EXPENSE & PURCHASE LEDGER API
+// =========================================================================
+
+export async function fetchOwnerExpenses(params = {}) {
+  const q = new URLSearchParams();
+  if (params.status && params.status !== 'all') q.set('status', params.status);
+  if (params.delivery_status && params.delivery_status !== 'all') q.set('delivery_status', params.delivery_status);
+  if (params.category && params.category !== 'all') q.set('category', params.category);
+  if (params.store && params.store !== 'all') q.set('store', params.store);
+  if (params.search) q.set('search', params.search);
+  if (params.start_date) q.set('start_date', params.start_date);
+  if (params.end_date) q.set('end_date', params.end_date);
+  if (params.overdue) q.set('overdue', 'true');
+
+  const res = await fetchWithRetry(`/api/accounting/owner-expenses/?${q.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to fetch expense ledger entries'));
+  }
+  return res.json();
+}
+
+export async function fetchOwnerExpenseSummary(params = {}) {
+  const q = new URLSearchParams();
+  if (params.status && params.status !== 'all') q.set('status', params.status);
+  if (params.delivery_status && params.delivery_status !== 'all') q.set('delivery_status', params.delivery_status);
+  if (params.category && params.category !== 'all') q.set('category', params.category);
+  if (params.store && params.store !== 'all') q.set('store', params.store);
+  if (params.search) q.set('search', params.search);
+  if (params.start_date) q.set('start_date', params.start_date);
+  if (params.end_date) q.set('end_date', params.end_date);
+
+  const res = await fetchWithRetry(`/api/accounting/owner-expenses/summary/?${q.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to load expense ledger summary'));
+  }
+  return res.json();
+}
+
+export async function createOwnerExpense(formData) {
+  const res = await fetch(`/api/accounting/owner-expenses/`, {
+    method: 'POST',
+    headers: getAuthHeaders(), // Let browser set multipart boundary
+    body: formData,
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to record expense entry'));
+  }
+  return res.json();
+}
+
+export async function updateOwnerExpense(id, formDataOrJson) {
+  const isFormData = formDataOrJson instanceof FormData;
+  const headers = isFormData ? getAuthHeaders() : getAuthHeaders({ 'Content-Type': 'application/json' });
+  const body = isFormData ? formDataOrJson : JSON.stringify(formDataOrJson);
+
+  const res = await fetch(`/api/accounting/owner-expenses/${id}/`, {
+    method: 'PATCH',
+    headers,
+    body,
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update expense entry'));
+  }
+  return res.json();
+}
+
+export async function markOwnerExpensePaid(id, payload) {
+  const res = await fetch(`/api/accounting/owner-expenses/${id}/mark-paid/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update payment status'));
+  }
+  return res.json();
+}
+
+export async function updateOwnerExpenseDelivery(id, payload) {
+  const res = await fetch(`/api/accounting/owner-expenses/${id}/update-delivery/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update delivery status'));
+  }
+  return res.json();
+}
+
+export async function deleteOwnerExpense(id) {
+  const res = await fetch(`/api/accounting/owner-expenses/${id}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to delete expense entry'));
+  }
+  return true;
+}
+
+export async function deleteOwnerExpenseAttachment(expenseId, attachmentId) {
+  const res = await fetch(`/api/accounting/owner-expenses/${expenseId}/attachments/${attachmentId}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to delete attachment'));
+  }
+  return res.json();
+}
+
+
+
 
 
 
