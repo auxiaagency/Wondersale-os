@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
 from django.http import HttpResponse, Http404
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, F, Count, Avg
 
 
 def parse_filter_datetime(val_str):
@@ -2552,8 +2552,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
             qs = qs.order_by('-total_spent', '-total_purchases_count')
         elif sort in ('frequently_bought', 'orders_count', '-total_purchases_count'):
             qs = qs.order_by('-total_purchases_count', '-total_spent')
-        elif sort in ('recent', 'last_purchase', '-last_purchase_date'):
-            qs = qs.order_by('-last_purchase_date', '-created_at')
+        elif sort in ('recent', 'recently_active', 'last_purchase', '-last_purchase_date'):
+            qs = qs.order_by(F('last_purchase_date').desc(nulls_last=True), '-created_at')
         elif sort in ('name', 'name_asc'):
             qs = qs.order_by('name', 'phone')
         elif sort in ('name_desc', '-name'):
@@ -2561,9 +2561,56 @@ class CustomerViewSet(viewsets.ModelViewSet):
         elif sort in ('newest', '-created_at'):
             qs = qs.order_by('-created_at')
         else:
-            qs = qs.order_by('-created_at')
+            # Default sorting: Recently Active (Last Visit / Purchase, nulls last)
+            qs = qs.order_by(F('last_purchase_date').desc(nulls_last=True), '-created_at')
 
         return qs
+
+    @action(detail=False, methods=['get'], url_path='summary-metrics')
+    def summary_metrics(self, request):
+        """
+        Computes accurate directory-wide aggregate totals for customers (lifetime spend, orders, dues, etc.)
+        scoped to the active store/branch and search criteria, enabling true server-side lazy pagination
+        without losing accurate top-level summary KPI metrics.
+        """
+        qs = self.get_queryset()
+
+        from django.db.models import Sum, Count, Q
+        agg = qs.aggregate(
+            total_customers=Count('id'),
+            total_spent=Sum('total_spent'),
+            total_orders=Sum('total_purchases_count'),
+            repeat_customers=Count('id', filter=Q(total_purchases_count__gt=1))
+        )
+
+        # Calculate outstanding dues for this customer set
+        cust_ids = qs.values_list('id', flat=True)
+        dues_agg = SaleOrder.objects.filter(
+            customer_id__in=cust_ids,
+            status__in=['completed', 'pending_sync'],
+            balance_due__gt=0
+        ).aggregate(
+            total_dues=Sum('balance_due'),
+            debtor_count=Count('customer_id', distinct=True)
+        )
+
+        total_cust = agg['total_customers'] or 0
+        tot_rev = float(agg['total_spent'] or 0)
+        tot_orders = agg['total_orders'] or 0
+        avg_order_val = round(tot_rev / tot_orders, 2) if tot_orders > 0 else 0.0
+        rep_cust = agg['repeat_customers'] or 0
+        tot_dues = float(dues_agg['total_dues'] or 0)
+        debtors = dues_agg['debtor_count'] or 0
+
+        return Response({
+            'total_customers_count': total_cust,
+            'total_revenue': tot_rev,
+            'total_orders_count': tot_orders,
+            'avg_order_value': avg_order_val,
+            'repeat_customers_count': rep_cust,
+            'total_customer_dues': tot_dues,
+            'customers_with_dues_count': debtors,
+        })
 
     def perform_create(self, serializer):
         # Auto-bind store if not explicitly given

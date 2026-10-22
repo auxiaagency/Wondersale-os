@@ -36,9 +36,15 @@ import {
   QrCode,
   FileDown,
   FileText,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Loader2,
 } from 'lucide-react';
 import {
   getCustomers,
+  getCustomerSummaryMetrics,
   createCustomer,
   updateCustomer,
   detachVipCard,
@@ -86,8 +92,23 @@ export default function CustomersView({
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('most_purchases');
+  const [sortBy, setSortBy] = useState('recent');
   const [notification, setNotification] = useState(null);
+
+  // Pagination & Server Aggregated Metrics State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [metrics, setMetrics] = useState({
+    total_customers_count: 0,
+    total_revenue: 0,
+    total_orders_count: 0,
+    avg_order_value: '0.00',
+    repeat_customers_count: 0,
+    total_customer_dues: 0,
+    customers_with_dues_count: 0,
+  });
 
   // Store filtering
   const [selectedStoreFilter, setSelectedStoreFilter] = useState(
@@ -327,25 +348,71 @@ export default function CustomersView({
     }
   };
 
+  // Reset page to 1 when filters or sorting change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortBy, selectedStoreFilter, pageSize]);
+
+  // Load paginated customers when page, pageSize, search, sort, or store changes
   useEffect(() => {
     loadCustomers();
-  }, [searchQuery, sortBy, selectedStoreFilter]);
+  }, [currentPage, pageSize, searchQuery, sortBy, selectedStoreFilter]);
+
+  // Load aggregated summary metrics across the entire filtered directory
+  useEffect(() => {
+    loadSummaryMetrics();
+  }, [searchQuery, selectedStoreFilter]);
 
   const loadCustomers = async () => {
     setLoading(true);
     try {
-      const params = { search: searchQuery, sort: sortBy };
+      const params = {
+        search: searchQuery,
+        sort: sortBy,
+        page: currentPage,
+        page_size: pageSize,
+      };
       if (selectedStoreFilter) {
         params.store = selectedStoreFilter;
       }
       const data = await getCustomers(params);
-      const list = Array.isArray(data) ? data : data.results || [];
-      setCustomers(list);
+      if (data && typeof data === 'object' && Array.isArray(data.results)) {
+        setCustomers(data.results);
+        setTotalCount(typeof data.count === 'number' ? data.count : data.results.length);
+        setTotalPages(typeof data.total_pages === 'number' ? data.total_pages : Math.max(1, Math.ceil((data.count || 0) / pageSize)));
+      } else {
+        const list = Array.isArray(data) ? data : [];
+        setCustomers(list);
+        setTotalCount(list.length);
+        setTotalPages(Math.max(1, Math.ceil(list.length / pageSize)));
+      }
     } catch (err) {
       console.error('Failed to load customers:', err);
       showNotification('error', 'Could not load customer profiles.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSummaryMetrics = async () => {
+    try {
+      const params = {};
+      if (searchQuery) params.search = searchQuery;
+      if (selectedStoreFilter) params.store = selectedStoreFilter;
+      const res = await getCustomerSummaryMetrics(params);
+      if (res) {
+        setMetrics({
+          total_customers_count: res.total_customers_count ?? 0,
+          total_revenue: res.total_revenue ?? 0,
+          total_orders_count: res.total_orders_count ?? 0,
+          avg_order_value: res.avg_order_value ?? '0.00',
+          repeat_customers_count: res.repeat_customers_count ?? 0,
+          total_customer_dues: res.total_customer_dues ?? 0,
+          customers_with_dues_count: res.customers_with_dues_count ?? 0,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load customer summary metrics:', err);
     }
   };
 
@@ -720,14 +787,14 @@ export default function CustomersView({
     showNotification('success', isReturn ? 'Return voucher summary copied!' : 'Invoice details (with Terms & Conditions & Dues) copied to clipboard!');
   };
 
-  // Calculate Metrics
-  const totalCustomersCount = customers.length;
-  const totalRevenue = customers.reduce((sum, c) => sum + parseFloat(c.total_spent || 0), 0);
-  const totalOrdersCount = customers.reduce((sum, c) => sum + (c.total_purchases_count || 0), 0);
-  const avgOrderValue = totalOrdersCount > 0 ? (totalRevenue / totalOrdersCount).toFixed(2) : '0.00';
-  const repeatCustomersCount = customers.filter((c) => c.total_purchases_count > 1).length;
-  const totalCustomerDues = customers.reduce((sum, c) => sum + parseFloat(c.total_outstanding_dues || 0), 0);
-  const customersWithDuesCount = customers.filter((c) => parseFloat(c.total_outstanding_dues || 0) > 0).length;
+  // Calculate Metrics from server-side aggregated metrics (covering entire filtered directory), falling back to local slice
+  const totalCustomersCount = metrics.total_customers_count || totalCount || customers.length;
+  const totalRevenue = typeof metrics.total_revenue === 'number' ? metrics.total_revenue : customers.reduce((sum, c) => sum + parseFloat(c.total_spent || 0), 0);
+  const totalOrdersCount = typeof metrics.total_orders_count === 'number' ? metrics.total_orders_count : customers.reduce((sum, c) => sum + (c.total_purchases_count || 0), 0);
+  const avgOrderValue = metrics.avg_order_value || (totalOrdersCount > 0 ? (totalRevenue / totalOrdersCount).toFixed(2) : '0.00');
+  const repeatCustomersCount = typeof metrics.repeat_customers_count === 'number' ? metrics.repeat_customers_count : customers.filter((c) => c.total_purchases_count > 1).length;
+  const totalCustomerDues = typeof metrics.total_customer_dues === 'number' ? metrics.total_customer_dues : customers.reduce((sum, c) => sum + parseFloat(c.total_outstanding_dues || 0), 0);
+  const customersWithDuesCount = typeof metrics.customers_with_dues_count === 'number' ? metrics.customers_with_dues_count : customers.filter((c) => parseFloat(c.total_outstanding_dues || 0) > 0).length;
 
   return (
     <div
@@ -1228,7 +1295,16 @@ export default function CustomersView({
               </tr>
             </thead>
             <tbody>
-              {customers.length > 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan="6" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', fontWeight: 600 }}>
+                      <Loader2 size={22} className="spin" style={{ color: '#06B6D4' }} />
+                      <span>Loading customers...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : customers.length > 0 ? (
                 customers.map((cust) => {
                   const initial = (cust.name?.trim() || cust.phone.slice(-4) || 'C').charAt(0).toUpperCase();
 
@@ -1473,6 +1549,120 @@ export default function CustomersView({
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Server-Side Pagination Footer */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 20px',
+            background: 'var(--bg-main)',
+            borderTop: '1px solid var(--border-subtle)',
+            flexWrap: 'wrap',
+            gap: '12px',
+            fontSize: '0.82rem',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          {/* Item Counter Summary */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>
+              Showing{' '}
+              <strong style={{ color: 'var(--text-main)' }}>
+                {totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+              </strong>
+              {' '}-{' '}
+              <strong style={{ color: 'var(--text-main)' }}>
+                {Math.min(currentPage * pageSize, totalCount)}
+              </strong>
+              {' '}of{' '}
+              <strong style={{ color: 'var(--text-main)' }}>{totalCount}</strong>
+              {' '}customers
+            </span>
+            {loading && <Loader2 size={14} className="spin" style={{ color: '#06B6D4' }} />}
+          </div>
+
+          {/* Page Navigation & Page Size Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            {/* Rows Per Page Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="form-select"
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  height: '28px',
+                }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+
+            {/* Pagination Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage <= 1 || loading}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '4px 6px', height: '28px' }}
+                title="First Page"
+              >
+                <ChevronsLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1 || loading}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '4px 8px', height: '28px' }}
+                title="Previous Page"
+              >
+                <ChevronLeft size={14} />
+              </button>
+
+              <span style={{ padding: '0 8px', fontWeight: 700, color: 'var(--text-main)', fontSize: '0.78rem' }}>
+                Page {currentPage} of {Math.max(1, totalPages)}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages || loading}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '4px 8px', height: '28px' }}
+                title="Next Page"
+              >
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage >= totalPages || loading}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '4px 6px', height: '28px' }}
+                title="Last Page"
+              >
+                <ChevronsRight size={14} />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

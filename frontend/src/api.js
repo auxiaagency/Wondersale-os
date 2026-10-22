@@ -939,10 +939,24 @@ export async function getCustomers(params = {}) {
   if (params.sort) query.append('sort', params.sort);
   if (params.store) query.append('store', params.store);
   if (params.store_id) query.append('store_id', params.store_id);
+  if (params.page !== undefined && params.page !== null) query.append('page', params.page);
+  if (params.page_size !== undefined && params.page_size !== null) query.append('page_size', params.page_size);
 
   const url = `${API_BASE}/customers/${query.toString() ? `?${query.toString()}` : ''}`;
   const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch customers');
+  return res.json();
+}
+
+export async function getCustomerSummaryMetrics(params = {}) {
+  const query = new URLSearchParams();
+  if (params.search) query.append('search', params.search);
+  if (params.store) query.append('store', params.store);
+  if (params.store_id) query.append('store_id', params.store_id);
+
+  const url = `${API_BASE}/customers/summary-metrics/${query.toString() ? `?${query.toString()}` : ''}`;
+  const res = await fetch(url, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('Failed to fetch customer summary metrics');
   return res.json();
 }
 
