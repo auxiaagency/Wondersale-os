@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Trophy,
   Medal,
@@ -25,7 +25,13 @@ import {
   Sparkles,
   AlertCircle,
   HelpCircle,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Loader2,
 } from 'lucide-react';
+import { fetchProductPeerRankings } from '../api';
 
 const METRIC_CONFIG = {
   revenue: {
@@ -111,6 +117,8 @@ const METRIC_CONFIG = {
   },
 };
 
+const PAGE_SIZE_OPTIONS = [15, 25, 50, 100];
+
 export default function ProductRankingCard({
   item,
   analytics,
@@ -124,6 +132,10 @@ export default function ProductRankingCard({
   const [selectedMetric, setSelectedMetric] = useState('revenue');
   const [sortAscending, setSortAscending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Pagination states (default 15 per page as requested)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
   const scopes = analytics?.rankings?.scopes || null;
 
@@ -292,6 +304,108 @@ export default function ProductRankingCard({
       };
     });
   }, [activeScopeData, selectedMetric, sortAscending, searchQuery, currentMetricDetails]);
+
+  // Server-side lazy pagination state
+  const [serverPageData, setServerPageData] = useState(null);
+  const [serverPageLoading, setServerPageLoading] = useState(false);
+  const [serverError, setServerError] = useState(null);
+
+  // Active scope ID (category, subcategory, supplier)
+  const activeScopeId = useMemo(() => {
+    if (scopeType === 'category') return activeCategoryId;
+    if (scopeType === 'subcategory') return activeSubcategoryId;
+    if (scopeType === 'supplier') return item?.supplier_id || item?.supplier?.id || null;
+    return null;
+  }, [scopeType, activeCategoryId, activeSubcategoryId, item]);
+
+  // Track if we need to auto-target the page containing the current product
+  const shouldAutoTargetRef = useRef(true);
+
+  // When scope, metric, sort, or page size change, flag auto-target
+  const prevFetchConfigRef = useRef('');
+  useEffect(() => {
+    const configSig = `${item?.id}_${scopeType}_${activeScopeId}_${selectedMetric}_${sortAscending}_${pageSize}_${searchQuery}`;
+    if (prevFetchConfigRef.current !== configSig) {
+      prevFetchConfigRef.current = configSig;
+      shouldAutoTargetRef.current = true;
+    }
+  }, [item?.id, scopeType, activeScopeId, selectedMetric, sortAscending, pageSize, searchQuery]);
+
+  // Fetch paginated page on demand from backend
+  const loadPeerRankingsPage = async (pageToLoad = null) => {
+    if (!item?.id) return;
+    setServerPageLoading(true);
+    setServerError(null);
+
+    const autoTarget = shouldAutoTargetRef.current && (pageToLoad === null);
+    try {
+      const data = await fetchProductPeerRankings(item.id, {
+        scope: scopeType,
+        scope_id: activeScopeId,
+        metric: selectedMetric,
+        sort_ascending: sortAscending ? 'true' : 'false',
+        search: searchQuery.trim(),
+        page: pageToLoad !== null ? pageToLoad : (autoTarget ? undefined : currentPage),
+        page_size: pageSize,
+        auto_target: autoTarget ? 'true' : 'false',
+      });
+
+      setServerPageData(data);
+      if (data?.current_page) {
+        setCurrentPage(data.current_page);
+      }
+      shouldAutoTargetRef.current = false;
+    } catch (err) {
+      console.warn('Server peer rankings error, falling back to embedded analytics:', err);
+      setServerError(err.message);
+    } finally {
+      setServerPageLoading(false);
+    }
+  };
+
+  // Re-fetch when dependencies change
+  useEffect(() => {
+    if (item?.id) {
+      loadPeerRankingsPage();
+    }
+  }, [item?.id, scopeType, activeScopeId, selectedMetric, sortAscending, pageSize, searchQuery]);
+
+  // Handler for user clicking a specific page
+  const handlePageChange = (newPage) => {
+    shouldAutoTargetRef.current = false;
+    setCurrentPage(newPage);
+    loadPeerRankingsPage(newPage);
+  };
+
+  // Handler for user clicking "Go to This Product"
+  const handleJumpToCurrentProduct = () => {
+    shouldAutoTargetRef.current = true;
+    loadPeerRankingsPage();
+  };
+
+  // Effective leaderboard items & counts (from server response or fallback to local)
+  const isServerDriven = Boolean(serverPageData && Array.isArray(serverPageData.results));
+  const effectiveTotalCount = isServerDriven
+    ? (serverPageData.count ?? 0)
+    : sortedLeaderboardItems.length;
+
+  const effectiveTotalPages = isServerDriven
+    ? (serverPageData.total_pages ?? 1)
+    : Math.max(1, Math.ceil(sortedLeaderboardItems.length / pageSize));
+
+  const effectivePageItems = isServerDriven
+    ? serverPageData.results
+    : sortedLeaderboardItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const fallbackCurrentProductIndex = useMemo(() => {
+    return sortedLeaderboardItems.findIndex(
+      (it) => it.is_current || (item && String(it.id) === String(item.id))
+    );
+  }, [sortedLeaderboardItems, item]);
+
+  const effectiveCurrentProductRank = isServerDriven
+    ? serverPageData.current_product_rank
+    : (fallbackCurrentProductIndex !== -1 ? fallbackCurrentProductIndex + 1 : (currentMetricDetails?.rank || null));
 
   const activeMetricCfg = METRIC_CONFIG[selectedMetric] || METRIC_CONFIG.revenue;
   const MetricIcon = activeMetricCfg.icon;
@@ -1140,7 +1254,10 @@ export default function ProductRankingCard({
               type="text"
               placeholder="Search product or UID..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="form-input"
               style={{
                 paddingLeft: '32px',
@@ -1185,18 +1302,27 @@ export default function ProductRankingCard({
                 </tr>
               </thead>
               <tbody>
-                {sortedLeaderboardItems.length === 0 ? (
+                {serverPageLoading ? (
+                  <tr>
+                    <td colSpan={4} style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}>
+                        <Loader2 size={18} className="spin" style={{ color: 'var(--brand-primary)' }} />
+                        <span>Loading ranking page from server...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : effectivePageItems.length === 0 ? (
                   <tr>
                     <td colSpan={4} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
                       No items found in this scope matching &ldquo;{searchQuery}&rdquo;.
                     </td>
                   </tr>
                 ) : (
-                  sortedLeaderboardItems.map((peer, idx) => {
+                  effectivePageItems.map((peer, idx) => {
                     const isCurrent = Boolean(peer.is_current || (item && String(peer.id) === String(item.id)));
-                    const peerRank = peer.displayRank || idx + 1;
+                    const peerRank = peer.displayRank || (currentPage - 1) * pageSize + idx + 1;
                     const val = peer[selectedMetric] ?? 0;
-                    const maxVal = Math.max(1, Number(sortedLeaderboardItems[0]?.[selectedMetric] || 1));
+                    const maxVal = Math.max(1, Number(effectivePageItems[0]?.[selectedMetric] || 1));
                     const barPct = Math.min(100, Math.max(4, Math.round((Number(val) / maxVal) * 100)));
 
                     return (
@@ -1251,7 +1377,7 @@ export default function ProductRankingCard({
                                       color: '#FFFFFF',
                                     }}
                                   >
-                                    CURRENT
+                                    CURRENT PRODUCT
                                   </span>
                                 )}
                               </div>
@@ -1313,6 +1439,178 @@ export default function ProductRankingCard({
               </tbody>
             </table>
           </div>
+
+          {/* Leaderboard Pagination Bar */}
+          {effectiveTotalCount > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                padding: '12px 18px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderTop: '1px solid var(--border-subtle)',
+              }}
+            >
+              {/* Range & Page Size */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Showing{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>
+                    {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, effectiveTotalCount)}
+                  </strong>{' '}
+                  of <strong style={{ color: 'var(--text-primary)' }}>{effectiveTotalCount}</strong> products
+                  {serverPageLoading && (
+                    <span style={{ marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--brand-primary)', fontSize: '0.72rem' }}>
+                      <Loader2 size={12} className="spin" /> Fetching page...
+                    </span>
+                  )}
+                </span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                    }}
+                    style={{
+                      height: '28px',
+                      fontSize: '0.76rem',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: 'var(--bg-main)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-primary)',
+                      colorScheme: 'dark',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quick button to jump to page containing this product */}
+                {effectiveCurrentProductRank !== null && effectiveCurrentProductRank > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleJumpToCurrentProduct}
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '3px 10px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      color: 'var(--brand-primary)',
+                      borderColor: 'rgba(239, 68, 68, 0.3)',
+                      background: 'rgba(239, 68, 68, 0.08)',
+                    }}
+                    title="Jump to the page showing this product"
+                  >
+                    <Crown size={12} />
+                    <span>Go to This Product (Rank #{effectiveCurrentProductRank})</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Navigation Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1 || serverPageLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: currentPage === 1 || serverPageLoading ? 0.4 : 1,
+                    cursor: currentPage === 1 || serverPageLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="First Page"
+                >
+                  <ChevronsLeft size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1 || serverPageLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: currentPage === 1 || serverPageLoading ? 0.4 : 1,
+                    cursor: currentPage === 1 || serverPageLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Previous Page"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <span
+                  style={{
+                    padding: '0 8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  Page {currentPage} of {effectiveTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(Math.min(effectiveTotalPages, currentPage + 1))}
+                  disabled={currentPage >= effectiveTotalPages || serverPageLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: currentPage >= effectiveTotalPages || serverPageLoading ? 0.4 : 1,
+                    cursor: currentPage >= effectiveTotalPages || serverPageLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Next Page"
+                >
+                  <ChevronRight size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(effectiveTotalPages)}
+                  disabled={currentPage >= effectiveTotalPages || serverPageLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: currentPage >= effectiveTotalPages || serverPageLoading ? 0.4 : 1,
+                    cursor: currentPage >= effectiveTotalPages || serverPageLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Last Page"
+                >
+                  <ChevronsRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </section>

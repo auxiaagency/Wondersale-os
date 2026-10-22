@@ -25,6 +25,10 @@ import {
   Box,
   Sparkles,
   AlertOctagon,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import {
   updateItem,
@@ -297,6 +301,9 @@ export default function ItemDetailModal({
     }
   }, [activeTab, item, ledgerTimeFilter]);
 
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerPageSize, setLedgerPageSize] = useState(15);
+
   const loadLedger = async () => {
     setLoadingLedger(true);
     try {
@@ -306,7 +313,9 @@ export default function ItemDetailModal({
         if (ledgerTimeFilter.to_date) params.to_date = ledgerTimeFilter.to_date;
       }
       const data = await fetchStockMovements(item.id, params);
-      setMovements(data);
+      const list = Array.isArray(data) ? data : (data?.results || []);
+      setMovements(list);
+      setLedgerPage(1);
     } catch (err) {
       console.error(err);
       setErrorMsg('Failed to load stock movements ledger.');
@@ -318,6 +327,12 @@ export default function ItemDetailModal({
   const filteredLedgerMovements = React.useMemo(() => {
     return filterLogsByTimeRange(movements, ledgerTimeFilter, ['created_at']);
   }, [movements, ledgerTimeFilter]);
+
+  const ledgerTotalPages = Math.max(1, Math.ceil(filteredLedgerMovements.length / ledgerPageSize));
+  const paginatedLedgerMovements = React.useMemo(() => {
+    const start = (ledgerPage - 1) * ledgerPageSize;
+    return filteredLedgerMovements.slice(start, start + ledgerPageSize);
+  }, [filteredLedgerMovements, ledgerPage, ledgerPageSize]);
 
   if (!item) return null;
 
@@ -1492,7 +1507,7 @@ export default function ItemDetailModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLedgerMovements.map((m) => (
+                    {paginatedLedgerMovements.map((m) => (
                       <tr key={m.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                         <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>
                           {new Date(m.created_at).toLocaleString()}
@@ -1550,6 +1565,148 @@ export default function ItemDetailModal({
                     ))}
                   </tbody>
                 </table>
+
+                {/* Ledger Pagination Bar */}
+                {filteredLedgerMovements.length > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '12px',
+                      padding: '10px 16px',
+                      background: 'rgba(0, 0, 0, 0.15)',
+                      borderTop: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        Showing{' '}
+                        <strong style={{ color: 'var(--text-primary)' }}>
+                          {(ledgerPage - 1) * ledgerPageSize + 1}–{Math.min(ledgerPage * ledgerPageSize, filteredLedgerMovements.length)}
+                        </strong>{' '}
+                        of <strong style={{ color: 'var(--text-primary)' }}>{filteredLedgerMovements.length}</strong> movements
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Per page:</span>
+                        <select
+                          value={ledgerPageSize}
+                          onChange={(e) => {
+                            setLedgerPageSize(Number(e.target.value));
+                            setLedgerPage(1);
+                          }}
+                          style={{
+                            height: '26px',
+                            fontSize: '0.76rem',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: 'var(--bg-main, #0B0E17)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-primary)',
+                            colorScheme: 'dark',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {[15, 25, 50, 100].map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPage(1)}
+                        disabled={ledgerPage === 1}
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          padding: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: ledgerPage === 1 ? 0.4 : 1,
+                          cursor: ledgerPage === 1 ? 'not-allowed' : 'pointer',
+                        }}
+                        title="First Page"
+                      >
+                        <ChevronsLeft size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPage((p) => Math.max(1, p - 1))}
+                        disabled={ledgerPage === 1}
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          padding: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: ledgerPage === 1 ? 0.4 : 1,
+                          cursor: ledgerPage === 1 ? 'not-allowed' : 'pointer',
+                        }}
+                        title="Previous Page"
+                      >
+                        <ChevronLeft size={13} />
+                      </button>
+                      <span
+                        style={{
+                          padding: '0 8px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {ledgerPage} / {ledgerTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPage((p) => Math.min(ledgerTotalPages, p + 1))}
+                        disabled={ledgerPage >= ledgerTotalPages}
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          padding: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: ledgerPage >= ledgerTotalPages ? 0.4 : 1,
+                          cursor: ledgerPage >= ledgerTotalPages ? 'not-allowed' : 'pointer',
+                        }}
+                        title="Next Page"
+                      >
+                        <ChevronRight size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLedgerPage(ledgerTotalPages)}
+                        disabled={ledgerPage >= ledgerTotalPages}
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          padding: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          opacity: ledgerPage >= ledgerTotalPages ? 0.4 : 1,
+                          cursor: ledgerPage >= ledgerTotalPages ? 'not-allowed' : 'pointer',
+                        }}
+                        title="Last Page"
+                      >
+                        <ChevronsRight size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

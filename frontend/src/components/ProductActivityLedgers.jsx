@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   History,
   ShoppingCart,
@@ -18,8 +18,16 @@ import {
   FileText,
   RefreshCw,
   Download,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Loader2,
 } from 'lucide-react';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
+import { getSaleOrdersPage, fetchStockMovements } from '../api';
+
+const PAGE_SIZE_OPTIONS = [15, 25, 50, 100];
 
 export default function ProductActivityLedgers({
   item,
@@ -30,33 +38,150 @@ export default function ProductActivityLedgers({
   const [orderSearch, setOrderSearch] = useState('');
   const [movementSearch, setMovementSearch] = useState('');
 
-  const recentSales = analytics?.recent_sales || [];
-  const recentMovements = analytics?.recent_movements || [];
+  // Pagination states
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderPageSize, setOrderPageSize] = useState(15);
+  const [movementPage, setMovementPage] = useState(1);
+  const [movementPageSize, setMovementPageSize] = useState(15);
 
-  // Filtered orders
-  const filteredSales = useMemo(() => {
-    if (!orderSearch.trim()) return recentSales;
-    const q = orderSearch.toLowerCase();
-    return recentSales.filter(
-      (s) =>
-        (s.invoice_number || '').toLowerCase().includes(q) ||
-        (s.cashier_name || '').toLowerCase().includes(q) ||
-        (s.date || '').toLowerCase().includes(q)
-    );
-  }, [recentSales, orderSearch]);
+  // Server-side lazy pagination states
+  const [serverOrdersData, setServerOrdersData] = useState(null);
+  const [serverOrdersLoading, setServerOrdersLoading] = useState(false);
+  const [serverMovementsData, setServerMovementsData] = useState(null);
+  const [serverMovementsLoading, setServerMovementsLoading] = useState(false);
 
-  // Filtered movements
+  // Fallbacks from embedded analytics
+  const fallbackSales = analytics?.recent_sales || [];
+  const fallbackMovements = analytics?.recent_movements || [];
+
+  // Fetch paginated sales orders on-demand from backend
+  const loadOrdersFromServer = async (pageToLoad = orderPage, sizeToLoad = orderPageSize, searchVal = orderSearch) => {
+    if (!item?.id) return;
+    setServerOrdersLoading(true);
+    try {
+      const data = await getSaleOrdersPage({
+        item: item.id,
+        page: pageToLoad,
+        page_size: sizeToLoad,
+        search: searchVal.trim(),
+      });
+      setServerOrdersData(data);
+    } catch (err) {
+      console.warn('Failed to load server-paginated sales orders:', err);
+    } finally {
+      setServerOrdersLoading(false);
+    }
+  };
+
+  // Fetch paginated stock movements on-demand from backend
+  const loadMovementsFromServer = async (pageToLoad = movementPage, sizeToLoad = movementPageSize) => {
+    if (!item?.id) return;
+    setServerMovementsLoading(true);
+    try {
+      const data = await fetchStockMovements(item.id, {
+        page: pageToLoad,
+        page_size: sizeToLoad,
+      });
+      setServerMovementsData(data);
+    } catch (err) {
+      console.warn('Failed to load server-paginated stock movements:', err);
+    } finally {
+      setServerMovementsLoading(false);
+    }
+  };
+
+  // Trigger server fetch on item, tab, page, or search change
+  useEffect(() => {
+    if (item?.id) {
+      loadOrdersFromServer(orderPage, orderPageSize, orderSearch);
+    }
+  }, [item?.id, orderPage, orderPageSize, orderSearch]);
+
+  useEffect(() => {
+    if (item?.id) {
+      loadMovementsFromServer(movementPage, movementPageSize);
+    }
+  }, [item?.id, movementPage, movementPageSize]);
+
+  // Transform server sales records into tabular format
+  const serverSalesList = useMemo(() => {
+    if (!serverOrdersData || !Array.isArray(serverOrdersData.results)) return null;
+    const rows = [];
+    serverOrdersData.results.forEach((order) => {
+      const lineItems = (order.items || []).filter((soi) => String(soi.item) === String(item.id) || String(soi.item_id) === String(item.id));
+      const dt = order.created_at ? new Date(order.created_at) : new Date();
+      const dateStr = dt.toLocaleString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const cashierName = order.cashier_name || order.cashier?.name || 'Cashier';
+
+      if (lineItems.length > 0) {
+        lineItems.forEach((si) => {
+          rows.push({
+            order_id: order.id,
+            invoice_number: order.invoice_number,
+            date: dateStr,
+            quantity: si.quantity,
+            unit_price: si.unit_selling_price,
+            discount: si.line_discount || 0,
+            total_price: si.total_price,
+            cashier_name: cashierName,
+          });
+        });
+      } else {
+        rows.push({
+          order_id: order.id,
+          invoice_number: order.invoice_number,
+          date: dateStr,
+          quantity: order.total_units || 1,
+          unit_price: order.total_amount,
+          discount: order.total_discount || 0,
+          total_price: order.final_amount,
+          cashier_name: cashierName,
+        });
+      }
+    });
+    return rows;
+  }, [serverOrdersData, item?.id]);
+
+  // Effective sales counts & rows
+  const isServerOrders = Boolean(serverOrdersData && Array.isArray(serverOrdersData.results));
+  const effectiveOrdersTotalCount = isServerOrders
+    ? (serverOrdersData.count ?? 0)
+    : fallbackSales.length;
+
+  const effectiveOrdersTotalPages = isServerOrders
+    ? (serverOrdersData.total_pages ?? 1)
+    : Math.max(1, Math.ceil(fallbackSales.length / orderPageSize));
+
+  const displaySales = isServerOrders
+    ? (serverSalesList || [])
+    : fallbackSales.slice((orderPage - 1) * orderPageSize, orderPage * orderPageSize);
+
+  // Effective movements counts & rows
+  const isServerMovements = Boolean(serverMovementsData && Array.isArray(serverMovementsData.results));
+  const effectiveMovementsTotalCount = isServerMovements
+    ? (serverMovementsData.count ?? 0)
+    : fallbackMovements.length;
+
+  const effectiveMovementsTotalPages = isServerMovements
+    ? (serverMovementsData.total_pages ?? 1)
+    : Math.max(1, Math.ceil(fallbackMovements.length / movementPageSize));
+
+  const rawServerMovements = isServerMovements
+    ? serverMovementsData.results
+    : fallbackMovements.slice((movementPage - 1) * movementPageSize, movementPage * movementPageSize);
+
   const filteredMovements = useMemo(() => {
-    if (!movementSearch.trim()) return recentMovements;
+    let list = rawServerMovements || [];
+    if (!movementSearch.trim()) return list;
     const q = movementSearch.toLowerCase();
-    return recentMovements.filter(
+    return list.filter(
       (m) =>
         (m.reason || '').toLowerCase().includes(q) ||
         (m.reason_display || '').toLowerCase().includes(q) ||
         (m.performed_by_name || '').toLowerCase().includes(q) ||
         (m.note || '').toLowerCase().includes(q)
     );
-  }, [recentMovements, movementSearch]);
+  }, [rawServerMovements, movementSearch]);
 
   // Valuation metrics
   const cost = parseFloat(item?.cost_price) || 0;
@@ -197,7 +322,7 @@ export default function ProductActivityLedgers({
             }}
           >
             <ShoppingCart size={13} />
-            <span>Recent Orders ({recentSales.length})</span>
+            <span>Orders History ({effectiveOrdersTotalCount})</span>
           </button>
 
           <button
@@ -219,7 +344,7 @@ export default function ProductActivityLedgers({
             }}
           >
             <History size={13} />
-            <span>Stock Audit Trail ({recentMovements.length})</span>
+            <span>Stock Audit Trail ({effectiveMovementsTotalCount})</span>
           </button>
 
           <button
@@ -246,11 +371,11 @@ export default function ProductActivityLedgers({
         </div>
       </div>
 
-      {/* 2. TAB 1: RECENT CUSTOMER ORDERS */}
+      {/* 2. TAB 1: CUSTOMER ORDERS */}
       {activeTab === 'orders' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Search bar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', maxWidth: '320px', width: '100%' }}>
               <Search
                 size={14}
@@ -266,7 +391,10 @@ export default function ProductActivityLedgers({
                 type="text"
                 placeholder="Search invoice or cashier..."
                 value={orderSearch}
-                onChange={(e) => setOrderSearch(e.target.value)}
+                onChange={(e) => {
+                  setOrderSearch(e.target.value);
+                  setOrderPage(1);
+                }}
                 style={{
                   width: '100%',
                   padding: '8px 12px 8px 34px',
@@ -279,9 +407,42 @@ export default function ProductActivityLedgers({
                 }}
               />
             </div>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>
-              Showing {filteredSales.length} of {recentSales.length} recent orders
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-muted, #64748B)' }}>
+                Showing{' '}
+                <strong style={{ color: 'var(--text-primary, #F8FAFC)' }}>
+                  {effectiveOrdersTotalCount === 0 ? 0 : (orderPage - 1) * orderPageSize + 1}–{Math.min(orderPage * orderPageSize, effectiveOrdersTotalCount)}
+                </strong>{' '}
+                of <strong style={{ color: 'var(--text-primary, #F8FAFC)' }}>{effectiveOrdersTotalCount}</strong> orders
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>Per page:</span>
+                <select
+                  value={orderPageSize}
+                  onChange={(e) => {
+                    setOrderPageSize(Number(e.target.value));
+                    setOrderPage(1);
+                  }}
+                  style={{
+                    height: '28px',
+                    fontSize: '0.76rem',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: 'var(--bg-main, #0B0E17)',
+                    border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
+                    color: 'var(--text-primary, #F8FAFC)',
+                    colorScheme: 'dark',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
 
           {/* Table Container */}
@@ -314,14 +475,23 @@ export default function ProductActivityLedgers({
                 </tr>
               </thead>
               <tbody>
-                {filteredSales.length === 0 ? (
+                {serverOrdersLoading ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: '#38BDF8' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <Loader2 size={16} className="spin-fast" />
+                        <span>Loading orders page {orderPage}...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : displaySales.length === 0 ? (
                   <tr>
                     <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted, #64748B)' }}>
                       No sales orders found for this product.
                     </td>
                   </tr>
                 ) : (
-                  filteredSales.map((s, idx) => (
+                  displaySales.map((s, idx) => (
                     <tr
                       key={s.order_id || idx}
                       style={{
@@ -361,14 +531,125 @@ export default function ProductActivityLedgers({
               </tbody>
             </table>
           </div>
+
+          {/* Orders Pagination Controls */}
+          {effectiveOrdersTotalCount > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderRadius: '10px',
+                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.06))',
+              }}
+            >
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #94A3B8)' }}>
+                Page <strong style={{ color: '#F8FAFC' }}>{orderPage}</strong> of{' '}
+                <strong style={{ color: '#F8FAFC' }}>{effectiveOrdersTotalPages}</strong> ({effectiveOrdersTotalCount} total orders)
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setOrderPage(1)}
+                  disabled={orderPage === 1 || serverOrdersLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: orderPage === 1 || serverOrdersLoading ? 0.4 : 1,
+                    cursor: orderPage === 1 || serverOrdersLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="First Page"
+                >
+                  <ChevronsLeft size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderPage((p) => Math.max(1, p - 1))}
+                  disabled={orderPage === 1 || serverOrdersLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: orderPage === 1 || serverOrdersLoading ? 0.4 : 1,
+                    cursor: orderPage === 1 || serverOrdersLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Previous Page"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <span
+                  style={{
+                    padding: '0 8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary, #F8FAFC)',
+                  }}
+                >
+                  {orderPage} / {effectiveOrdersTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOrderPage((p) => Math.min(effectiveOrdersTotalPages, p + 1))}
+                  disabled={orderPage >= effectiveOrdersTotalPages || serverOrdersLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: orderPage >= effectiveOrdersTotalPages || serverOrdersLoading ? 0.4 : 1,
+                    cursor: orderPage >= effectiveOrdersTotalPages || serverOrdersLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Next Page"
+                >
+                  <ChevronRight size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderPage(effectiveOrdersTotalPages)}
+                  disabled={orderPage >= effectiveOrdersTotalPages || serverOrdersLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: orderPage >= effectiveOrdersTotalPages || serverOrdersLoading ? 0.4 : 1,
+                    cursor: orderPage >= effectiveOrdersTotalPages || serverOrdersLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Last Page"
+                >
+                  <ChevronsRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* 3. TAB 2: INVENTORY MOVEMENT & AUDIT TRAIL */}
       {activeTab === 'movements' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* Search bar */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          {/* Search and Action bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', maxWidth: '320px', width: '100%' }}>
               <Search
                 size={14}
@@ -384,7 +665,10 @@ export default function ProductActivityLedgers({
                 type="text"
                 placeholder="Search reason or staff..."
                 value={movementSearch}
-                onChange={(e) => setMovementSearch(e.target.value)}
+                onChange={(e) => {
+                  setMovementSearch(e.target.value);
+                  setMovementPage(1);
+                }}
                 style={{
                   width: '100%',
                   padding: '8px 12px 8px 34px',
@@ -397,17 +681,49 @@ export default function ProductActivityLedgers({
                 }}
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>
-                Showing {filteredMovements.length} audit movement logs
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.76rem', color: 'var(--text-muted, #64748B)' }}>
+                Showing{' '}
+                <strong style={{ color: 'var(--text-primary, #F8FAFC)' }}>
+                  {filteredMovements.length === 0 ? 0 : (movementPage - 1) * movementPageSize + 1}–{Math.min(movementPage * movementPageSize, filteredMovements.length)}
+                </strong>{' '}
+                of <strong style={{ color: 'var(--text-primary, #F8FAFC)' }}>{filteredMovements.length}</strong> logs
+                {filteredMovements.length !== recentMovements.length && ` (filtered from ${recentMovements.length})`}
               </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>Per page:</span>
+                <select
+                  value={movementPageSize}
+                  onChange={(e) => {
+                    setMovementPageSize(Number(e.target.value));
+                    setMovementPage(1);
+                  }}
+                  style={{
+                    height: '28px',
+                    fontSize: '0.76rem',
+                    padding: '2px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: 'var(--bg-main, #0B0E17)',
+                    border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
+                    color: 'var(--text-primary, #F8FAFC)',
+                    colorScheme: 'dark',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   if (filteredMovements.length === 0) return;
                   const headers = ['Date & Time', 'Product Name', 'UID', 'Reason', 'Change (Units)', 'Performed By', 'Role', 'Notes'];
                   const rows = filteredMovements.map((m) => {
-                    const dt = m.created_at ? new Date(m.created_at).toLocaleString('en-IN') : '';
+                    const dt = m.created_at || m.timestamp ? new Date(m.created_at || m.timestamp).toLocaleString('en-IN') : '';
                     const perfName = m.performed_by_name || 'Owner / Admin';
                     const perfRole = m.performed_by_role || 'Owner';
                     return [
@@ -478,7 +794,16 @@ export default function ProductActivityLedgers({
                 </tr>
               </thead>
               <tbody>
-                {filteredMovements.length === 0 ? (
+                {serverMovementsLoading ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '36px', textAlign: 'center', color: '#38BDF8' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                        <Loader2 size={16} className="spin-fast" />
+                        <span>Loading audit logs page {movementPage}...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredMovements.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted, #64748B)' }}>
                       No stock movement audit entries recorded yet.
@@ -547,6 +872,117 @@ export default function ProductActivityLedgers({
               </tbody>
             </table>
           </div>
+
+          {/* Movements Pagination Controls */}
+          {effectiveMovementsTotalCount > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                padding: '10px 14px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderRadius: '10px',
+                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.06))',
+              }}
+            >
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary, #94A3B8)' }}>
+                Page <strong style={{ color: '#F8FAFC' }}>{movementPage}</strong> of{' '}
+                <strong style={{ color: '#F8FAFC' }}>{effectiveMovementsTotalPages}</strong> ({effectiveMovementsTotalCount} total logs)
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setMovementPage(1)}
+                  disabled={movementPage === 1 || serverMovementsLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: movementPage === 1 || serverMovementsLoading ? 0.4 : 1,
+                    cursor: movementPage === 1 || serverMovementsLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="First Page"
+                >
+                  <ChevronsLeft size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMovementPage((p) => Math.max(1, p - 1))}
+                  disabled={movementPage === 1 || serverMovementsLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: movementPage === 1 || serverMovementsLoading ? 0.4 : 1,
+                    cursor: movementPage === 1 || serverMovementsLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Previous Page"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <span
+                  style={{
+                    padding: '0 8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary, #F8FAFC)',
+                  }}
+                >
+                  {movementPage} / {effectiveMovementsTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMovementPage((p) => Math.min(effectiveMovementsTotalPages, p + 1))}
+                  disabled={movementPage >= effectiveMovementsTotalPages || serverMovementsLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: movementPage >= effectiveMovementsTotalPages || serverMovementsLoading ? 0.4 : 1,
+                    cursor: movementPage >= effectiveMovementsTotalPages || serverMovementsLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Next Page"
+                >
+                  <ChevronRight size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMovementPage(effectiveMovementsTotalPages)}
+                  disabled={movementPage >= effectiveMovementsTotalPages || serverMovementsLoading}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: movementPage >= effectiveMovementsTotalPages || serverMovementsLoading ? 0.4 : 1,
+                    cursor: movementPage >= effectiveMovementsTotalPages || serverMovementsLoading ? 'not-allowed' : 'pointer',
+                  }}
+                  title="Last Page"
+                >
+                  <ChevronsRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

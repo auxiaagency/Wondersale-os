@@ -33,7 +33,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
-from .dashboard_services import get_dashboard_analytics, get_product_analytics, get_expiry_analytics
+from .dashboard_services import (
+    get_dashboard_analytics,
+    get_product_analytics,
+    get_expiry_analytics,
+    get_product_peer_rankings,
+)
 
 from .models import (
     Store,
@@ -800,7 +805,7 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='stock-movements')
     def stock_movements(self, request, pk=None):
-        """Fetches the audit history ledger of stock movements for this item."""
+        """Fetches the audit history ledger of stock movements for this item with optional pagination."""
         item = self.get_object()
         qs = item.stock_movements.all()
         start_time = parse_filter_datetime(request.query_params.get('start_time'))
@@ -809,7 +814,14 @@ class ItemViewSet(viewsets.ModelViewSet):
             qs = qs.filter(created_at__gte=start_time)
         if end_time:
             qs = qs.filter(created_at__lte=end_time)
-        serializer = StockMovementSerializer(qs.order_by('-created_at'), many=True)
+        qs = qs.order_by('-created_at')
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = StockMovementSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = StockMovementSerializer(qs, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser, JSONParser], url_path='report-broken')
@@ -848,6 +860,49 @@ class ItemViewSet(viewsets.ModelViewSet):
         """
         item = self.get_object()
         data = get_product_analytics(item, request=request)
+        return Response(data)
+
+    @action(detail=True, methods=['get'], url_path='peer-rankings')
+    def peer_rankings(self, request, pk=None):
+        """
+        Server-side paginated peer ranking standings for this item.
+        Accepts:
+        - scope_type: 'all' | 'category' | 'subcategory' | 'supplier' (default: 'all')
+        - scope_id: int ID of category/subcategory/supplier if applicable
+        - metric: 'revenue' | 'profit' | 'units_sold' | 'margin_pct' | 'markup_pct' | 'velocity' | 'stock'
+        - sort_ascending: 'true' | 'false' (default: false)
+        - search: optional string search filter
+        - page: int page number
+        - page_size: int items per page (default: 15)
+        - auto_target: 'true' | 'false' (default: true; if page not provided, serves page containing item)
+        """
+        item = self.get_object()
+        scope_type = request.query_params.get('scope_type') or request.query_params.get('scope') or 'all'
+        scope_id = request.query_params.get('scope_id')
+        if scope_id and str(scope_id).isdigit():
+            scope_id = int(scope_id)
+        else:
+            scope_id = None
+
+        metric = request.query_params.get('metric', 'revenue')
+        sort_ascending = request.query_params.get('sort_ascending') in ('true', '1', 'True')
+        search_query = request.query_params.get('search', '').strip()
+        page = request.query_params.get('page')
+        page_size = request.query_params.get('page_size', 15)
+        auto_target = request.query_params.get('auto_target', 'true') in ('true', '1', 'True')
+
+        data = get_product_peer_rankings(
+            item=item,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            metric=metric,
+            sort_ascending=sort_ascending,
+            search_query=search_query,
+            page=page,
+            page_size=page_size,
+            auto_target_item=auto_target,
+            request=request,
+        )
         return Response(data)
 
     @action(detail=False, methods=['get'], url_path='check-uid')
@@ -2750,6 +2805,10 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         customer_id = self.request.query_params.get('customer')
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
+
+        item_filter = self.request.query_params.get('item') or self.request.query_params.get('item_id')
+        if item_filter:
+            qs = qs.filter(items__item_id=item_filter).distinct()
 
         cashier_id = self.request.query_params.get('cashier') or self.request.query_params.get('cashier_id')
         if cashier_id:

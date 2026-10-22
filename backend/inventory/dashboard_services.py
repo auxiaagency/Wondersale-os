@@ -1,3 +1,4 @@
+import math
 import calendar
 from datetime import datetime, time, date, timedelta
 from decimal import Decimal
@@ -820,23 +821,22 @@ def get_product_analytics(item: Item, request=None):
         date_sales_map[d_key]['revenue'] += rev
         date_sales_map[d_key]['discount'] += line_discount
 
-        if len(recent_sales) < 15:
-            cashier_name = ""
-            if si.sale_order.cashier:
-                cashier_name = getattr(si.sale_order.cashier, 'name', '') or str(si.sale_order.cashier)
-            recent_sales.append({
-                'order_id': si.sale_order.id,
-                'invoice_number': si.sale_order.invoice_number,
-                'timestamp': dt.isoformat(),
-                'date': dt.strftime('%Y-%m-%d %H:%M'),
-                'quantity': qty,
-                'unit_price': float(si.unit_selling_price),
-                'mrp': float(mrp_val),
-                'discount': float(line_discount),
-                'has_discount': line_discount > 0,
-                'total_price': float(rev),
-                'cashier_name': cashier_name or 'Cashier',
-            })
+        cashier_name = ""
+        if si.sale_order.cashier:
+            cashier_name = getattr(si.sale_order.cashier, 'name', '') or str(si.sale_order.cashier)
+        recent_sales.append({
+            'order_id': si.sale_order.id,
+            'invoice_number': si.sale_order.invoice_number,
+            'timestamp': dt.isoformat(),
+            'date': dt.strftime('%Y-%m-%d %H:%M'),
+            'quantity': qty,
+            'unit_price': float(si.unit_selling_price),
+            'mrp': float(mrp_val),
+            'discount': float(line_discount),
+            'has_discount': line_discount > 0,
+            'total_price': float(rev),
+            'cashier_name': cashier_name or 'Cashier',
+        })
 
     total_profit = total_revenue - total_cost
     margin_pct = round(float((total_profit / total_revenue) * 100), 2) if total_revenue > 0 else 0.0
@@ -1207,9 +1207,9 @@ def get_product_analytics(item: Item, request=None):
 
     timeline_year = list(years_dict.values())
 
-    # Recent Stock Movements
+    # Stock Movements (all movements, newest first)
     recent_movements = []
-    for sm in reversed(all_movements[-20:]):
+    for sm in reversed(all_movements):
         recent_movements.append({
             'id': sm.id,
             'timestamp': sm.created_at.isoformat(),
@@ -1537,4 +1537,158 @@ def get_product_analytics(item: Item, request=None):
         },
         'recent_sales': recent_sales,
         'recent_movements': recent_movements,
+    }
+
+
+def get_product_peer_rankings(
+    item,
+    scope_type='all',
+    scope_id=None,
+    metric='revenue',
+    sort_ascending=False,
+    search_query='',
+    page=None,
+    page_size=15,
+    auto_target_item=True,
+    request=None
+):
+    """
+    Dedicated server-side paginated endpoint for product peer group rankings.
+    Computes rankings across the scoped catalog, determines the exact rank of the current item,
+    and returns a paginated page (default 15 items per page) without transmitting thousands of items.
+    If page is not specified and auto_target_item is True, calculates the exact page containing
+    the current item and serves it.
+    """
+    store_filter = Q(store_id=item.store_id) if item.store_id else Q()
+    base_catalog = Item.objects.filter(store_filter)
+
+    # Filter base pool by scope
+    if scope_type == 'category' and scope_id:
+        base_catalog = base_catalog.filter(subcategories__category_id=scope_id).distinct()
+    elif scope_type == 'subcategory' and scope_id:
+        base_catalog = base_catalog.filter(subcategories__id=scope_id).distinct()
+    elif scope_type == 'supplier':
+        target_supplier_id = scope_id or (item.supplier_id if item.supplier else None)
+        if target_supplier_id:
+            base_catalog = base_catalog.filter(supplier_id=target_supplier_id)
+
+    # Ensure current item is in the pool if active
+    catalog_items = list(base_catalog.values(
+        'id', 'uid', 'name', 'cost_price', 'selling_price', 'quantity', 'created_at', 'supplier_id', 'supplier__name'
+    ))
+
+    # Pre-fetch completed sales by item for this catalog
+    catalog_sales_map = {}
+    catalog_so_qs = SaleOrderItem.objects.filter(
+        sale_order__status='completed',
+        item__in=[it['id'] for it in catalog_items]
+    ).exclude(sale_order__invoice_number__startswith='RET-')
+
+    for agg in catalog_so_qs.values('item_id').annotate(
+        tot_units=Sum('quantity'),
+        tot_rev=Sum('total_price')
+    ):
+        catalog_sales_map[agg['item_id']] = {
+            'units': agg['tot_units'] or 0,
+            'revenue': float(agg['tot_rev'] or 0.0),
+        }
+
+    now_date = timezone.now().date()
+    computed_pool = []
+    for cit in catalog_items:
+        s_data = catalog_sales_map.get(cit['id'], {'units': 0, 'revenue': 0.0})
+        u_sold = s_data['units']
+        rev = s_data['revenue']
+        c_price = float(cit['cost_price'])
+        s_price = float(cit['selling_price'])
+        profit = round(rev - (c_price * u_sold), 2)
+        m_pct = round(((s_price - c_price) / s_price * 100), 2) if s_price > 0 else 0.0
+        markup_pct = round(((s_price - c_price) / c_price * 100), 2) if c_price > 0 else 0.0
+        c_days = max(1, (now_date - cit['created_at'].date()).days + 1)
+        velocity = round(u_sold / c_days, 2)
+
+        computed_pool.append({
+            'id': cit['id'],
+            'uid': cit['uid'],
+            'name': cit['name'],
+            'stock': cit['quantity'],
+            'cost_price': c_price,
+            'selling_price': s_price,
+            'units_sold': u_sold,
+            'revenue': rev,
+            'profit': profit,
+            'margin_pct': m_pct,
+            'markup_pct': markup_pct,
+            'velocity': velocity,
+            'supplier_id': cit['supplier_id'],
+            'supplier_name': cit['supplier__name'] or '',
+            'is_current': cit['id'] == item.id,
+        })
+
+    # Search filter if provided
+    if search_query:
+        q_lower = search_query.strip().lower()
+        computed_pool = [
+            x for x in computed_pool
+            if q_lower in (x['name'] or '').lower() or q_lower in (x['uid'] or '').lower()
+        ]
+
+    # Map metric to sort key
+    metric_map = {
+        'revenue': 'revenue',
+        'profit': 'profit',
+        'units_sold': 'units_sold',
+        'units': 'units_sold',
+        'margin_pct': 'margin_pct',
+        'margin': 'margin_pct',
+        'markup_pct': 'markup_pct',
+        'markup': 'markup_pct',
+        'velocity': 'velocity',
+        'stock': 'stock',
+    }
+    sort_key = metric_map.get(metric, 'revenue')
+
+    # Sort
+    computed_pool.sort(key=lambda x: x.get(sort_key, 0) or 0, reverse=not sort_ascending)
+
+    # Attach 1-based display rank (support both 'rank' and 'displayRank')
+    for idx, entry in enumerate(computed_pool, start=1):
+        entry['displayRank'] = idx
+        entry['rank'] = idx
+
+    total_count = len(computed_pool)
+    page_size = max(1, min(int(page_size or 15), 500))
+    total_pages = max(1, math.ceil(total_count / page_size)) if total_count > 0 else 1
+
+    # Locate current item index (0-based)
+    current_product_index = next((idx for idx, x in enumerate(computed_pool) if x['is_current']), -1)
+    current_product_rank = current_product_index + 1 if current_product_index != -1 else None
+
+    # Determine which page to serve
+    if page is not None and str(page).isdigit():
+        target_page = int(page)
+    elif auto_target_item and current_product_index != -1:
+        target_page = (current_product_index // page_size) + 1
+    else:
+        target_page = 1
+
+    target_page = max(1, min(target_page, total_pages))
+
+    # Slice page
+    start_idx = (target_page - 1) * page_size
+    end_idx = start_idx + page_size
+    page_results = computed_pool[start_idx:end_idx]
+
+    return {
+        'count': total_count,
+        'total_pages': total_pages,
+        'current_page': target_page,
+        'page_size': page_size,
+        'current_product_rank': current_product_rank,
+        'current_product_index': current_product_index,
+        'metric': metric,
+        'sort_ascending': sort_ascending,
+        'scope_type': scope_type,
+        'scope_id': scope_id,
+        'results': page_results,
     }

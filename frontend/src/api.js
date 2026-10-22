@@ -709,6 +709,19 @@ export async function fetchProductAnalytics(id) {
   return res.json();
 }
 
+export async function fetchProductPeerRankings(id, params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') query.append(k, v);
+  });
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  const res = await fetch(`${API_BASE}/items/${id}/peer-rankings/${qs}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch peer rankings for item ${id}`);
+  return res.json();
+}
+
 export async function createItem(data) {
   const res = await fetch(`${API_BASE}/items/`, {
     method: 'POST',
