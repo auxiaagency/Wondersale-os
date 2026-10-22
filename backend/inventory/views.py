@@ -4874,6 +4874,16 @@ class DashboardAnalyticsView(APIView):
     """
     API endpoint to retrieve retail dashboard analytics for a given date range.
     Accepts start_date/end_date (YYYY-MM-DD) as primary params; falls back to year/month.
+    
+    Supports server-side lazy pagination per section:
+    - section: 'overview' | 'best_selling' | 'low_selling' | 'fast_movers' | 'stock_depletion'
+    - page: int (1-indexed)
+    - page_size: int (e.g. 10, 25, 50, 100)
+    - sort: str (e.g. 'units_sold', 'revenue', 'gross_profit', 'tied_capital', 'urgency', etc.)
+    - filter: str (e.g. 'all', 'dead', 'slow', 'out', 'critical', 'depleting')
+    - search: str (text search by name or uid)
+    
+    When section is omitted or 'all', returns full payload for complete backward compatibility.
     """
     def get(self, request, *args, **kwargs):
         store_id = request.query_params.get('store_id')
@@ -4889,7 +4899,150 @@ class DashboardAnalyticsView(APIView):
             year=year,
             month=month,
         )
-        return Response(data, status=status.HTTP_200_OK)
+
+        section = request.query_params.get('section', '').strip().lower()
+        if not section or section in ('all', 'full'):
+            return Response(data, status=status.HTTP_200_OK)
+
+        # Overview section: Return KPI metrics, charts, timeline, and counts without sending full product arrays
+        if section == 'overview':
+            fast_movers_count = len([p for p in data.get('best_selling_products', []) if (p.get('units_sold') or 0) > 0])
+            return Response({
+                'meta': data.get('meta', {}),
+                'overview': data.get('overview', {}),
+                'category_analytics': data.get('category_analytics', []),
+                'subcategory_analytics': data.get('subcategory_analytics', []),
+                'daily_timeline': data.get('daily_timeline', []),
+                'counts': {
+                    'best_selling_total': len(data.get('best_selling_products', [])),
+                    'low_selling_total': len(data.get('low_selling_products', [])),
+                    'fast_movers_total': fast_movers_count,
+                    'stock_depletion_total': len(data.get('stock_depletion_products', [])),
+                }
+            }, status=status.HTTP_200_OK)
+
+        # Handle paginated product sections
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (ValueError, TypeError):
+            page = 1
+
+        try:
+            page_size = max(1, min(200, int(request.query_params.get('page_size', 10))))
+        except (ValueError, TypeError):
+            page_size = 10
+
+        search_q = request.query_params.get('search', '').strip().lower()
+        sort_by = request.query_params.get('sort', '').strip()
+        filter_val = request.query_params.get('filter', '').strip().lower()
+
+        items = []
+
+        if section in ('best_selling', 'bestsellers'):
+            items = list(data.get('best_selling_products', []))
+            if search_q:
+                items = [p for p in items if search_q in (p.get('name') or '').lower() or search_q in (p.get('uid') or '').lower()]
+            if sort_by == 'units_sold':
+                items.sort(key=lambda p: p.get('units_sold') or 0, reverse=True)
+            elif sort_by == 'revenue':
+                items.sort(key=lambda p: p.get('revenue') or 0, reverse=True)
+            elif sort_by == 'gross_profit':
+                items.sort(key=lambda p: p.get('gross_profit') or 0, reverse=True)
+
+        elif section in ('low_selling', 'slow_moving'):
+            items = list(data.get('low_selling_products', []))
+            if filter_val == 'dead':
+                items = [p for p in items if (p.get('units_sold') or 0) == 0]
+            elif filter_val == 'slow':
+                items = [p for p in items if (p.get('units_sold') or 0) > 0]
+            if search_q:
+                items = [p for p in items if search_q in (p.get('name') or '').lower() or search_q in (p.get('uid') or '').lower()]
+            if sort_by == 'tied_capital':
+                items.sort(key=lambda p: (p.get('current_stock') or 0) * (p.get('unit_cost_price') or p.get('cost_price') or 0), reverse=True)
+            elif sort_by == 'quantity':
+                items.sort(key=lambda p: p.get('current_stock') or 0, reverse=True)
+            elif sort_by == 'revenue':
+                items.sort(key=lambda p: p.get('revenue_generated') or p.get('revenue') or 0)
+
+        elif section in ('fast_movers', 'fast_moving'):
+            days_in_period = data.get('meta', {}).get('days_in_period', 30)
+            elapsed = data.get('meta', {}).get('elapsed_days', 0)
+            velocity_days = elapsed if elapsed > 0 else days_in_period
+            base_best = [p for p in data.get('best_selling_products', []) if (p.get('units_sold') or 0) > 0]
+            for p in base_best:
+                u_sold = p.get('units_sold') or 0
+                vel = round(u_sold / float(velocity_days), 2)
+                stock_left = p.get('current_stock') or 0
+                days_left = round(stock_left / vel) if (stock_left > 0 and vel > 0) else None
+                item_copy = dict(p)
+                item_copy['daily_velocity'] = vel
+                item_copy['est_days_left'] = days_left
+                items.append(item_copy)
+
+            if search_q:
+                items = [p for p in items if search_q in (p.get('name') or '').lower() or search_q in (p.get('uid') or '').lower()]
+            if sort_by == 'units_sold':
+                items.sort(key=lambda p: p.get('units_sold') or 0, reverse=True)
+            elif sort_by == 'revenue':
+                items.sort(key=lambda p: p.get('revenue') or 0, reverse=True)
+            elif sort_by == 'velocity':
+                items.sort(key=lambda p: p.get('daily_velocity') or 0, reverse=True)
+            else:
+                items.sort(key=lambda p: p.get('daily_velocity') or 0, reverse=True)
+
+        elif section in ('stock_depletion', 'out_of_stock'):
+            urgency_rank = {'out_of_stock': 0, 'critically_low': 1, 'depleting_fast': 2, 'low_stock': 3, 'healthy': 4}
+            base_depletion = []
+            for p in data.get('stock_depletion_products', []):
+                stock_qty = p.get('current_stock') or 0
+                units = p.get('units_sold') or p.get('units_sold_this_month') or 0
+                status_key = p.get('stock_status') or p.get('status')
+                if not status_key:
+                    if stock_qty <= 0:
+                        status_key = 'out_of_stock'
+                    elif stock_qty <= 5:
+                        status_key = 'critically_low'
+                    elif units >= 5:
+                        status_key = 'depleting_fast'
+                    else:
+                        status_key = 'low_stock'
+                item_copy = dict(p)
+                item_copy['stock_status'] = status_key
+                item_copy['units_sold'] = units
+                base_depletion.append(item_copy)
+
+            if filter_val == 'out':
+                base_depletion = [p for p in base_depletion if p.get('stock_status') == 'out_of_stock' or (p.get('current_stock') or 0) <= 0]
+            elif filter_val == 'critical':
+                base_depletion = [p for p in base_depletion if p.get('stock_status') == 'critically_low' or (0 < (p.get('current_stock') or 0) <= 5)]
+            elif filter_val == 'depleting':
+                base_depletion = [p for p in base_depletion if p.get('stock_status') == 'depleting_fast']
+
+            if search_q:
+                base_depletion = [p for p in base_depletion if search_q in (p.get('name') or '').lower() or search_q in (p.get('uid') or '').lower()]
+
+            if sort_by == 'urgency':
+                base_depletion.sort(key=lambda p: urgency_rank.get(p.get('stock_status'), 5))
+            elif sort_by == 'units_sold':
+                base_depletion.sort(key=lambda p: p.get('units_sold') or 0, reverse=True)
+            elif sort_by == 'stock':
+                base_depletion.sort(key=lambda p: p.get('current_stock') or 0)
+            items = base_depletion
+
+        total_count = len(items)
+        import math
+        total_pages = max(1, math.ceil(total_count / float(page_size)))
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paged_results = items[start_idx:end_idx]
+
+        return Response({
+            'count': total_count,
+            'total_pages': total_pages,
+            'current_page': page,
+            'page_size': page_size,
+            'results': paged_results,
+        }, status=status.HTTP_200_OK)
 
 
 class ExpiryAnalyticsView(APIView):

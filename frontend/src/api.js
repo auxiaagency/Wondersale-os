@@ -1733,12 +1733,19 @@ export async function settleRegisterDiscrepancy(id, data) {
   return res.json();
 }
 
-export async function fetchDashboardAnalytics(storeId, startDate, endDate) {
+export async function fetchDashboardAnalytics(storeId, startDate, endDate, extraParams = {}) {
   let url = `${API_BASE}/dashboard-analytics/`;
   const params = [];
   if (storeId && storeId !== 'all') params.push(`store_id=${encodeURIComponent(storeId)}`);
   if (startDate) params.push(`start_date=${encodeURIComponent(startDate)}`);
   if (endDate) params.push(`end_date=${encodeURIComponent(endDate)}`);
+  if (extraParams && typeof extraParams === 'object') {
+    Object.entries(extraParams).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        params.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+      }
+    });
+  }
   if (params.length > 0) {
     url += `?${params.join('&')}`;
   }
@@ -1748,6 +1755,17 @@ export async function fetchDashboardAnalytics(storeId, startDate, endDate) {
     throw new Error(err.error || err.detail || 'Failed to load dashboard analytics');
   }
   return await res.json();
+}
+
+export async function fetchDashboardSectionPage(section, { storeId, startDate, endDate, page = 1, pageSize = 10, sort = '', filter = '', search = '' } = {}) {
+  return fetchDashboardAnalytics(storeId, startDate, endDate, {
+    section,
+    page,
+    page_size: pageSize,
+    sort,
+    filter,
+    search,
+  });
 }
 
 export async function fetchExpiryAnalytics(storeId) {

@@ -13,6 +13,7 @@ import TimelineRangeSelector, { calculateDatesForDuration, formatDateYMD } from 
 import FineEmployeeModal from './FineEmployeeModal';
 import {
   fetchDashboardAnalytics,
+  fetchDashboardSectionPage,
   fetchExpiryAnalytics,
   fetchStores,
   fetchDailyAttendance,
@@ -535,12 +536,13 @@ export default function DashboardView({
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const rangeInitRef = useRef(false);
 
-  // ── Per-module state ──
+  // ── Per-module state (with Server-Side Lazy Pagination) ──
   // Best-Selling
   const [bsSort, setBsSort] = useState('units_sold');
   const [bsPage, setBsPage] = useState(1);
   const [bsPageSize, setBsPageSize] = useState(10);
   const [bsSearch, setBsSearch] = useState('');
+  const [bsServerData, setBsServerData] = useState({ results: [], count: 0, loading: false });
 
   // Slow-Moving
   const [smFilter, setSmFilter] = useState('all'); // all | dead | slow
@@ -548,12 +550,14 @@ export default function DashboardView({
   const [smPage, setSmPage] = useState(1);
   const [smPageSize, setSmPageSize] = useState(10);
   const [smSearch, setSmSearch] = useState('');
+  const [smServerData, setSmServerData] = useState({ results: [], count: 0, loading: false });
 
   // Fast-Moving
   const [fmSort, setFmSort] = useState('units_sold');
   const [fmPage, setFmPage] = useState(1);
   const [fmPageSize, setFmPageSize] = useState(10);
   const [fmSearch, setFmSearch] = useState('');
+  const [fmServerData, setFmServerData] = useState({ results: [], count: 0, loading: false });
 
   // Out-of-Stock
   const [oosFilter, setOosFilter] = useState('all'); // all | out | critical | depleting
@@ -561,6 +565,7 @@ export default function DashboardView({
   const [oosPage, setOosPage] = useState(1);
   const [oosPageSize, setOosPageSize] = useState(10);
   const [oosSearch, setOosSearch] = useState('');
+  const [oosServerData, setOosServerData] = useState({ results: [], count: 0, loading: false });
 
   // Expiry
   const [exFilter, setExFilter] = useState('all'); // all | expired | critical | warning | notice | ok
@@ -742,7 +747,7 @@ export default function DashboardView({
     fetchStores().then((s) => setStores(s || [])).catch(() => {});
   }, []);
 
-  // ── Fetch main analytics ──
+  // ── Fetch main analytics (Overview & charts) ──
   const loadAnalytics = useCallback(async (store, range) => {
     setLoading(true);
     setError(null);
@@ -750,14 +755,142 @@ export default function DashboardView({
       const d = await fetchDashboardAnalytics(store, range.startDate, range.endDate);
       setData(d);
       setLastRefreshed(new Date());
-      // Reset pages
-      setBsPage(1); setSmPage(1); setFmPage(1); setOosPage(1);
     } catch (e) {
       setError(e.message || 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // ── Lazy load Section 1: Best-Selling Products ──
+  useEffect(() => {
+    let isMounted = true;
+    setBsServerData((prev) => ({ ...prev, loading: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchDashboardSectionPage('best_selling', {
+          storeId: activeStore,
+          startDate: rangeConfig.startDate,
+          endDate: rangeConfig.endDate,
+          page: bsPage,
+          pageSize: bsPageSize,
+          sort: bsSort,
+          search: bsSearch,
+        });
+        if (isMounted && res) {
+          setBsServerData({
+            results: Array.isArray(res.results) ? res.results : (Array.isArray(res) ? res : []),
+            count: typeof res.count === 'number' ? res.count : (res.results?.length || 0),
+            loading: false,
+          });
+        }
+      } catch (err) {
+        if (isMounted) setBsServerData((prev) => ({ ...prev, loading: false }));
+      }
+    }, bsSearch ? 300 : 0);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [activeStore, rangeConfig.startDate, rangeConfig.endDate, bsPage, bsPageSize, bsSort, bsSearch]);
+
+  // ── Lazy load Section 2: Slow-Moving Products ──
+  useEffect(() => {
+    let isMounted = true;
+    setSmServerData((prev) => ({ ...prev, loading: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchDashboardSectionPage('low_selling', {
+          storeId: activeStore,
+          startDate: rangeConfig.startDate,
+          endDate: rangeConfig.endDate,
+          page: smPage,
+          pageSize: smPageSize,
+          sort: smSort,
+          filter: smFilter,
+          search: smSearch,
+        });
+        if (isMounted && res) {
+          setSmServerData({
+            results: Array.isArray(res.results) ? res.results : (Array.isArray(res) ? res : []),
+            count: typeof res.count === 'number' ? res.count : (res.results?.length || 0),
+            loading: false,
+          });
+        }
+      } catch (err) {
+        if (isMounted) setSmServerData((prev) => ({ ...prev, loading: false }));
+      }
+    }, smSearch ? 300 : 0);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [activeStore, rangeConfig.startDate, rangeConfig.endDate, smPage, smPageSize, smSort, smFilter, smSearch]);
+
+  // ── Lazy load Section 3: Fast-Moving Inventory ──
+  useEffect(() => {
+    let isMounted = true;
+    setFmServerData((prev) => ({ ...prev, loading: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchDashboardSectionPage('fast_movers', {
+          storeId: activeStore,
+          startDate: rangeConfig.startDate,
+          endDate: rangeConfig.endDate,
+          page: fmPage,
+          pageSize: fmPageSize,
+          sort: fmSort,
+          search: fmSearch,
+        });
+        if (isMounted && res) {
+          setFmServerData({
+            results: Array.isArray(res.results) ? res.results : (Array.isArray(res) ? res : []),
+            count: typeof res.count === 'number' ? res.count : (res.results?.length || 0),
+            loading: false,
+          });
+        }
+      } catch (err) {
+        if (isMounted) setFmServerData((prev) => ({ ...prev, loading: false }));
+      }
+    }, fmSearch ? 300 : 0);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [activeStore, rangeConfig.startDate, rangeConfig.endDate, fmPage, fmPageSize, fmSort, fmSearch]);
+
+  // ── Lazy load Section 4: Out of Stock & Critically Low ──
+  useEffect(() => {
+    let isMounted = true;
+    setOosServerData((prev) => ({ ...prev, loading: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchDashboardSectionPage('stock_depletion', {
+          storeId: activeStore,
+          startDate: rangeConfig.startDate,
+          endDate: rangeConfig.endDate,
+          page: oosPage,
+          pageSize: oosPageSize,
+          sort: oosSort,
+          filter: oosFilter,
+          search: oosSearch,
+        });
+        if (isMounted && res) {
+          setOosServerData({
+            results: Array.isArray(res.results) ? res.results : (Array.isArray(res) ? res : []),
+            count: typeof res.count === 'number' ? res.count : (res.results?.length || 0),
+            loading: false,
+          });
+        }
+      } catch (err) {
+        if (isMounted) setOosServerData((prev) => ({ ...prev, loading: false }));
+      }
+    }, oosSearch ? 300 : 0);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [activeStore, rangeConfig.startDate, rangeConfig.endDate, oosPage, oosPageSize, oosSort, oosFilter, oosSearch]);
 
   // ── Fetch expiry ──
   const loadExpiry = useCallback(async (store) => {
@@ -2634,8 +2767,8 @@ export default function DashboardView({
           icon={TrendingUp}
           title="Best-Selling Products"
           subtitle={`Top performers by sales in ${rangeConfig.label || 'selected period'}`}
-          count={bestSellersFiltered.length}
-          loading={loading}
+          count={bsServerData.count || bestSellersFiltered.length}
+          loading={loading && !bsServerData.results.length}
           error={error}
         >
           {/* Controls */}
@@ -2652,7 +2785,12 @@ export default function DashboardView({
             <SearchInput value={bsSearch} onChange={(v) => { setBsSearch(v); setBsPage(1); }} placeholder="Search products…" />
           </div>
 
-          {bestSellersFiltered.length === 0 ? (
+          {bsServerData.loading && !bsServerData.results.length ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <RefreshCw size={20} className="spin" style={{ display: 'inline-block', marginBottom: 8, color: 'var(--brand-primary)' }} />
+              <div style={{ fontSize: '12px' }}>Loading best-sellers…</div>
+            </div>
+          ) : (bsServerData.count === 0 && !bsServerData.loading) ? (
             <EmptyState message="No sales data found for the selected period." icon={TrendingUp} />
           ) : (
             <>
@@ -2671,7 +2809,7 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(bestSellersFiltered, bsPage, bsPageSize).map((p, i) => {
+                  {(bsServerData.results.length > 0 ? bsServerData.results : paginate(bestSellersFiltered, bsPage, bsPageSize)).map((p, i) => {
                     const rank = (bsPage - 1) * bsPageSize + i + 1;
                     const margin = p.revenue > 0 ? ((p.gross_profit || 0) / p.revenue) * 100 : 0;
                     const stockStatus = p.current_stock <= 0 ? 'out_of_stock'
@@ -2713,7 +2851,7 @@ export default function DashboardView({
               </TableScroll>
               <Paginator
                 page={bsPage}
-                total={bestSellersFiltered.length}
+                total={bsServerData.count || bestSellersFiltered.length}
                 pageSize={bsPageSize}
                 onPageSizeChange={setBsPageSize}
                 onChange={setBsPage}
@@ -2728,8 +2866,8 @@ export default function DashboardView({
           icon={TrendingDown}
           title="Slow-Moving & Dead Stock"
           subtitle="Products with little or no sales — capital tied up in idle inventory"
-          count={slowMovingFiltered.length}
-          loading={loading}
+          count={smServerData.count || slowMovingFiltered.length}
+          loading={loading && !smServerData.results.length}
           error={error}
         >
           <div className="dash-module-controls" style={{
@@ -2750,7 +2888,12 @@ export default function DashboardView({
             <SearchInput value={smSearch} onChange={(v) => { setSmSearch(v); setSmPage(1); }} placeholder="Search products…" />
           </div>
 
-          {slowMovingFiltered.length === 0 ? (
+          {smServerData.loading && !smServerData.results.length ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <RefreshCw size={20} className="spin" style={{ display: 'inline-block', marginBottom: 8, color: 'var(--brand-primary)' }} />
+              <div style={{ fontSize: '12px' }}>Loading slow-moving products…</div>
+            </div>
+          ) : (smServerData.count === 0 && !smServerData.loading) ? (
             <EmptyState message="No slow-moving products found for the selected period." icon={Package} />
           ) : (
             <>
@@ -2769,9 +2912,9 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(slowMovingFiltered, smPage, smPageSize).map((p, i) => {
+                  {(smServerData.results.length > 0 ? smServerData.results : paginate(slowMovingFiltered, smPage, smPageSize)).map((p, i) => {
                     const rank = (smPage - 1) * smPageSize + i + 1;
-                    const tiedCapital = (p.current_stock || 0) * (p.cost_price || 0);
+                    const tiedCapital = (p.current_stock || 0) * (p.unit_cost_price || p.cost_price || 0);
                     const status = (p.units_sold || 0) === 0 ? 'dead_stock'
                       : (p.units_sold || 0) <= 3 ? 'slow_moving' : 'moderate';
                     return (
@@ -2794,7 +2937,7 @@ export default function DashboardView({
                         <TD right mono style={{ color: (p.units_sold || 0) === 0 ? 'var(--color-danger)' : 'var(--color-warning)' }}>
                           {fmtNum(p.units_sold)}
                         </TD>
-                        <TD right mono>{fmtCompact(p.revenue)}</TD>
+                        <TD right mono>{fmtCompact(p.revenue_generated || p.revenue)}</TD>
                         <TD right mono style={{ fontWeight: 600, color: tiedCapital > 50000 ? 'var(--color-danger)' : tiedCapital > 10000 ? 'var(--color-warning)' : 'var(--text-primary)' }}>
                           {fmtCompact(tiedCapital)}
                         </TD>
@@ -2806,7 +2949,7 @@ export default function DashboardView({
               </TableScroll>
               <Paginator
                 page={smPage}
-                total={slowMovingFiltered.length}
+                total={smServerData.count || slowMovingFiltered.length}
                 pageSize={smPageSize}
                 onPageSizeChange={setSmPageSize}
                 onChange={setSmPage}
@@ -2821,8 +2964,8 @@ export default function DashboardView({
           icon={Flame}
           title="Fast-Moving Inventory"
           subtitle="High-velocity products — monitor for stockout risk"
-          count={fastMoversFiltered.length}
-          loading={loading}
+          count={fmServerData.count || fastMoversFiltered.length}
+          loading={loading && !fmServerData.results.length}
           error={error}
         >
           <div className="dash-module-controls" style={{
@@ -2838,7 +2981,12 @@ export default function DashboardView({
             <SearchInput value={fmSearch} onChange={(v) => { setFmSearch(v); setFmPage(1); }} placeholder="Search products…" />
           </div>
 
-          {fastMoversFiltered.length === 0 ? (
+          {fmServerData.loading && !fmServerData.results.length ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <RefreshCw size={20} className="spin" style={{ display: 'inline-block', marginBottom: 8, color: 'var(--brand-primary)' }} />
+              <div style={{ fontSize: '12px' }}>Loading fast-moving inventory…</div>
+            </div>
+          ) : (fmServerData.count === 0 && !fmServerData.loading) ? (
             <EmptyState message="No sales data found for the selected period." icon={Flame} />
           ) : (
             <>
@@ -2856,7 +3004,7 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(fastMoversFiltered, fmPage, fmPageSize).map((p, i) => {
+                  {(fmServerData.results.length > 0 ? fmServerData.results : paginate(fastMoversFiltered, fmPage, fmPageSize)).map((p, i) => {
                     const rank = (fmPage - 1) * fmPageSize + i + 1;
                     const runout = p.est_days_left;
                     const runoutColor = runout === null ? 'var(--text-muted)'
@@ -2878,7 +3026,7 @@ export default function DashboardView({
                         <TD muted style={{ fontSize: '12px' }}>{p.primary_category_name || p.category_name || '—'}</TD>
                         <TD right mono style={{ fontWeight: 600 }}>{fmtNum(p.units_sold)}</TD>
                         <TD right mono>{fmtCompact(p.revenue)}</TD>
-                        <TD right mono style={{ fontWeight: 600 }}>{p.daily_velocity.toFixed(2)}/day</TD>
+                        <TD right mono style={{ fontWeight: 600 }}>{(p.daily_velocity || 0).toFixed(2)}/day</TD>
                         <TD right mono>{fmtNum(p.current_stock)}</TD>
                         <TD right style={{ fontWeight: 600, color: runoutColor, fontFamily: 'var(--font-mono)' }}>
                           {runout === null ? '—' : runout <= 0 ? 'OOS' : `${runout}d`}
@@ -2890,7 +3038,7 @@ export default function DashboardView({
               </TableScroll>
               <Paginator
                 page={fmPage}
-                total={fastMoversFiltered.length}
+                total={fmServerData.count || fastMoversFiltered.length}
                 pageSize={fmPageSize}
                 onPageSizeChange={setFmPageSize}
                 onChange={setFmPage}
@@ -2905,8 +3053,8 @@ export default function DashboardView({
           icon={AlertTriangle}
           title="Out of Stock & Critically Low"
           subtitle="Live inventory status — products requiring immediate restocking"
-          count={oosFiltered.length}
-          loading={loading}
+          count={oosServerData.count || oosFiltered.length}
+          loading={loading && !oosServerData.results.length}
           error={error}
         >
           <div className="dash-module-controls" style={{
@@ -2928,7 +3076,12 @@ export default function DashboardView({
             <SearchInput value={oosSearch} onChange={(v) => { setOosSearch(v); setOosPage(1); }} placeholder="Search products…" />
           </div>
 
-          {oosFiltered.length === 0 ? (
+          {oosServerData.loading && !oosServerData.results.length ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <RefreshCw size={20} className="spin" style={{ display: 'inline-block', marginBottom: 8, color: 'var(--brand-primary)' }} />
+              <div style={{ fontSize: '12px' }}>Loading stock depletion alerts…</div>
+            </div>
+          ) : (oosServerData.count === 0 && !oosServerData.loading) ? (
             <EmptyState message="No stock depletion alerts found." icon={Package} />
           ) : (
             <>
@@ -2946,7 +3099,7 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(oosFiltered, oosPage, oosPageSize).map((p, i) => {
+                  {(oosServerData.results.length > 0 ? oosServerData.results : paginate(oosFiltered, oosPage, oosPageSize)).map((p, i) => {
                     const rank = (oosPage - 1) * oosPageSize + i + 1;
                     return (
                       <tr
@@ -2980,7 +3133,7 @@ export default function DashboardView({
               </TableScroll>
               <Paginator
                 page={oosPage}
-                total={oosFiltered.length}
+                total={oosServerData.count || oosFiltered.length}
                 pageSize={oosPageSize}
                 onPageSizeChange={setOosPageSize}
                 onChange={setOosPage}
