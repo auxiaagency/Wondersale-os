@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Package,
   AlertTriangle, AlertCircle, Flame, Calendar, ChevronLeft,
-  ChevronRight, Search, Clock, Activity, Layers, ShieldAlert,
+  ChevronRight, ChevronsLeft, ChevronsRight, Search, Clock, Activity, Layers, ShieldAlert,
   Store as StoreIcon, BarChart3, ArrowUpDown, Users, Wallet,
   UserCheck, UserX, CheckCircle, CheckCircle2, XCircle, FileText,
   ArrowRight, DollarSign, Filter, ExternalLink, Scale, Check, X,
@@ -49,10 +49,10 @@ const pct = (n) => {
   return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
 };
 
-const paginate = (arr, page) => arr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-const totalPages = (arrOrCount) => {
+const paginate = (arr, page, size = PAGE_SIZE) => arr.slice((page - 1) * (size || PAGE_SIZE), page * (size || PAGE_SIZE));
+const totalPages = (arrOrCount, size = PAGE_SIZE) => {
   const count = typeof arrOrCount === 'number' ? arrOrCount : (arrOrCount?.length || 0);
-  return Math.max(1, Math.ceil(count / PAGE_SIZE));
+  return Math.max(1, Math.ceil(count / (size || PAGE_SIZE)));
 };
 
 const SETTLEMENT_ACTIONS = [
@@ -263,9 +263,10 @@ function StatusBadge({ type, label }) {
   );
 }
 
-function Paginator({ page, total, onChange }) {
+function Paginator({ page, total, onChange, pageSize = PAGE_SIZE, onPageSizeChange = null, pageSizeOptions = [10, 25, 50, 100] }) {
   const count = typeof total === 'number' ? total : (Array.isArray(total) ? total.length : (Number(total) || 0));
-  const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const effectivePageSize = pageSize || PAGE_SIZE;
+  const pages = Math.max(1, Math.ceil(count / effectivePageSize));
   if (count === 0) return null;
   const isFirst = page <= 1;
   const isLast = page >= pages;
@@ -273,32 +274,85 @@ function Paginator({ page, total, onChange }) {
     <div className="dash-paginator" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '12px 20px', borderTop: '1px solid var(--border-color)',
+      flexWrap: 'wrap', gap: '10px',
     }}>
       <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-        {count > 0 ? `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, count)} of ${fmtNum(count)}` : '0 items'}
+        {count > 0 ? (
+          <>
+            Showing <strong style={{ color: 'var(--text-primary)' }}>{(page - 1) * effectivePageSize + 1}</strong>
+            –<strong style={{ color: 'var(--text-primary)' }}>{Math.min(page * effectivePageSize, count)}</strong> of{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>{fmtNum(count)}</strong> products
+          </>
+        ) : '0 items'}
       </span>
-      <div style={{ display: 'flex', gap: '4px' }}>
-        <button
-          onClick={() => onChange(Math.max(1, page - 1))}
-          disabled={isFirst}
-          style={pgBtnStyle(isFirst)}
-        >
-          <ChevronLeft size={14} />
-        </button>
-        <span style={{
-          padding: '5px 12px', fontSize: '12px', color: 'var(--text-primary)',
-          fontWeight: 600, background: 'var(--bg-surface)',
-          border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
-        }}>
-          {page} / {pages}
-        </span>
-        <button
-          onClick={() => onChange(Math.min(pages, page + 1))}
-          disabled={isLast}
-          style={pgBtnStyle(isLast)}
-        >
-          <ChevronRight size={14} />
-        </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {onPageSizeChange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Per page:</span>
+            <select
+              value={effectivePageSize}
+              onChange={(e) => {
+                onPageSizeChange(Number(e.target.value));
+                onChange(1);
+              }}
+              style={{
+                padding: '3px 8px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-primary)',
+                fontSize: '11.5px',
+                cursor: 'pointer',
+                height: '28px',
+              }}
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <button
+            onClick={() => onChange(1)}
+            disabled={isFirst}
+            style={pgBtnStyle(isFirst)}
+            title="First Page"
+          >
+            <ChevronsLeft size={13} />
+          </button>
+          <button
+            onClick={() => onChange(Math.max(1, page - 1))}
+            disabled={isFirst}
+            style={pgBtnStyle(isFirst)}
+            title="Previous Page"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span style={{
+            padding: '5px 12px', fontSize: '12px', color: 'var(--text-primary)',
+            fontWeight: 600, background: 'var(--bg-surface)',
+            border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)',
+          }}>
+            {page} / {pages}
+          </span>
+          <button
+            onClick={() => onChange(Math.min(pages, page + 1))}
+            disabled={isLast}
+            style={pgBtnStyle(isLast)}
+            title="Next Page"
+          >
+            <ChevronRight size={14} />
+          </button>
+          <button
+            onClick={() => onChange(pages)}
+            disabled={isLast}
+            style={pgBtnStyle(isLast)}
+            title="Last Page"
+          >
+            <ChevronsRight size={13} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -485,29 +539,34 @@ export default function DashboardView({
   // Best-Selling
   const [bsSort, setBsSort] = useState('units_sold');
   const [bsPage, setBsPage] = useState(1);
+  const [bsPageSize, setBsPageSize] = useState(10);
   const [bsSearch, setBsSearch] = useState('');
 
   // Slow-Moving
   const [smFilter, setSmFilter] = useState('all'); // all | dead | slow
   const [smSort, setSmSort] = useState('tied_capital');
   const [smPage, setSmPage] = useState(1);
+  const [smPageSize, setSmPageSize] = useState(10);
   const [smSearch, setSmSearch] = useState('');
 
   // Fast-Moving
   const [fmSort, setFmSort] = useState('units_sold');
   const [fmPage, setFmPage] = useState(1);
+  const [fmPageSize, setFmPageSize] = useState(10);
   const [fmSearch, setFmSearch] = useState('');
 
   // Out-of-Stock
   const [oosFilter, setOosFilter] = useState('all'); // all | out | critical | depleting
   const [oosSort, setOosSort] = useState('urgency');
   const [oosPage, setOosPage] = useState(1);
+  const [oosPageSize, setOosPageSize] = useState(10);
   const [oosSearch, setOosSearch] = useState('');
 
   // Expiry
   const [exFilter, setExFilter] = useState('all'); // all | expired | critical | warning | notice | ok
   const [exSort, setExSort] = useState('days_asc');
   const [exPage, setExPage] = useState(1);
+  const [exPageSize, setExPageSize] = useState(10);
   const [exSearch, setExSearch] = useState('');
 
   // ── Employee Attendance Widget ──
@@ -2612,8 +2671,8 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(bestSellersFiltered, bsPage).map((p, i) => {
-                    const rank = (bsPage - 1) * PAGE_SIZE + i + 1;
+                  {paginate(bestSellersFiltered, bsPage, bsPageSize).map((p, i) => {
+                    const rank = (bsPage - 1) * bsPageSize + i + 1;
                     const margin = p.revenue > 0 ? ((p.gross_profit || 0) / p.revenue) * 100 : 0;
                     const stockStatus = p.current_stock <= 0 ? 'out_of_stock'
                       : p.current_stock <= 5 ? 'critically_low'
@@ -2652,7 +2711,13 @@ export default function DashboardView({
                   })}
                 </tbody>
               </TableScroll>
-              <Paginator page={bsPage} total={bestSellersFiltered.length} onChange={setBsPage} />
+              <Paginator
+                page={bsPage}
+                total={bestSellersFiltered.length}
+                pageSize={bsPageSize}
+                onPageSizeChange={setBsPageSize}
+                onChange={setBsPage}
+              />
             </>
           )}
         </ModuleCard>
@@ -2704,8 +2769,8 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(slowMovingFiltered, smPage).map((p, i) => {
-                    const rank = (smPage - 1) * PAGE_SIZE + i + 1;
+                  {paginate(slowMovingFiltered, smPage, smPageSize).map((p, i) => {
+                    const rank = (smPage - 1) * smPageSize + i + 1;
                     const tiedCapital = (p.current_stock || 0) * (p.cost_price || 0);
                     const status = (p.units_sold || 0) === 0 ? 'dead_stock'
                       : (p.units_sold || 0) <= 3 ? 'slow_moving' : 'moderate';
@@ -2739,7 +2804,13 @@ export default function DashboardView({
                   })}
                 </tbody>
               </TableScroll>
-              <Paginator page={smPage} total={slowMovingFiltered.length} onChange={setSmPage} />
+              <Paginator
+                page={smPage}
+                total={slowMovingFiltered.length}
+                pageSize={smPageSize}
+                onPageSizeChange={setSmPageSize}
+                onChange={setSmPage}
+              />
             </>
           )}
         </ModuleCard>
@@ -2785,8 +2856,8 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(fastMoversFiltered, fmPage).map((p, i) => {
-                    const rank = (fmPage - 1) * PAGE_SIZE + i + 1;
+                  {paginate(fastMoversFiltered, fmPage, fmPageSize).map((p, i) => {
+                    const rank = (fmPage - 1) * fmPageSize + i + 1;
                     const runout = p.est_days_left;
                     const runoutColor = runout === null ? 'var(--text-muted)'
                       : runout <= 7 ? '#EF4444' : runout <= 30 ? '#F59E0B' : 'var(--color-success)';
@@ -2817,7 +2888,13 @@ export default function DashboardView({
                   })}
                 </tbody>
               </TableScroll>
-              <Paginator page={fmPage} total={fastMoversFiltered.length} onChange={setFmPage} />
+              <Paginator
+                page={fmPage}
+                total={fastMoversFiltered.length}
+                pageSize={fmPageSize}
+                onPageSizeChange={setFmPageSize}
+                onChange={setFmPage}
+              />
             </>
           )}
         </ModuleCard>
@@ -2869,8 +2946,8 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(oosFiltered, oosPage).map((p, i) => {
-                    const rank = (oosPage - 1) * PAGE_SIZE + i + 1;
+                  {paginate(oosFiltered, oosPage, oosPageSize).map((p, i) => {
+                    const rank = (oosPage - 1) * oosPageSize + i + 1;
                     return (
                       <tr
                         key={p.item_id || i}
@@ -2901,7 +2978,13 @@ export default function DashboardView({
                   })}
                 </tbody>
               </TableScroll>
-              <Paginator page={oosPage} total={oosFiltered.length} onChange={setOosPage} />
+              <Paginator
+                page={oosPage}
+                total={oosFiltered.length}
+                pageSize={oosPageSize}
+                onPageSizeChange={setOosPageSize}
+                onChange={setOosPage}
+              />
             </>
           )}
         </ModuleCard>
@@ -2995,8 +3078,8 @@ export default function DashboardView({
                   </tr>
                 </thead>
                 <tbody>
-                  {paginate(exFiltered, exPage).map((p, i) => {
-                    const rank = (exPage - 1) * PAGE_SIZE + i + 1;
+                  {paginate(exFiltered, exPage, exPageSize).map((p, i) => {
+                    const rank = (exPage - 1) * exPageSize + i + 1;
                     const days = p.days_until_expiry;
                     const daysColor = days < 0 ? '#EF4444' : days === 0 ? '#EF4444'
                       : days <= 7 ? '#F97316' : days <= 30 ? '#F59E0B'
@@ -3034,7 +3117,13 @@ export default function DashboardView({
                   })}
                 </tbody>
               </TableScroll>
-              <Paginator page={exPage} total={exFiltered.length} onChange={setExPage} />
+              <Paginator
+                page={exPage}
+                total={exFiltered.length}
+                pageSize={exPageSize}
+                onPageSizeChange={setExPageSize}
+                onChange={setExPage}
+              />
             </>
           )}
         </ModuleCard>
