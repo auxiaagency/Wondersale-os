@@ -688,7 +688,7 @@ export default function ProductActivityLedgers({
                   {filteredMovements.length === 0 ? 0 : (movementPage - 1) * movementPageSize + 1}–{Math.min(movementPage * movementPageSize, filteredMovements.length)}
                 </strong>{' '}
                 of <strong style={{ color: 'var(--text-primary, #F8FAFC)' }}>{filteredMovements.length}</strong> logs
-                {filteredMovements.length !== recentMovements.length && ` (filtered from ${recentMovements.length})`}
+                {rawServerMovements && filteredMovements.length !== rawServerMovements.length && ` (filtered from ${rawServerMovements.length})`}
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)' }}>Per page:</span>

@@ -176,6 +176,146 @@ class Supplier(models.Model):
         return self.name
 
 
+class SupplierOrder(models.Model):
+    STATUS_CHOICES = [
+        ('unpaid', 'Unpaid'),
+        ('partial', 'Partially Paid'),
+        ('paid', 'Fully Paid'),
+    ]
+    DELIVERY_CHOICES = [
+        ('pending', 'Awaiting Arrival'),
+        ('in_transit', 'In Transit'),
+        ('delivered', 'Received'),
+    ]
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('upi', 'UPI'),
+        ('cheque', 'Cheque'),
+        ('other', 'Other'),
+    ]
+
+    order_number = models.CharField(max_length=64, unique=True, db_index=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='orders')
+    store = models.ForeignKey(Store, on_delete=models.SET_NULL, null=True, blank=True, related_name='supplier_orders')
+    title = models.CharField(max_length=255)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='unpaid', db_index=True)
+    delivery_status = models.CharField(max_length=30, choices=DELIVERY_CHOICES, default='pending', db_index=True)
+    order_date = models.DateField(default=timezone.now, db_index=True)
+    due_date = models.DateField(null=True, blank=True)
+    payment_method = models.CharField(max_length=30, choices=PAYMENT_METHOD_CHOICES, blank=True, default='')
+    payment_reference = models.CharField(max_length=100, blank=True, default='')
+    payment_date = models.DateField(null=True, blank=True)
+    payment_notes = models.TextField(blank=True, default='')
+    bill_file = models.FileField(upload_to='supplier_bills/%Y/%m/', null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    batch_key = models.CharField(max_length=64, blank=True, default='', db_index=True, help_text="UUID from frontend to group batch-added items into one order")
+    recorded_by = models.ForeignKey('staff.StaffMember', on_delete=models.SET_NULL, null=True, blank=True, related_name='recorded_supplier_orders')
+    recorded_by_name = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-order_date', '-created_at']
+        verbose_name = 'Supplier Order'
+        verbose_name_plural = 'Supplier Orders'
+
+    @property
+    def outstanding_amount(self):
+        return max(Decimal('0.00'), self.total_amount - self.paid_amount)
+
+    def save(self, *args, **kwargs):
+        if self.paid_amount >= self.total_amount and self.total_amount > Decimal('0.00'):
+            self.status = 'paid'
+        elif self.paid_amount > Decimal('0.00'):
+            self.status = 'partial'
+        else:
+            self.status = 'unpaid'
+
+        if not self.order_number:
+            from datetime import date
+            today = self.order_date or date.today()
+            prefix = f"SUP-ORD-{today.strftime('%Y%m')}-"
+            last = SupplierOrder.objects.filter(order_number__startswith=prefix).order_by('-order_number').first()
+            seq = (int(last.order_number.split('-')[-1]) + 1) if last else 1
+            self.order_number = f"{prefix}{seq:04d}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.order_number} - {self.supplier.name} ({self.status})"
+
+
+class SupplierOrderItem(models.Model):
+    order = models.ForeignKey(SupplierOrder, on_delete=models.CASCADE, related_name='items')
+    item = models.ForeignKey('Item', on_delete=models.SET_NULL, null=True, blank=True, related_name='supplier_order_items')
+    item_name = models.CharField(max_length=255)
+    item_uid = models.CharField(max_length=64, blank=True, default='')
+    quantity = models.PositiveIntegerField(default=1)
+    cost_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'Supplier Order Item'
+        verbose_name_plural = 'Supplier Order Items'
+
+    def __str__(self):
+        return f"{self.item_name} x {self.quantity} ({self.order.order_number})"
+
+
+class SupplierLedgerEntry(models.Model):
+    ENTRY_TYPES = [
+        ('debit', 'Debit (We owe more)'),
+        ('credit', 'Credit (We owe less)'),
+        ('payment', 'Payment Made'),
+    ]
+    PAYMENT_METHOD_CHOICES = [
+        ('cash', 'Cash'),
+        ('bank_transfer', 'Bank Transfer'),
+        ('upi', 'UPI'),
+        ('cheque', 'Cheque'),
+        ('other', 'Other'),
+    ]
+
+    entry_number = models.CharField(max_length=64, unique=True, db_index=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='ledger_entries')
+    order = models.ForeignKey(SupplierOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name='ledger_entries')
+    store = models.ForeignKey(Store, on_delete=models.SET_NULL, null=True, blank=True, related_name='supplier_ledger_entries')
+    entry_type = models.CharField(max_length=20, choices=ENTRY_TYPES, default='payment', db_index=True)
+    title = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    entry_date = models.DateField(default=timezone.now, db_index=True)
+    payment_method = models.CharField(max_length=30, choices=PAYMENT_METHOD_CHOICES, blank=True, default='')
+    reference = models.CharField(max_length=100, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    recorded_by = models.ForeignKey('staff.StaffMember', on_delete=models.SET_NULL, null=True, blank=True, related_name='recorded_supplier_ledger_entries')
+    recorded_by_name = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-entry_date', '-created_at']
+        verbose_name = 'Supplier Ledger Entry'
+        verbose_name_plural = 'Supplier Ledger Entries'
+
+    def save(self, *args, **kwargs):
+        if not self.entry_number:
+            from datetime import date
+            today = self.entry_date or date.today()
+            prefix = f"SUP-LED-{today.strftime('%Y%m')}-"
+            last = SupplierLedgerEntry.objects.filter(entry_number__startswith=prefix).order_by('-entry_number').first()
+            seq = (int(last.entry_number.split('-')[-1]) + 1) if last else 1
+            self.entry_number = f"{prefix}{seq:04d}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.entry_number} - {self.supplier.name} - {self.amount}"
+
+
+
 class Section(models.Model):
     """
     Store Section / Department / Aisle classification (e.g. Menswear, Electronics, Shelf A1, Ground Floor).

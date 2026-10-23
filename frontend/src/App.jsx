@@ -17,6 +17,7 @@ import { lazyWithRetry } from './utils/lazyWithRetry';
 const AddItemSection = lazyWithRetry(() => import('./components/AddItemSection'));
 const StaffManagementView = lazyWithRetry(() => import('./components/StaffManagementView'));
 const SettingsView = lazyWithRetry(() => import('./components/SettingsView'));
+const SuppliersAppView = lazyWithRetry(() => import('./components/SuppliersAppView'));
 const CategorySection = lazyWithRetry(() => import('./components/CategorySection'));
 const SupplierSection = lazyWithRetry(() => import('./components/SupplierSection'));
 const SectionSection = lazyWithRetry(() => import('./components/SectionSection'));
@@ -105,7 +106,7 @@ export default function App() {
   }, []);
 
   const validViews = [
-    'launcher', 'inventory', 'staff', 'settings', 'employee_management',
+    'launcher', 'inventory', 'staff', 'settings', 'suppliers', 'employee_management',
     'billing', 'customers', ...(stakeholdersActive ? ['stakeholders'] : []),
     'accounting', 'dashboard', 'assets', 'employee_portal',
   ];
@@ -719,6 +720,18 @@ export default function App() {
             />
           )}
 
+          {activeView === 'suppliers' && isModuleAccessible(currentUser, 'suppliers') && (
+            <SuppliersAppView
+              currentUser={currentUser}
+              stores={stores}
+              selectedStore={selectedStore}
+              suppliers={suppliers}
+              loading={loading}
+              onSuppliersUpdated={reloadMeta}
+              onBackToLauncher={() => handleNavigate('launcher')}
+            />
+          )}
+
           {activeView === 'stakeholders' && isModuleAccessible(currentUser, 'stakeholders') && stakeholdersActive && (
             <StakeholdersView
               currentUser={currentUser}
@@ -893,28 +906,6 @@ export default function App() {
               >
                 <Layers size={18} />
                 <span>Add Category ({categories.length})</span>
-              </button>
-
-              <button
-                type="button"
-                className="inv-tab-btn"
-                onClick={() => setInventorySubTab('suppliers')}
-                style={{
-                  padding: '12px 20px',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: inventorySubTab === 'suppliers' ? '3px solid var(--brand-primary)' : '3px solid transparent',
-                  color: inventorySubTab === 'suppliers' ? 'var(--brand-primary)' : 'var(--text-secondary)',
-                  fontWeight: 700,
-                  fontSize: '0.94rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                <Truck size={18} />
-                <span>Suppliers ({suppliers.length})</span>
               </button>
 
               {!isSectionRestricted && (
@@ -1394,17 +1385,6 @@ export default function App() {
               subcategories={subcategories}
               loading={loading}
               onTaxonomyUpdated={reloadMeta}
-            />
-          )}
-
-          {/* Sub-Section 3.5: Suppliers & Vendors Directory */}
-          {inventorySubTab === 'suppliers' && (
-            <SupplierSection
-              suppliers={suppliers}
-              stores={stores}
-              currentStore={stores.find((s) => String(s.id) === String(selectedStore))}
-              loading={loading}
-              onSuppliersUpdated={reloadMeta}
             />
           )}
 

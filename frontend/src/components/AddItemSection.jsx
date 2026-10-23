@@ -235,6 +235,13 @@ export default function AddItemSection({
   const userKey = currentUser?.username || (currentUser?.id ? `id_${currentUser.id}` : 'guest_profile');
   const STAGED_STORAGE_KEY = `wondersale_staged_products_${userKey}`;
 
+  // Session batchKey for grouping items added in one session into a single supplier order
+  const batchKeyRef = useRef(
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `batch_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+  );
+
   // Form states - Line 1
   const [name, setName] = useState('');
   const [customUid, setCustomUid] = useState('');
@@ -754,6 +761,7 @@ export default function AddItemSection({
         needs_new_barcode_printed: true,
         has_variants: Boolean(hasVariants),
         variants: hasVariants ? variants.map((v) => ({ name: v.name.trim(), quantity: parseInt(v.quantity, 10) || 0, image_id: v.image_id })) : [],
+        batch_key: batchKeyRef.current,
         ...(isManualUidEnabled && customUid.trim() ? { uid: customUid.trim() } : {}),
       };
 
@@ -1231,7 +1239,7 @@ export default function AddItemSection({
           ...(item.uid && String(item.uid).trim() ? { uid: String(item.uid).trim() } : {}),
         }));
 
-        const bulkRes = await bulkCreateItems(bulkPayload, storeTargetId);
+        const bulkRes = await bulkCreateItems(bulkPayload, storeTargetId, batchKeyRef.current);
         const countSaved = bulkRes.created_count || productsToSave.length;
         setBatchSuccessCount(countSaved);
         onProductCreated?.(null);
@@ -1285,6 +1293,7 @@ export default function AddItemSection({
           height: item.height ? parseFloat(item.height) : null,
           description: item.description ? String(item.description).trim() : '',
           needs_new_barcode_printed: true,
+          batch_key: batchKeyRef.current,
           ...(item.uid && String(item.uid).trim() ? { uid: String(item.uid).trim() } : {}),
         };
 

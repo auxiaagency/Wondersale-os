@@ -32,6 +32,7 @@ import {
   IdCard,
   Settings,
   ChevronDown,
+  Truck,
 } from 'lucide-react';
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from '../utils/stakeholdersSettings';
 
@@ -97,6 +98,14 @@ export const SYSTEM_MODULES = [
   },
 
   // Extended (Visible after clicking "Show More")
+  {
+    id: 'suppliers',
+    title: 'Suppliers',
+    icon: Truck,
+    color: '#14B8A6',
+    bgGlow: 'rgba(20, 184, 166, 0.16)',
+    description: 'Vendors, procurement & payments',
+  },
   {
     id: 'employee_portal',
     title: 'Employee Portal',

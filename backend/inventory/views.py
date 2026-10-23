@@ -58,6 +58,9 @@ from .models import (
     Section,
     AIDescriptionBatchJob,
     BrokenItemReport,
+    SupplierOrder,
+    SupplierOrderItem,
+    SupplierLedgerEntry,
 )
 from .serializers import (
     StoreSerializer,
@@ -85,6 +88,9 @@ from .serializers import (
     OrderCustomerUpdateSerializer,
     generate_next_return_number,
     generate_next_payout_number,
+    SupplierOrderSerializer,
+    SupplierOrderItemSerializer,
+    SupplierLedgerEntrySerializer,
 )
 from .services import (
     adjust_stock,
@@ -208,6 +214,182 @@ class SupplierViewSet(viewsets.ModelViewSet):
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() in ('true', '1'))
         return qs
+
+    @action(detail=True, methods=['get'], url_path='detail-stats')
+    def detail_stats(self, request, pk=None):
+        supplier = self.get_object()
+        store_id = request.query_params.get('store')
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        # Filter items
+        items_qs = Item.objects.filter(supplier=supplier)
+        if store_id:
+            items_qs = items_qs.filter(store_id=store_id)
+        
+        total_items_count = items_qs.count()
+        total_units_in_stock = items_qs.aggregate(total=Sum('quantity'))['total'] or 0
+        total_stock_value = sum(((it.quantity or 0) * (it.cost_price or Decimal('0.00'))) for it in items_qs)
+        total_retail_value = sum(((it.quantity or 0) * (it.price or Decimal('0.00'))) for it in items_qs)
+
+        # Sales of products from this supplier
+        item_ids = list(items_qs.values_list('id', flat=True))
+        sale_items_qs = SaleOrderItem.objects.filter(item_id__in=item_ids)
+        if store_id:
+            sale_items_qs = sale_items_qs.filter(order__store_id=store_id)
+        if start_date:
+            sale_items_qs = sale_items_qs.filter(order__created_at__date__gte=start_date)
+        if end_date:
+            sale_items_qs = sale_items_qs.filter(order__created_at__date__lte=end_date)
+        
+        sales_aggregate = sale_items_qs.aggregate(
+            total_sold_units=Sum('quantity'),
+            total_sold_revenue=Sum('total_price'),
+        )
+        total_sold_units = sales_aggregate['total_sold_units'] or 0
+        total_sold_revenue = float(sales_aggregate['total_sold_revenue'] or Decimal('0.00'))
+
+        # Orders stats
+        orders_qs = SupplierOrder.objects.filter(supplier=supplier)
+        if store_id:
+            orders_qs = orders_qs.filter(store_id=store_id)
+        
+        total_orders_count = orders_qs.count()
+        total_ordered_amount = float(orders_qs.aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00'))
+        total_paid_amount = float(orders_qs.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00'))
+        total_owed_amount = max(0.0, total_ordered_amount - total_paid_amount)
+        unpaid_orders_count = orders_qs.filter(status='unpaid').count()
+        partial_orders_count = orders_qs.filter(status='partial').count()
+        paid_orders_count = orders_qs.filter(status='paid').count()
+
+        return Response({
+            'supplier_id': supplier.id,
+            'supplier_name': supplier.name,
+            'total_items_count': total_items_count,
+            'total_units_in_stock': total_units_in_stock,
+            'total_stock_cost_value': float(total_stock_value),
+            'total_retail_value': float(total_retail_value),
+            'total_sold_units': total_sold_units,
+            'total_sold_revenue': total_sold_revenue,
+            'total_orders_count': total_orders_count,
+            'total_ordered_amount': total_ordered_amount,
+            'total_paid_amount': total_paid_amount,
+            'total_owed_amount': total_owed_amount,
+            'unpaid_orders_count': unpaid_orders_count,
+            'partial_orders_count': partial_orders_count,
+            'paid_orders_count': paid_orders_count,
+        })
+
+
+class SupplierOrderViewSet(viewsets.ModelViewSet):
+    queryset = SupplierOrder.objects.select_related('supplier', 'store', 'recorded_by').prefetch_related('items').all()
+    serializer_class = SupplierOrderSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        supplier_id = self.request.query_params.get('supplier') or self.request.query_params.get('supplier_id')
+        if supplier_id:
+            qs = qs.filter(supplier_id=supplier_id)
+        store_id = self.request.query_params.get('store')
+        if store_id:
+            qs = qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        delivery_status = self.request.query_params.get('delivery_status')
+        if delivery_status:
+            qs = qs.filter(delivery_status=delivery_status)
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(
+                Q(order_number__icontains=search) |
+                Q(title__icontains=search) |
+                Q(supplier__name__icontains=search) |
+                Q(payment_reference__icontains=search)
+            )
+        return qs
+
+    def perform_create(self, serializer):
+        from .views import get_current_staff
+        member = get_current_staff(self.request)
+        kwargs = {}
+        if member:
+            kwargs['recorded_by'] = member
+            kwargs['recorded_by_name'] = getattr(member, 'full_name', str(member))
+        serializer.save(**kwargs)
+
+    @action(detail=True, methods=['post'], url_path='record-payment')
+    def record_payment(self, request, pk=None):
+        order = self.get_object()
+        amount = Decimal(str(request.data.get('amount', 0)))
+        payment_method = request.data.get('payment_method', 'cash')
+        payment_reference = request.data.get('payment_reference', '')
+        notes = request.data.get('notes', '')
+        payment_date = request.data.get('payment_date') or timezone.now().date()
+
+        if amount <= Decimal('0.00'):
+            return Response({'detail': 'Payment amount must be greater than zero.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.paid_amount += amount
+        order.payment_method = payment_method
+        order.payment_reference = payment_reference
+        order.payment_date = payment_date
+        if notes:
+            order.payment_notes = f"{order.payment_notes}\n{notes}".strip()
+        order.save()
+
+        # Also create a SupplierLedgerEntry
+        from .views import get_current_staff
+        member = get_current_staff(request)
+        ledger_entry = SupplierLedgerEntry.objects.create(
+            supplier=order.supplier,
+            order=order,
+            store=order.store,
+            entry_type='payment',
+            title=f"Payment for Order {order.order_number}",
+            amount=amount,
+            entry_date=payment_date,
+            payment_method=payment_method,
+            reference=payment_reference,
+            notes=notes,
+            recorded_by=member if member else None,
+            recorded_by_name=getattr(member, 'full_name', '') if member else '',
+        )
+
+        return Response({
+            'order': SupplierOrderSerializer(order).data,
+            'ledger_entry': SupplierLedgerEntrySerializer(ledger_entry).data,
+            'message': 'Payment recorded successfully'
+        })
+
+
+class SupplierLedgerEntryViewSet(viewsets.ModelViewSet):
+    queryset = SupplierLedgerEntry.objects.select_related('supplier', 'order', 'store', 'recorded_by').all()
+    serializer_class = SupplierLedgerEntrySerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        supplier_id = self.request.query_params.get('supplier') or self.request.query_params.get('supplier_id')
+        if supplier_id:
+            qs = qs.filter(supplier_id=supplier_id)
+        store_id = self.request.query_params.get('store')
+        if store_id:
+            qs = qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
+        entry_type = self.request.query_params.get('entry_type')
+        if entry_type:
+            qs = qs.filter(entry_type=entry_type)
+        return qs
+
+    def perform_create(self, serializer):
+        from .views import get_current_staff
+        member = get_current_staff(self.request)
+        kwargs = {}
+        if member:
+            kwargs['recorded_by'] = member
+            kwargs['recorded_by_name'] = getattr(member, 'full_name', str(member))
+        serializer.save(**kwargs)
+
 
 
 class SectionViewSet(viewsets.ModelViewSet):
@@ -382,7 +564,56 @@ class ItemViewSet(viewsets.ModelViewSet):
                 if not member.section_id:
                     raise PermissionDenied("Your account is restricted to your assigned section, but no section is currently assigned to you.")
                 extra['section'] = member.section
-        serializer.save(**extra)
+        item = serializer.save(**extra)
+
+        # Auto-order creation when item has a supplier
+        try:
+            if item.supplier_id:
+                batch_key = str(self.request.data.get('batch_key') or '').strip()
+                item_qty = int(item.quantity or 1)
+                cost = Decimal(str(item.cost_price or '0.00'))
+                line_total = cost * item_qty
+
+                target_order = None
+                if batch_key:
+                    target_order = SupplierOrder.objects.filter(
+                        batch_key=batch_key,
+                        supplier=item.supplier,
+                        status='unpaid'
+                    ).first()
+
+                if not target_order:
+                    title = f"Order for {item.name}" if not batch_key else f"Batch Order ({timezone.now().strftime('%d %b %Y')})"
+                    target_order = SupplierOrder.objects.create(
+                        supplier=item.supplier,
+                        store=item.store,
+                        title=title,
+                        total_amount=line_total,
+                        paid_amount=Decimal('0.00'),
+                        status='unpaid',
+                        delivery_status='pending',
+                        order_date=timezone.now().date(),
+                        batch_key=batch_key,
+                        recorded_by=member if member else None,
+                        recorded_by_name=getattr(member, 'full_name', '') if member else '',
+                    )
+                else:
+                    target_order.total_amount += line_total
+                    target_order.save(update_fields=['total_amount', 'status'])
+
+                SupplierOrderItem.objects.create(
+                    order=target_order,
+                    item=item,
+                    item_name=item.name,
+                    item_uid=item.uid or '',
+                    quantity=item_qty,
+                    cost_price=cost,
+                    line_total=line_total,
+                )
+        except Exception as e:
+            # Do not block item creation if auto-order fails
+            import logging
+            logging.getLogger(__name__).warning("Failed to auto-create supplier order for item %s: %s", getattr(item, 'id', None), e)
 
     def perform_update(self, serializer):
         member = get_current_staff(self.request)
@@ -1294,6 +1525,73 @@ class ItemViewSet(viewsets.ModelViewSet):
                     ))
             if through_objects:
                 ItemSubCategoryThrough.objects.bulk_create(through_objects, ignore_conflicts=True)
+
+            # Auto-create supplier orders for bulk created items
+            try:
+                supplier_items_map = {}
+                for it_obj, raw_it in zip(to_save_models, valid_items):
+                    if it_obj.supplier_id:
+                        s_id = it_obj.supplier_id
+                        if s_id not in supplier_items_map:
+                            supplier_items_map[s_id] = []
+                        supplier_items_map[s_id].append((it_obj, raw_it))
+
+                batch_key = str(request.data.get('batch_key') or '').strip()
+                for s_id, items_list in supplier_items_map.items():
+                    supplier_obj = Supplier.objects.filter(id=s_id).first()
+                    if not supplier_obj:
+                        continue
+                    
+                    target_order = None
+                    if batch_key:
+                        target_order = SupplierOrder.objects.filter(
+                            batch_key=batch_key,
+                            supplier_id=s_id,
+                            status='unpaid'
+                        ).first()
+
+                    order_total = sum(
+                        Decimal(str(it.cost_price or '0.00')) * Decimal(str(it.quantity or 1))
+                        for it, _ in items_list
+                    )
+
+                    if not target_order:
+                        first_store = items_list[0][0].store
+                        target_order = SupplierOrder.objects.create(
+                            supplier=supplier_obj,
+                            store=first_store,
+                            title=f"Bulk Inventory Order ({timezone.now().strftime('%d %b %Y')})",
+                            total_amount=order_total,
+                            paid_amount=Decimal('0.00'),
+                            status='unpaid',
+                            delivery_status='pending',
+                            order_date=timezone.now().date(),
+                            batch_key=batch_key,
+                            recorded_by=member if (member and hasattr(member, 'pk')) else None,
+                            recorded_by_name=staff_name,
+                        )
+                    else:
+                        target_order.total_amount += order_total
+                        target_order.save(update_fields=['total_amount', 'status'])
+
+                    order_items_to_create = []
+                    for it, _ in items_list:
+                        qty = int(it.quantity or 1)
+                        cost = Decimal(str(it.cost_price or '0.00'))
+                        order_items_to_create.append(SupplierOrderItem(
+                            order=target_order,
+                            item=it,
+                            item_name=it.name,
+                            item_uid=it.uid or '',
+                            quantity=qty,
+                            cost_price=cost,
+                            line_total=cost * qty,
+                        ))
+                    if order_items_to_create:
+                        SupplierOrderItem.objects.bulk_create(order_items_to_create)
+            except Exception as sup_err:
+                import logging
+                logging.getLogger(__name__).warning("Bulk create supplier order auto-generation error: %s", sup_err)
 
         return Response({
             'success': True,

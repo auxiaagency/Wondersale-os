@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from staff.models import StaffRole, StaffMember
+from staff.models import StaffRole, StaffMember, ALL_MODULE_KEYS
 from staff.services import ensure_default_roles_and_owner, authenticate_staff
 
 
@@ -164,13 +164,13 @@ class StaffAPITests(TestCase):
         staff_data = login_resp.data['staff']
         self.assertEqual(staff_data['role_details']['allowed_modules'], ['accounting'])
 
-        # 4. Verify Owner always has all 8 modules
+        # 4. Verify Owner always has all modules
         owner_login_resp = self.client.post(login_url, {
             'staff_id': 'Salman',
             'password': '7869186388'
         }, format='json')
         self.assertEqual(owner_login_resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(owner_login_resp.data['staff']['role_details']['allowed_modules']), 8)
+        self.assertEqual(len(owner_login_resp.data['staff']['role_details']['allowed_modules']), len(ALL_MODULE_KEYS))
 
         # 5. Verify direct URL/API access to inventory is forbidden for staff without inventory/billing permission
         inventory_items_url = reverse('item-list')

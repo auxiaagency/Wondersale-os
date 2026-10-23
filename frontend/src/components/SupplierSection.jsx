@@ -39,6 +39,7 @@ export default function SupplierSection({
   const [gstNumber, setGstNumber] = useState('');
   const [city, setCity] = useState('');
   const [stateName, setStateName] = useState('');
+  const [pincode, setPincode] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [storeId, setStoreId] = useState(currentStore?.id || '');
@@ -78,6 +79,7 @@ export default function SupplierSection({
         gst_number: gstNumber.trim().toUpperCase(),
         city: city.trim(),
         state: stateName.trim(),
+        pincode: pincode.trim(),
         address: address.trim(),
         notes: notes.trim(),
         store: storeId ? storeId : null,
@@ -90,6 +92,7 @@ export default function SupplierSection({
       setGstNumber('');
       setCity('');
       setStateName('');
+      setPincode('');
       setAddress('');
       setNotes('');
       showFeedback(`Supplier "${created.name}" created successfully.`);
@@ -117,6 +120,7 @@ export default function SupplierSection({
         gst_number: (editingSupplier.gst_number || '').trim().toUpperCase(),
         city: (editingSupplier.city || '').trim(),
         state: (editingSupplier.state || '').trim(),
+        pincode: (editingSupplier.pincode || '').trim(),
         address: (editingSupplier.address || '').trim(),
         notes: (editingSupplier.notes || '').trim(),
         is_active: editingSupplier.is_active !== undefined ? editingSupplier.is_active : true,
@@ -155,6 +159,8 @@ export default function SupplierSection({
         sup.phone?.toLowerCase().includes(q) ||
         sup.gst_number?.toLowerCase().includes(q) ||
         sup.city?.toLowerCase().includes(q) ||
+        sup.state?.toLowerCase().includes(q) ||
+        sup.pincode?.toLowerCase().includes(q) ||
         sup.notes?.toLowerCase().includes(q)
       );
     });
@@ -315,7 +321,7 @@ export default function SupplierSection({
           </div>
 
           <div>
-            <label className="form-label">City / State</label>
+            <label className="form-label">City, State &amp; PIN Code</label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
                 type="text"
@@ -330,6 +336,14 @@ export default function SupplierSection({
                 value={stateName}
                 onChange={(e) => setStateName(e.target.value)}
                 placeholder="State"
+                className="form-input"
+                style={{ flex: 1 }}
+              />
+              <input
+                type="text"
+                value={pincode}
+                onChange={(e) => setPincode(e.target.value)}
+                placeholder="PIN Code"
                 className="form-input"
                 style={{ flex: 1 }}
               />
@@ -576,10 +590,13 @@ export default function SupplierSection({
                       <span>GST: <strong style={{ color: 'var(--text-main)', letterSpacing: '0.5px' }}>{sup.gst_number}</strong></span>
                     </div>
                   )}
-                  {(sup.city || sup.state) && (
+                  {(sup.city || sup.state || sup.pincode) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <MapPin size={13} style={{ opacity: 0.7 }} />
-                      <span>{[sup.city, sup.state].filter(Boolean).join(', ')}</span>
+                      <span>
+                        {[sup.city, sup.state].filter(Boolean).join(', ')}
+                        {sup.pincode ? (sup.city || sup.state ? ` - ${sup.pincode}` : `PIN: ${sup.pincode}`) : ''}
+                      </span>
                     </div>
                   )}
                   {sup.notes && (
@@ -702,6 +719,25 @@ export default function SupplierSection({
                     value={editingSupplier.city || ''}
                     onChange={(e) => setEditingSupplier({ ...editingSupplier, city: e.target.value })}
                     className="form-input"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">State</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.state || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, state: e.target.value })}
+                    className="form-input"
+                  />
+                </div>
+                <div>
+                  <label className="form-label">PIN Code</label>
+                  <input
+                    type="text"
+                    value={editingSupplier.pincode || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, pincode: e.target.value })}
+                    className="form-input"
+                    placeholder="e.g. 462001"
                   />
                 </div>
               </div>

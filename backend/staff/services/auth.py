@@ -45,7 +45,7 @@ def ensure_default_roles_and_owner() -> StaffMember:
             'is_owner': True,
             'allowed_modules': [
                 'dashboard', 'inventory', 'staff', 'billing', 'accounting',
-                'stakeholders', 'customers', 'settings'
+                'stakeholders', 'customers', 'settings', 'suppliers'
             ],
             'can_access_inventory': True,
             'can_adjust_stock': True,
@@ -53,11 +53,11 @@ def ensure_default_roles_and_owner() -> StaffMember:
             'can_access_staff': True,
         }
     )
-    # Ensure all permissions & all 8 modules are active on Owner role
+    # Ensure all permissions & all modules are active on Owner role
     owner_role.is_owner = True
     owner_role.allowed_modules = [
         'dashboard', 'inventory', 'staff', 'billing', 'accounting',
-        'stakeholders', 'customers', 'settings'
+        'stakeholders', 'customers', 'settings', 'suppliers'
     ]
     owner_role.can_access_inventory = True
     owner_role.can_adjust_stock = True

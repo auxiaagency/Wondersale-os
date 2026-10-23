@@ -14,6 +14,7 @@ ALL_MODULE_KEYS = [
     'stakeholders',
     'customers',
     'settings',
+    'suppliers',
 ]
 
 

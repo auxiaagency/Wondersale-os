@@ -6,7 +6,8 @@ from django.db.models import Q
 from .models import (
     Store, Category, SubCategory, Supplier, Section, Item, StockMovement, ItemImage,
     ItemVariant, Customer, SaleOrder, SaleOrderItem, OrderPaymentTransaction, VIPCardTransaction,
-    CounterPayout, DailyRegisterShift, AIDescriptionBatchJob, BrokenItemReport
+    CounterPayout, DailyRegisterShift, AIDescriptionBatchJob, BrokenItemReport,
+    SupplierOrder, SupplierOrderItem, SupplierLedgerEntry
 )
 from .services import adjust_stock, generate_next_uid, report_broken_item
 
@@ -97,6 +98,8 @@ class SectionSerializer(serializers.ModelSerializer):
 
 class SupplierSerializer(serializers.ModelSerializer):
     items_count = serializers.SerializerMethodField()
+    orders_count = serializers.SerializerMethodField()
+    total_owed = serializers.SerializerMethodField()
     store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
 
     class Meta:
@@ -117,13 +120,112 @@ class SupplierSerializer(serializers.ModelSerializer):
             'store_name',
             'is_active',
             'items_count',
+            'orders_count',
+            'total_owed',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'store_name', 'items_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'store_name', 'items_count', 'orders_count', 'total_owed', 'created_at', 'updated_at']
 
     def get_items_count(self, obj):
         return obj.items.count()
+
+    def get_orders_count(self, obj):
+        return obj.orders.count()
+
+    def get_total_owed(self, obj):
+        # Sum outstanding amount of unpaid and partial orders
+        total = Decimal('0.00')
+        for order in obj.orders.filter(status__in=['unpaid', 'partial']):
+            total += order.outstanding_amount
+        return float(total)
+
+
+class SupplierOrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SupplierOrderItem
+        fields = [
+            'id',
+            'order',
+            'item',
+            'item_name',
+            'item_uid',
+            'quantity',
+            'cost_price',
+            'line_total',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class SupplierOrderSerializer(serializers.ModelSerializer):
+    items = SupplierOrderItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
+    outstanding_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = SupplierOrder
+        fields = [
+            'id',
+            'order_number',
+            'supplier',
+            'supplier_name',
+            'store',
+            'store_name',
+            'title',
+            'total_amount',
+            'paid_amount',
+            'outstanding_amount',
+            'status',
+            'delivery_status',
+            'order_date',
+            'due_date',
+            'payment_method',
+            'payment_reference',
+            'payment_date',
+            'payment_notes',
+            'bill_file',
+            'notes',
+            'batch_key',
+            'recorded_by',
+            'recorded_by_name',
+            'items',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'order_number', 'supplier_name', 'store_name', 'outstanding_amount', 'created_at', 'updated_at']
+
+
+class SupplierLedgerEntrySerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
+    order_number = serializers.CharField(source='order.order_number', read_only=True, allow_null=True)
+
+    class Meta:
+        model = SupplierLedgerEntry
+        fields = [
+            'id',
+            'entry_number',
+            'supplier',
+            'supplier_name',
+            'order',
+            'order_number',
+            'store',
+            'store_name',
+            'entry_type',
+            'title',
+            'amount',
+            'entry_date',
+            'payment_method',
+            'reference',
+            'notes',
+            'recorded_by',
+            'recorded_by_name',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'entry_number', 'supplier_name', 'store_name', 'order_number', 'created_at', 'updated_at']
 
 
 class SubCategorySerializer(serializers.ModelSerializer):

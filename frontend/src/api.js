@@ -562,6 +562,124 @@ export async function deleteSupplier(id) {
   return true;
 }
 
+export async function fetchSupplierDetailStats(supplierId, params = {}) {
+  const url = new URL(`${window.location.origin}${API_BASE}/suppliers/${supplierId}/detail-stats/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch supplier detail stats');
+  return res.json();
+}
+
+export async function fetchSupplierOrders(params = {}) {
+  const url = new URL(`${window.location.origin}${API_BASE}/supplier-orders/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch supplier orders');
+  return res.json();
+}
+
+export async function createSupplierOrder(formDataOrObj) {
+  const isFormData = formDataOrObj instanceof FormData;
+  const headers = isFormData ? getAuthHeaders() : getAuthHeaders({ 'Content-Type': 'application/json' });
+  const body = isFormData ? formDataOrObj : JSON.stringify(formDataOrObj);
+  const res = await fetch(`${API_BASE}/supplier-orders/`, {
+    method: 'POST',
+    headers,
+    body,
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const message = Object.entries(errData)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('; ') || 'Failed to create supplier order';
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function updateSupplierOrder(id, formDataOrObj) {
+  const isFormData = formDataOrObj instanceof FormData;
+  const headers = isFormData ? getAuthHeaders() : getAuthHeaders({ 'Content-Type': 'application/json' });
+  const body = isFormData ? formDataOrObj : JSON.stringify(formDataOrObj);
+  const res = await fetch(`${API_BASE}/supplier-orders/${id}/`, {
+    method: 'PATCH',
+    headers,
+    body,
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const message = Object.entries(errData)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('; ') || 'Failed to update supplier order';
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function recordSupplierOrderPayment(orderId, paymentData) {
+  const res = await fetch(`${API_BASE}/supplier-orders/${orderId}/record-payment/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(paymentData),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || 'Failed to record payment');
+  }
+  return res.json();
+}
+
+export async function fetchSupplierLedgerEntries(params = {}) {
+  const url = new URL(`${window.location.origin}${API_BASE}/supplier-ledger-entries/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch supplier ledger entries');
+  return res.json();
+}
+
+export async function createSupplierLedgerEntry(data) {
+  const res = await fetch(`${API_BASE}/supplier-ledger-entries/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const message = Object.entries(errData)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('; ') || 'Failed to create ledger entry';
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function deleteSupplierLedgerEntry(id) {
+  const res = await fetch(`${API_BASE}/supplier-ledger-entries/${id}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to delete ledger entry');
+  return true;
+}
+
 // ----------------- Sections (Departments / Aisles) APIs -----------------
 
 export async function fetchSections(params = {}) {
@@ -738,11 +856,11 @@ export async function createItem(data) {
   return res.json();
 }
 
-export async function bulkCreateItems(items, storeId = null) {
+export async function bulkCreateItems(items, storeId = null, batchKey = null) {
   const res = await fetch(`${API_BASE}/items/bulk-create/`, {
     method: 'POST',
     headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ items, store: storeId }),
+    body: JSON.stringify({ items, store: storeId, batch_key: batchKey }),
   });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
