@@ -2879,8 +2879,45 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
                 Q(invoice_number__icontains=search) |
                 Q(customer_phone__icontains=search) |
                 Q(customer_name__icontains=search) |
-                Q(cashier_name__icontains=search)
-            )
+                Q(customer_display_name__icontains=search) |
+                Q(cashier_name__icontains=search) |
+                Q(notes__icontains=search) |
+                Q(items__item_name__icontains=search) |
+                Q(items__item_uid__icontains=search)
+            ).distinct()
+
+        # Dedicated product search by name or UID
+        product_query = self.request.query_params.get('product_query', '').strip()
+        if product_query:
+            qs = qs.filter(
+                Q(items__item_name__icontains=product_query) |
+                Q(items__item_uid__icontains=product_query)
+            ).distinct()
+
+        # Section filter (by Section ID)
+        section_id = self.request.query_params.get('section') or self.request.query_params.get('section_id')
+        if section_id and section_id != 'all':
+            qs = qs.filter(items__item__section_id=section_id).distinct()
+
+        # Supplier filter (by Supplier ID)
+        supplier_id = self.request.query_params.get('supplier') or self.request.query_params.get('supplier_id')
+        if supplier_id and supplier_id != 'all':
+            qs = qs.filter(items__item__supplier_id=supplier_id).distinct()
+
+        # Category / Subcategory filter
+        category_id = self.request.query_params.get('category') or self.request.query_params.get('category_id')
+        if category_id and category_id != 'all':
+            qs = qs.filter(
+                Q(items__item__subcategories__category_id=category_id) |
+                Q(items__item__primary_subcategory__category_id=category_id)
+            ).distinct()
+
+        subcategory_id = self.request.query_params.get('subcategory') or self.request.query_params.get('subcategory_id')
+        if subcategory_id and subcategory_id != 'all':
+            qs = qs.filter(
+                Q(items__item__subcategories__id=subcategory_id) |
+                Q(items__item__primary_subcategory_id=subcategory_id)
+            ).distinct()
 
         # Payment method filter (supports 'partial' alias for pending dues)
         payment_method = self.request.query_params.get('payment_method', '').strip().lower()
@@ -2988,6 +3025,12 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
             '-created_at': '-created_at',
             'total_amount': 'total_amount',
             '-total_amount': '-total_amount',
+            'invoice_number': 'invoice_number',
+            '-invoice_number': '-invoice_number',
+            'customer_name': 'customer_name',
+            '-customer_name': '-customer_name',
+            'balance_due': 'balance_due',
+            '-balance_due': '-balance_due',
         }
         ordering = self.request.query_params.get('ordering', '-created_at')
         safe_ordering = ALLOWED_ORDERINGS.get(ordering, '-created_at')

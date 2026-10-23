@@ -8415,6 +8415,36 @@ input[type=number] {
   }
 }
 
+/* ==========================================================================
+   ACCOUNTS SALES & INVOICES LEDGER TABLE SCALING & FIT
+   Scale down the sales ledger table cleanly and proportionally (same as inventory)
+   so all columns including 'Collect Due' button fit comfortably without cut-off.
+   ========================================================================== */
+.ledger-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.ledger-table {
+  width: 100% !important;
+  font-size: 0.78rem !important;
+  zoom: 0.88;
+}
+
+@supports not (zoom: 0.88) {
+  .ledger-table {
+    transform: scale(0.88);
+    transform-origin: top left;
+    width: 113.6% !important;
+  }
+}
+
+.ledger-table th {
+  white-space: nowrap;
+}
+
+
 
 /* ==========================================================================
    EMPLOYEE PORTAL WORKSTATION (RESPONSIVE STYLES)

@@ -42,7 +42,7 @@ import {
   ChevronsRight,
   Loader2,
 } from 'lucide-react';
-import { getSaleOrders, getSaleOrdersPage, getSaleOrdersLedgerSummary, recordOrderDuePayment } from '../api';
+import { getSaleOrders, getSaleOrdersPage, getSaleOrdersLedgerSummary, recordOrderDuePayment, fetchCategories, fetchSuppliers, fetchSections } from '../api';
 import { formatIndianCurrencyCompact } from './GlowCurveChart';
 import TimelineRangeSelector from './TimelineRangeSelector';
 import {
@@ -122,7 +122,48 @@ export default function SalesInvoicesLedgerView({
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
   const [cashierFilter, setCashierFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'completed' | 'returned' | 'dues'
-  const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
+  const [sectionFilter, setSectionFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [supplierFilter, setSupplierFilter] = useState('all');
+  const [productQuery, setProductQuery] = useState('');
+  const [debouncedProductQuery, setDebouncedProductQuery] = useState('');
+  const productDebounceRef = useRef(null);
+  const handleProductQueryChange = (value) => {
+    setProductQuery(value);
+    clearTimeout(productDebounceRef.current);
+    productDebounceRef.current = setTimeout(() => setDebouncedProductQuery(value.trim()), 400);
+  };
+
+  // Master metadata options loaded for category, section, and supplier filters
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [sectionOptions, setSectionOptions] = useState([]);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.allSettled([
+      fetchCategories(),
+      fetchSections({ is_active: true }),
+      fetchSuppliers({ is_active: true }),
+    ]).then(([catRes, secRes, supRes]) => {
+      if (!isMounted) return;
+      if (catRes.status === 'fulfilled') {
+        const cats = Array.isArray(catRes.value) ? catRes.value : (catRes.value?.results || []);
+        setCategoryOptions(cats);
+      }
+      if (secRes.status === 'fulfilled') {
+        const secs = Array.isArray(secRes.value) ? secRes.value : (secRes.value?.results || []);
+        setSectionOptions(secs);
+      }
+      if (supRes.status === 'fulfilled') {
+        const sups = Array.isArray(supRes.value) ? supRes.value : (supRes.value?.results || []);
+        setSupplierOptions(sups);
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
+
+  const [sortBy, setSortBy] = useState('date_desc'); // 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'invoice_asc' | 'invoice_desc' | 'customer_asc' | 'due_desc'
 
   // Receipt Modal State
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
@@ -253,17 +294,37 @@ export default function SalesInvoicesLedgerView({
     if (dateRangeBounds.start) params['created_at__gte'] = `${dateRangeBounds.start}T00:00:00`;
     if (dateRangeBounds.end)   params['created_at__lte'] = `${dateRangeBounds.end}T23:59:59`;
     if (debouncedSearch)       params.search = debouncedSearch;
+    if (debouncedProductQuery) params.product_query = debouncedProductQuery;
     if (paymentMethodFilter !== 'all') params.payment_method = paymentMethodFilter;
     if (cashierFilter !== 'all')       params.cashier_name   = cashierFilter;
     if (statusFilter !== 'all')        params.order_status   = statusFilter;
+    if (sectionFilter !== 'all')       params.section        = sectionFilter;
+    if (categoryFilter !== 'all')      params.category       = categoryFilter;
+    if (supplierFilter !== 'all')      params.supplier       = supplierFilter;
     return params;
-  }, [activeStoreId, dateRangeBounds.start, dateRangeBounds.end, debouncedSearch, paymentMethodFilter, cashierFilter, statusFilter]);
+  }, [
+    activeStoreId,
+    dateRangeBounds.start,
+    dateRangeBounds.end,
+    debouncedSearch,
+    debouncedProductQuery,
+    paymentMethodFilter,
+    cashierFilter,
+    statusFilter,
+    sectionFilter,
+    categoryFilter,
+    supplierFilter,
+  ]);
 
   // ─── Sorting map (backend ordering param) ─────────────────────────────────
   const orderingParam = useMemo(() => {
-    if (sortBy === 'date_asc')    return 'created_at';
-    if (sortBy === 'amount_desc') return '-total_amount';
-    if (sortBy === 'amount_asc')  return 'total_amount';
+    if (sortBy === 'date_asc')     return 'created_at';
+    if (sortBy === 'amount_desc')  return '-total_amount';
+    if (sortBy === 'amount_asc')   return 'total_amount';
+    if (sortBy === 'invoice_asc')  return 'invoice_number';
+    if (sortBy === 'invoice_desc') return '-invoice_number';
+    if (sortBy === 'customer_asc') return 'customer_name';
+    if (sortBy === 'due_desc')     return '-balance_due';
     return '-created_at'; // date_desc default
   }, [sortBy]);
 
@@ -332,8 +393,30 @@ export default function SalesInvoicesLedgerView({
 
   // ─── Trigger reload when filters change (reset to page 1) ─────────────────
   const filterSig = useMemo(() =>
-    JSON.stringify([activeStoreId, dateRangeBounds, debouncedSearch, paymentMethodFilter, cashierFilter, statusFilter]),
-    [activeStoreId, dateRangeBounds, debouncedSearch, paymentMethodFilter, cashierFilter, statusFilter]
+    JSON.stringify([
+      activeStoreId,
+      dateRangeBounds,
+      debouncedSearch,
+      debouncedProductQuery,
+      paymentMethodFilter,
+      cashierFilter,
+      statusFilter,
+      sectionFilter,
+      categoryFilter,
+      supplierFilter,
+    ]),
+    [
+      activeStoreId,
+      dateRangeBounds,
+      debouncedSearch,
+      debouncedProductQuery,
+      paymentMethodFilter,
+      cashierFilter,
+      statusFilter,
+      sectionFilter,
+      categoryFilter,
+      supplierFilter,
+    ]
   );
 
   useEffect(() => {
@@ -900,12 +983,12 @@ export default function SalesInvoicesLedgerView({
           />
         ))}
         {/* Centre text */}
-        <text x={cx} y={cy - 10} textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.7">{centerLabel}</text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="#F8FAFC" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
+        <text x={cx} y={cy - 10} textAnchor="middle" fill="var(--text-secondary)" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.85">{centerLabel}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fill="var(--text-primary)" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
           {formatIndianCurrencyCompact(centerVal)}
         </text>
         {hovered && (
-          <text x={cx} y={cy + 28} textAnchor="middle" fill="#94A3B8" fontSize="10" fontFamily="Inter, sans-serif">
+          <text x={cx} y={cy + 28} textAnchor="middle" fill="var(--text-muted)" fontSize="10" fontFamily="Inter, sans-serif">
             {(slices[pieCashierHovered]?.share * 100).toFixed(1)}% share
           </text>
         )}
@@ -946,8 +1029,8 @@ export default function SalesInvoicesLedgerView({
           />
         ))}
         {/* Centre text */}
-        <text x={cx} y={cy - 10} textAnchor="middle" fill="#F8FAFC" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.7">{centerLabel}</text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="#F8FAFC" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
+        <text x={cx} y={cy - 10} textAnchor="middle" fill="var(--text-secondary)" fontSize="11" fontWeight="600" fontFamily="Inter, sans-serif" opacity="0.85">{centerLabel}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fill="var(--text-primary)" fontSize="13" fontWeight="800" fontFamily="Inter, sans-serif">
           {formatIndianCurrencyCompact(centerVal)}
         </text>
         {hovered && (
@@ -976,21 +1059,21 @@ export default function SalesInvoicesLedgerView({
             style={{
               padding: '16px 20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted, #94A3B8)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Total Orders
             </span>
-            <Receipt size={16} color="#38BDF8" />
+            <Receipt size={16} color="#0284C7" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {kpiSummary.orderCount.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)' }}>
@@ -1003,22 +1086,22 @@ export default function SalesInvoicesLedgerView({
           style={{
             padding: '16px 20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
             background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%)',
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Net Sales Turnover
             </span>
-            <Sparkles size={16} color="#10B981" />
+            <Sparkles size={16} color="#059669" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#34D399', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#059669', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             ₹{kpiSummary.grossTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)' }}>
@@ -1026,29 +1109,29 @@ export default function SalesInvoicesLedgerView({
           </div>
         </div>
 
-        {/* NET PROFIT KPI CARD (NEW) */}
+        {/* NET PROFIT KPI CARD */}
         <div
           style={{
             padding: '16px 20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: `1px solid ${kpiSummary.totalProfit >= 0 ? 'rgba(99, 102, 241, 0.35)' : 'rgba(239, 68, 68, 0.3)'}`,
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: `1px solid ${kpiSummary.totalProfit >= 0 ? 'rgba(79, 70, 229, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
             background: kpiSummary.totalProfit >= 0
-              ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(99, 102, 241, 0.02) 100%)'
-              : 'linear-gradient(135deg, rgba(239,68,68,0.09) 0%, rgba(239,68,68,0.02) 100%)',
+              ? 'linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(79, 70, 229, 0.02) 100%)'
+              : 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 100%)',
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: kpiSummary.totalProfit >= 0 ? '#818CF8' : '#F87171', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: kpiSummary.totalProfit >= 0 ? '#4F46E5' : '#DC2626', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Gross Profit
             </span>
-            <TrendingUp size={16} color={kpiSummary.totalProfit >= 0 ? '#818CF8' : '#F87171'} />
+            <TrendingUp size={16} color={kpiSummary.totalProfit >= 0 ? '#4F46E5' : '#DC2626'} />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: kpiSummary.totalProfit >= 0 ? '#A5B4FC' : '#FCA5A5', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: kpiSummary.totalProfit >= 0 ? '#4F46E5' : '#DC2626', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             ₹{kpiSummary.totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1059,8 +1142,8 @@ export default function SalesInvoicesLedgerView({
                 borderRadius: '4px',
                 fontWeight: 700,
                 fontSize: '0.70rem',
-                background: kpiSummary.totalProfit >= 0 ? 'rgba(99,102,241,0.18)' : 'rgba(239,68,68,0.15)',
-                color: kpiSummary.totalProfit >= 0 ? '#A5B4FC' : '#FCA5A5',
+                background: kpiSummary.totalProfit >= 0 ? 'rgba(79, 70, 229, 0.14)' : 'rgba(239,68,68,0.14)',
+                color: kpiSummary.totalProfit >= 0 ? '#4F46E5' : '#DC2626',
               }}
             >
               {kpiSummary.profitMargin.toFixed(1)}% margin
@@ -1074,21 +1157,21 @@ export default function SalesInvoicesLedgerView({
           style={{
             padding: '16px 20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted, #94A3B8)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Avg Order Value
             </span>
-            <ShoppingBag size={16} color="#A78BFA" />
+            <ShoppingBag size={16} color="#7C3AED" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#C4B5FD', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#7C3AED', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             ₹{kpiSummary.aov.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)' }}>
@@ -1101,21 +1184,21 @@ export default function SalesInvoicesLedgerView({
           style={{
             padding: '16px 20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
             display: 'flex',
             flexDirection: 'column',
             gap: '4px',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted, #94A3B8)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Discounts Given
             </span>
-            <Tag size={16} color="#F59E0B" />
+            <Tag size={16} color="#D97706" />
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#FBBF24', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#D97706', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             ₹{kpiSummary.totalDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)' }}>
@@ -1129,11 +1212,12 @@ export default function SalesInvoicesLedgerView({
         style={{
           padding: '18px 20px',
           borderRadius: '16px',
-          backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-          border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+          backgroundColor: 'var(--card-bg, #FFFFFF)',
+          border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
           display: 'flex',
           flexDirection: 'column',
           gap: '14px',
+          boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -1158,9 +1242,9 @@ export default function SalesInvoicesLedgerView({
                 width: '100%',
                 padding: '9px 12px 9px 36px',
                 borderRadius: '10px',
-                backgroundColor: 'var(--bg-main, #0B0E17)',
-                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
-                color: 'var(--text-primary, #F8FAFC)',
+                backgroundColor: 'var(--bg-input, #FFFFFF)',
+                border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                color: 'var(--text-primary, #0F172A)',
                 fontSize: '0.84rem',
                 outline: 'none',
               }}
@@ -1279,9 +1363,9 @@ export default function SalesInvoicesLedgerView({
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
-                backgroundColor: 'var(--bg-main, #0B0E17)',
-                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
-                color: 'var(--text-primary, #F8FAFC)',
+                backgroundColor: 'var(--bg-input, #FFFFFF)',
+                border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                color: 'var(--text-primary, #0F172A)',
                 fontSize: '0.78rem',
                 fontWeight: 600,
                 outline: 'none',
@@ -1289,7 +1373,7 @@ export default function SalesInvoicesLedgerView({
               }}
             >
               {PAYMENT_METHODS.map((pm) => (
-                <option key={pm.id} value={pm.id} style={{ backgroundColor: 'var(--bg-surface)' }}>
+                <option key={pm.id} value={pm.id} style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>
                   {pm.label}
                 </option>
               ))}
@@ -1306,18 +1390,18 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   padding: '6px 12px',
                   borderRadius: '8px',
-                  backgroundColor: 'var(--bg-main, #0B0E17)',
-                  border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
-                  color: 'var(--text-primary, #F8FAFC)',
+                  backgroundColor: 'var(--bg-input, #FFFFFF)',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                  color: 'var(--text-primary, #0F172A)',
                   fontSize: '0.78rem',
                   fontWeight: 600,
                   outline: 'none',
                   cursor: 'pointer',
                 }}
               >
-                <option value="all" style={{ backgroundColor: 'var(--bg-surface)' }}>All Cashiers</option>
+                <option value="all" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>All Cashiers</option>
                 {cashierOptions.map((c) => (
-                  <option key={c} value={c} style={{ backgroundColor: 'var(--bg-surface)' }}>
+                  <option key={c} value={c} style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>
                     {c}
                   </option>
                 ))}
@@ -1334,21 +1418,223 @@ export default function SalesInvoicesLedgerView({
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
-                backgroundColor: 'var(--bg-main, #0B0E17)',
-                border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
-                color: 'var(--text-primary, #F8FAFC)',
+                backgroundColor: 'var(--bg-input, #FFFFFF)',
+                border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                color: 'var(--text-primary, #0F172A)',
                 fontSize: '0.78rem',
                 fontWeight: 600,
                 outline: 'none',
                 cursor: 'pointer',
               }}
             >
-              <option value="all" style={{ backgroundColor: 'var(--bg-surface)' }}>All Orders</option>
-              <option value="completed" style={{ backgroundColor: 'var(--bg-surface)' }}>Fully Paid / Completed Only</option>
-              <option value="dues" style={{ backgroundColor: 'var(--bg-surface)' }}>Pending Dues (Khata) Only</option>
-              <option value="returned" style={{ backgroundColor: 'var(--bg-surface)' }}>Returned / Refunds Only</option>
+              <option value="all" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>All Orders</option>
+              <option value="completed" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Fully Paid / Completed Only</option>
+              <option value="dues" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Pending Dues (Khata) Only</option>
+              <option value="returned" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Returned / Refunds Only</option>
             </select>
           </div>
+
+          {/* Section Filter */}
+          {sectionOptions.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', fontWeight: 600 }}>Section:</span>
+              <select
+                value={sectionFilter}
+                onChange={(e) => setSectionFilter(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--bg-input, #FFFFFF)',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                  color: 'var(--text-primary, #0F172A)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  maxWidth: '160px',
+                }}
+              >
+                <option value="all" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>All Sections</option>
+                {sectionOptions.map((s) => (
+                  <option key={s.id} value={s.id} style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Category Filter */}
+          {categoryOptions.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', fontWeight: 600 }}>Category:</span>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--bg-input, #FFFFFF)',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                  color: 'var(--text-primary, #0F172A)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  maxWidth: '170px',
+                }}
+              >
+                <option value="all" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>All Categories</option>
+                {categoryOptions.map((c) => (
+                  <option key={c.id} value={c.id} style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Supplier Filter */}
+          {supplierOptions.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', fontWeight: 600 }}>Supplier:</span>
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--bg-input, #FFFFFF)',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                  color: 'var(--text-primary, #0F172A)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  maxWidth: '170px',
+                }}
+              >
+                <option value="all" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>All Suppliers</option>
+                {supplierOptions.map((sup) => (
+                  <option key={sup.id} value={sup.id} style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>
+                    {sup.name || sup.company_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Product / Item UID Search Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', fontWeight: 600 }}>Product / UID:</span>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Product name or UID..."
+                value={productQuery}
+                onChange={(e) => handleProductQueryChange(e.target.value)}
+                style={{
+                  padding: '6px 26px 6px 10px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--bg-input, #FFFFFF)',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                  color: 'var(--text-primary, #0F172A)',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  outline: 'none',
+                  width: '180px',
+                }}
+              />
+              {productQuery && (
+                <button
+                  type="button"
+                  onClick={() => handleProductQueryChange('')}
+                  style={{
+                    position: 'absolute',
+                    right: '6px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted, #64748B)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 0,
+                  }}
+                  title="Clear product search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Sort By Dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', fontWeight: 600 }}>Sort By:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--bg-input, #FFFFFF)',
+                border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
+                color: 'var(--text-primary, #0F172A)',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="date_desc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Date: Newest First</option>
+              <option value="date_asc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Date: Oldest First</option>
+              <option value="amount_desc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Amount: High to Low</option>
+              <option value="amount_asc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Amount: Low to High</option>
+              <option value="invoice_desc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Invoice #: Descending</option>
+              <option value="invoice_asc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Invoice #: Ascending</option>
+              <option value="customer_asc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Customer: A to Z</option>
+              <option value="due_desc" style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>Highest Balance Due</option>
+            </select>
+          </div>
+
+          {/* Reset / Clear All Filters */}
+          {(searchQuery || productQuery || paymentMethodFilter !== 'all' || cashierFilter !== 'all' || statusFilter !== 'all' || sectionFilter !== 'all' || categoryFilter !== 'all' || supplierFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setDebouncedSearch('');
+                setProductQuery('');
+                setDebouncedProductQuery('');
+                setPaymentMethodFilter('all');
+                setCashierFilter('all');
+                setStatusFilter('all');
+                setSectionFilter('all');
+                setCategoryFilter('all');
+                setSupplierFilter('all');
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                color: '#EF4444',
+                fontSize: '0.76rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              title="Reset all search queries and filters"
+            >
+              <X size={13} />
+              <span>Clear All</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1358,24 +1644,24 @@ export default function SalesInvoicesLedgerView({
           style={{
             padding: '20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: 34, height: 34, borderRadius: '10px', background: 'rgba(129,140,248,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(129,140,248,0.3)' }}>
-                <Users size={17} color="#818CF8" />
+              <div style={{ width: 34, height: 34, borderRadius: '10px', background: 'rgba(99, 102, 241, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                <Users size={17} color="#4F46E5" />
               </div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--text-primary, #F8FAFC)' }}>Cashier Performance Breakdown</div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>Turnover &amp; profit attribution per staff member</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--text-primary, #0F172A)' }}>Cashier Performance Breakdown</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)', marginTop: '2px' }}>Turnover &amp; profit attribution per staff member</div>
               </div>
             </div>
             {/* Metric Toggle */}
-            <div style={{ display: 'flex', background: 'var(--bg-main, #0B0E17)', borderRadius: '8px', padding: '3px', gap: '2px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))' }}>
+            <div style={{ display: 'flex', background: 'var(--bg-surface-hover, #F1F5F9)', borderRadius: '8px', padding: '3px', gap: '2px', border: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
               {[{ id: 'revenue', label: 'Turnover' }, { id: 'profit', label: 'Profit' }].map((m) => (
                 <button
                   key={m.id}
@@ -1388,8 +1674,9 @@ export default function SalesInvoicesLedgerView({
                     fontSize: '0.76rem',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    background: pieMetric === m.id ? 'rgba(129,140,248,0.25)' : 'transparent',
-                    color: pieMetric === m.id ? '#A5B4FC' : 'var(--text-muted, #94A3B8)',
+                    background: pieMetric === m.id ? 'var(--card-bg, #FFFFFF)' : 'transparent',
+                    color: pieMetric === m.id ? '#4F46E5' : 'var(--text-secondary, #64748B)',
+                    boxShadow: pieMetric === m.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                     transition: 'all 0.15s ease',
                   }}
                 >
@@ -1412,7 +1699,7 @@ export default function SalesInvoicesLedgerView({
             <div style={{ flex: 1, minWidth: '320px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))', color: 'var(--text-muted, #94A3B8)', fontSize: '0.70rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <tr style={{ borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.08))', color: 'var(--text-muted, #64748B)', fontSize: '0.70rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     <th style={{ padding: '8px 12px', textAlign: 'left' }}>Cashier</th>
                     <th style={{ padding: '8px 12px', textAlign: 'center' }}>Orders</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right' }}>Turnover</th>
@@ -1433,23 +1720,23 @@ export default function SalesInvoicesLedgerView({
                         onMouseEnter={() => setPieCashierHovered(i)}
                         onMouseLeave={() => setPieCashierHovered(null)}
                         style={{
-                          borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.04))',
+                          borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.04))',
                           transition: 'background 0.15s ease',
-                          background: isHov ? 'rgba(255,255,255,0.04)' : 'transparent',
+                          background: isHov ? 'var(--bg-surface-hover, rgba(0,0,0,0.03))' : 'transparent',
                           cursor: 'default',
                         }}
                       >
                         <td style={{ padding: '10px 12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                            <span style={{ fontWeight: 700, color: 'var(--text-primary, #F8FAFC)' }}>{c.name}</span>
+                            <span style={{ fontWeight: 700, color: 'var(--text-primary, #0F172A)' }}>{c.name}</span>
                           </div>
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary, #94A3B8)', fontWeight: 600 }}>{c.orders}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#34D399', fontFamily: 'monospace' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>{c.orders}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
                           ₹{c.turnover.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: c.profit >= 0 ? '#A5B4FC' : '#FCA5A5', fontFamily: 'monospace' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: c.profit >= 0 ? '#4F46E5' : '#DC2626', fontFamily: 'monospace' }}>
                           ₹{c.profit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -1459,13 +1746,13 @@ export default function SalesInvoicesLedgerView({
                             borderRadius: '5px',
                             fontSize: '0.72rem',
                             fontWeight: 700,
-                            background: margin >= 0 ? 'rgba(99,102,241,0.15)' : 'rgba(239,68,68,0.13)',
-                            color: margin >= 0 ? '#A5B4FC' : '#FCA5A5',
+                            background: margin >= 0 ? 'rgba(79, 70, 229, 0.12)' : 'rgba(239,68,68,0.12)',
+                            color: margin >= 0 ? '#4F46E5' : '#DC2626',
                           }}>
                             {margin.toFixed(1)}%
                           </span>
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #94A3B8)', fontFamily: 'monospace', fontWeight: 600 }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #475569)', fontFamily: 'monospace', fontWeight: 600 }}>
                           ₹{avgOrd.toFixed(2)}
                         </td>
                       </tr>
@@ -1474,13 +1761,13 @@ export default function SalesInvoicesLedgerView({
                 </tbody>
                 {/* Totals footer */}
                 <tfoot>
-                  <tr style={{ borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.12))', background: 'rgba(255,255,255,0.02)' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)', fontSize: '0.80rem' }}>Total</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)' }}>{kpiSummary.orderCount}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#34D399', fontFamily: 'monospace' }}>
+                  <tr style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.12))', background: 'var(--bg-surface-hover, rgba(0,0,0,0.02))' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', fontSize: '0.80rem' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--text-primary, #0F172A)' }}>{kpiSummary.orderCount}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
                       ₹{kpiSummary.grossTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: kpiSummary.totalProfit >= 0 ? '#A5B4FC' : '#FCA5A5', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: kpiSummary.totalProfit >= 0 ? '#4F46E5' : '#DC2626', fontFamily: 'monospace' }}>
                       ₹{kpiSummary.totalProfit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -1490,13 +1777,13 @@ export default function SalesInvoicesLedgerView({
                         borderRadius: '5px',
                         fontSize: '0.72rem',
                         fontWeight: 700,
-                        background: kpiSummary.profitMargin >= 0 ? 'rgba(99,102,241,0.18)' : 'rgba(239,68,68,0.15)',
-                        color: kpiSummary.profitMargin >= 0 ? '#A5B4FC' : '#FCA5A5',
+                        background: kpiSummary.profitMargin >= 0 ? 'rgba(79, 70, 229, 0.14)' : 'rgba(239,68,68,0.14)',
+                        color: kpiSummary.profitMargin >= 0 ? '#4F46E5' : '#DC2626',
                       }}>
                         {kpiSummary.profitMargin.toFixed(1)}%
                       </span>
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #94A3B8)', fontFamily: 'monospace', fontWeight: 600 }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary, #475569)', fontFamily: 'monospace', fontWeight: 600 }}>
                       ₹{kpiSummary.aov.toFixed(2)}
                     </td>
                   </tr>
@@ -1513,20 +1800,20 @@ export default function SalesInvoicesLedgerView({
           style={{
             padding: '20px',
             borderRadius: '16px',
-            backgroundColor: 'var(--bg-surface-solid, #161B2C)',
-            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
-            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+            backgroundColor: 'var(--card-bg, #FFFFFF)',
+            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+            boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
           }}
         >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: 34, height: 34, borderRadius: '10px', background: 'rgba(56,189,248,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(56,189,248,0.3)' }}>
-                <Wallet size={17} color="#38BDF8" />
+              <div style={{ width: 34, height: 34, borderRadius: '10px', background: 'rgba(2, 132, 199, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(2, 132, 199, 0.3)' }}>
+                <Wallet size={17} color="#0284C7" />
               </div>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--text-primary, #F8FAFC)' }}>Payment Methods &amp; Cashier Settlement Breakdown</div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>Distribution of collection channels (UPI, Cash, Cards) &amp; per-cashier payment breakdown</div>
+                <div style={{ fontWeight: 800, fontSize: '0.94rem', color: 'var(--text-primary, #0F172A)' }}>Payment Methods &amp; Cashier Settlement Breakdown</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted, #64748B)', marginTop: '2px' }}>Distribution of collection channels (UPI, Cash, Cards) &amp; per-cashier payment breakdown</div>
               </div>
             </div>
 
@@ -1543,14 +1830,14 @@ export default function SalesInvoicesLedgerView({
                       gap: '5px',
                       padding: '4px 9px',
                       borderRadius: '8px',
-                      backgroundColor: 'var(--bg-main, #0B0E17)',
-                      border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
+                      backgroundColor: 'var(--bg-surface-hover, #F1F5F9)',
+                      border: '1px solid var(--border-color, rgba(255,255,255,0.08))',
                       fontSize: '0.74rem',
                     }}
                   >
                     <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: pm.color, display: 'inline-block' }} />
-                    <span style={{ color: 'var(--text-secondary, #94A3B8)', fontWeight: 600 }}>{pm.label}:</span>
-                    <span style={{ color: 'var(--text-primary, #F8FAFC)', fontWeight: 700, fontFamily: 'monospace' }}>₹{pm.amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                    <span style={{ color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>{pm.label}:</span>
+                    <span style={{ color: 'var(--text-primary, #0F172A)', fontWeight: 700, fontFamily: 'monospace' }}>₹{pm.amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                     <span style={{ color: pm.color, fontWeight: 800, fontSize: '0.68rem' }}>({share}%)</span>
                   </div>
                 );
@@ -1579,18 +1866,18 @@ export default function SalesInvoicesLedgerView({
                         padding: '3px 6px',
                         borderRadius: '6px',
                         cursor: 'pointer',
-                        backgroundColor: isHov ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        backgroundColor: isHov ? 'var(--bg-surface-hover, rgba(0,0,0,0.04))' : 'transparent',
                         transition: 'background 0.15s ease',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: pm.color }} />
-                        <span style={{ fontSize: '0.74rem', color: isHov ? '#F8FAFC' : 'var(--text-secondary, #94A3B8)', fontWeight: isHov ? 700 : 500 }}>
+                        <span style={{ fontSize: '0.74rem', color: isHov ? 'var(--text-primary, #0F172A)' : 'var(--text-secondary, #475569)', fontWeight: isHov ? 700 : 500 }}>
                           {pm.label}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '0.74rem', color: '#F8FAFC', fontWeight: 700, fontFamily: 'monospace' }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-primary, #0F172A)', fontWeight: 700, fontFamily: 'monospace' }}>
                           ₹{pm.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                         </span>
                         <span style={{ fontSize: '0.68rem', color: pm.color, fontWeight: 700, minWidth: '34px', textAlign: 'right' }}>
@@ -1607,26 +1894,26 @@ export default function SalesInvoicesLedgerView({
             <div style={{ flex: 1, minWidth: '340px', overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))', color: 'var(--text-muted, #94A3B8)', fontSize: '0.70rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <tr style={{ borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.08))', color: 'var(--text-muted, #64748B)', fontSize: '0.70rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     <th style={{ padding: '8px 12px', textAlign: 'left' }}>Cashier</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right' }}>Total Collected</th>
                     <th style={{ padding: '8px 12px', textAlign: 'right' }}>
-                      <span style={{ color: '#10B981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <Banknote size={12} /> Cash (₹ / %)
                       </span>
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'right' }}>
-                      <span style={{ color: '#38BDF8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: '#0284C7', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <QrCode size={12} /> UPI / QR (₹ / %)
                       </span>
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'right' }}>
-                      <span style={{ color: '#818CF8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: '#4F46E5', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <CreditCard size={12} /> Card (₹ / %)
                       </span>
                     </th>
                     <th style={{ padding: '8px 12px', textAlign: 'right' }}>
-                      <span style={{ color: '#EC4899', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: '#DB2777', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <Receipt size={12} /> Khata Due
                       </span>
                     </th>
@@ -1644,7 +1931,7 @@ export default function SalesInvoicesLedgerView({
                       <tr
                         key={cp.name}
                         style={{
-                          borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.04))',
+                          borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.04))',
                           transition: 'background 0.15s ease',
                           cursor: 'default',
                         }}
@@ -1653,34 +1940,34 @@ export default function SalesInvoicesLedgerView({
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
                             <div>
-                              <span style={{ fontWeight: 700, color: 'var(--text-primary, #F8FAFC)' }}>{cp.name}</span>
-                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted, #94A3B8)' }}>{cp.ordersCount} transactions</div>
+                              <span style={{ fontWeight: 700, color: 'var(--text-primary, #0F172A)' }}>{cp.name}</span>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted, #64748B)' }}>{cp.ordersCount} transactions</div>
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#F8FAFC', fontFamily: 'monospace' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: 'var(--text-primary, #0F172A)', fontFamily: 'monospace' }}>
                           ₹{cp.totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
-                          <div style={{ fontWeight: 700, color: '#10B981' }}>
+                          <div style={{ fontWeight: 700, color: '#059669' }}>
                             ₹{cp.methods.cash.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                           </div>
-                          <div style={{ fontSize: '0.68rem', color: '#10B981', opacity: 0.85 }}>{cashPct}%</div>
+                          <div style={{ fontSize: '0.68rem', color: '#059669', opacity: 0.85 }}>{cashPct}%</div>
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
-                          <div style={{ fontWeight: 700, color: '#38BDF8' }}>
+                          <div style={{ fontWeight: 700, color: '#0284C7' }}>
                             ₹{cp.methods.upi.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                           </div>
-                          <div style={{ fontSize: '0.68rem', color: '#38BDF8', opacity: 0.85 }}>{upiPct}%</div>
+                          <div style={{ fontSize: '0.68rem', color: '#0284C7', opacity: 0.85 }}>{upiPct}%</div>
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
-                          <div style={{ fontWeight: 700, color: '#818CF8' }}>
+                          <div style={{ fontWeight: 700, color: '#4F46E5' }}>
                             ₹{cp.methods.card.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                           </div>
-                          <div style={{ fontSize: '0.68rem', color: '#818CF8', opacity: 0.85 }}>{cardPct}%</div>
+                          <div style={{ fontSize: '0.68rem', color: '#4F46E5', opacity: 0.85 }}>{cardPct}%</div>
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'monospace' }}>
-                          <div style={{ fontWeight: 700, color: cp.methods.due > 0 ? '#EC4899' : 'var(--text-muted, #64748B)' }}>
+                          <div style={{ fontWeight: 700, color: cp.methods.due > 0 ? '#DB2777' : 'var(--text-muted, #64748B)' }}>
                             ₹{cp.methods.due.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                           </div>
                         </td>
@@ -1690,21 +1977,21 @@ export default function SalesInvoicesLedgerView({
                 </tbody>
                 {/* Payment Breakdown Footer */}
                 <tfoot>
-                  <tr style={{ borderTop: '1px solid var(--border-subtle, rgba(255,255,255,0.12))', background: 'rgba(255,255,255,0.02)' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--text-primary, #F8FAFC)', fontSize: '0.80rem' }}>Total</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#F8FAFC', fontFamily: 'monospace' }}>
+                  <tr style={{ borderTop: '1px solid var(--border-color, rgba(255,255,255,0.12))', background: 'var(--bg-surface-hover, rgba(0,0,0,0.02))' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', fontSize: '0.80rem' }}>Total</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: 'var(--text-primary, #0F172A)', fontFamily: 'monospace' }}>
                       ₹{paymentMethodTotals.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#10B981', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
                       ₹{(paymentMethodBreakdown.find((p) => p.id === 'cash')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#38BDF8', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#0284C7', fontFamily: 'monospace' }}>
                       ₹{(paymentMethodBreakdown.find((p) => p.id === 'upi')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#818CF8', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#4F46E5', fontFamily: 'monospace' }}>
                       ₹{(paymentMethodBreakdown.find((p) => p.id === 'card')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#EC4899', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#DB2777', fontFamily: 'monospace' }}>
                       ₹{(paymentMethodBreakdown.find((p) => p.id === 'due')?.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -1719,10 +2006,10 @@ export default function SalesInvoicesLedgerView({
       <div
         style={{
           borderRadius: '16px',
-          border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
-          backgroundColor: 'var(--bg-surface-solid, #161B2C)',
+          border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+          backgroundColor: 'var(--card-bg, #FFFFFF)',
           overflow: 'hidden',
-          boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.15))',
+          boxShadow: 'var(--shadow-sm, 0 4px 12px rgba(0,0,0,0.06))',
         }}
       >
         <div
@@ -1731,35 +2018,75 @@ export default function SalesInvoicesLedgerView({
           onMouseMove={handleTableMouseMove}
           onMouseUp={handleTableMouseUp}
           onMouseLeave={handleTableMouseUp}
+          className="ledger-table-scroll"
           style={{
             overflowX: 'auto',
+            width: '100%',
             cursor: isDraggingTable ? 'grabbing' : 'grab',
             userSelect: isDraggingTable ? 'none' : 'auto',
             WebkitUserSelect: isDraggingTable ? 'none' : 'auto',
+            scrollbarWidth: 'thin',
           }}
         >
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left', minWidth: '1100px' }}>
+          <table className="ledger-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
             <thead>
               <tr
                 style={{
-                  borderBottom: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
-                  backgroundColor: 'var(--bg-main, #0B0E17)',
-                  color: 'var(--text-muted, #94A3B8)',
+                  borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+                  backgroundColor: 'var(--bg-surface-hover, #F8FAFC)',
+                  color: 'var(--text-muted, #64748B)',
                   fontSize: '0.72rem',
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <th style={{ padding: '14px 18px' }}>Invoice / Bill #</th>
-                <th style={{ padding: '14px 18px' }}>Date &amp; Time</th>
-                {showBranchColumn && <th style={{ padding: '14px 18px' }}>Branch</th>}
-                <th style={{ padding: '14px 18px' }}>Customer</th>
-                <th style={{ padding: '14px 18px' }}>Cashier / Shift</th>
-                <th style={{ padding: '14px 18px' }}>Items Billed</th>
-                <th style={{ padding: '14px 18px' }}>Payment Mode</th>
-                <th style={{ padding: '14px 18px' }}>Status</th>
-                <th style={{ padding: '14px 18px', textAlign: 'right' }}>Total Amount</th>
-                <th style={{ padding: '14px 18px', textAlign: 'center' }}>Action</th>
+                <th
+                  onClick={() => setSortBy(sortBy === 'invoice_asc' ? 'invoice_desc' : 'invoice_asc')}
+                  style={{ padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                  title="Sort by Invoice Number"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Invoice / Bill #</span>
+                    {sortBy === 'invoice_asc' ? <ChevronDown size={13} style={{ transform: 'rotate(180deg)' }} /> : sortBy === 'invoice_desc' ? <ChevronDown size={13} /> : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th
+                  onClick={() => setSortBy(sortBy === 'date_desc' ? 'date_asc' : 'date_desc')}
+                  style={{ padding: '12px 12px', cursor: 'pointer', userSelect: 'none' }}
+                  title="Sort by Date"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Date &amp; Time</span>
+                    {sortBy === 'date_desc' ? <ChevronDown size={13} /> : sortBy === 'date_asc' ? <ChevronDown size={13} style={{ transform: 'rotate(180deg)' }} /> : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                {showBranchColumn && <th style={{ padding: '12px 12px' }}>Branch</th>}
+                <th
+                  onClick={() => setSortBy(sortBy === 'customer_asc' ? 'date_desc' : 'customer_asc')}
+                  style={{ padding: '12px 12px', cursor: 'pointer', userSelect: 'none' }}
+                  title="Sort by Customer Name"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Customer</span>
+                    {sortBy === 'customer_asc' ? <ChevronDown size={13} /> : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th style={{ padding: '12px 12px' }}>Cashier / Shift</th>
+                <th style={{ padding: '12px 12px' }}>Items Billed</th>
+                <th style={{ padding: '12px 12px' }}>Payment Mode</th>
+                <th style={{ padding: '12px 12px' }}>Status</th>
+                <th
+                  onClick={() => setSortBy(sortBy === 'amount_desc' ? 'amount_asc' : 'amount_desc')}
+                  style={{ padding: '12px 14px', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                  title="Sort by Total Amount"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', width: '100%' }}>
+                    <span>Total Amount</span>
+                    {sortBy === 'amount_desc' ? <ChevronDown size={13} /> : sortBy === 'amount_asc' ? <ChevronDown size={13} style={{ transform: 'rotate(180deg)' }} /> : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th style={{ padding: '12px 14px', textAlign: 'center', width: '120px', minWidth: '120px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -1802,10 +2129,10 @@ export default function SalesInvoicesLedgerView({
                   // Payment mode color mapping
                   const pm = (o.payment_method || 'cash').toLowerCase();
                   const pmColor =
-                    pm === 'cash' ? '#10B981' :
-                    pm === 'upi' ? '#38BDF8' :
-                    pm === 'card' ? '#818CF8' :
-                    pm === 'split' ? '#F59E0B' : '#94A3B8';
+                    pm === 'cash' ? '#059669' :
+                    pm === 'upi' ? '#0284C7' :
+                    pm === 'card' ? '#4F46E5' :
+                    pm === 'split' ? '#D97706' : '#64748B';
 
                   return (
                     <tr
@@ -1816,21 +2143,21 @@ export default function SalesInvoicesLedgerView({
                         }
                       }}
                       style={{
-                        borderBottom: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.05))',
+                        borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.05))',
                         cursor: 'pointer',
                         transition: 'background-color 0.15s ease',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.03)')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-surface-hover, rgba(0, 0, 0, 0.03))')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
                       {/* Invoice # */}
-                      <td style={{ padding: '14px 18px' }}>
+                      <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span
                             style={{
                               fontFamily: 'monospace',
                               fontWeight: 800,
-                              color: isReturn ? '#F87171' : '#38BDF8',
+                              color: isReturn ? '#DC2626' : '#0284C7',
                               fontSize: '0.86rem',
                             }}
                           >
@@ -1843,7 +2170,7 @@ export default function SalesInvoicesLedgerView({
                             style={{
                               background: 'transparent',
                               border: 'none',
-                              color: copiedInvoice === o.invoice_number ? '#34D399' : 'var(--text-muted, #64748B)',
+                              color: copiedInvoice === o.invoice_number ? '#059669' : 'var(--text-muted, #64748B)',
                               cursor: 'pointer',
                               padding: '2px',
                               display: 'inline-flex',
@@ -1855,14 +2182,14 @@ export default function SalesInvoicesLedgerView({
                       </td>
 
                       {/* Date & Time */}
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ color: 'var(--text-primary, #F8FAFC)', fontWeight: 600 }}>{dStr}</div>
+                      <td style={{ padding: '12px 12px' }}>
+                        <div style={{ color: 'var(--text-primary, #0F172A)', fontWeight: 600 }}>{dStr}</div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted, #64748B)' }}>{tStr}</div>
                       </td>
 
                       {/* Branch (Multi-Store / Combined View) */}
                       {showBranchColumn && (
-                        <td style={{ padding: '14px 18px' }}>
+                        <td style={{ padding: '12px 12px' }}>
                           <span
                             style={{
                               display: 'inline-flex',
@@ -1873,7 +2200,7 @@ export default function SalesInvoicesLedgerView({
                               fontSize: '0.74rem',
                               fontWeight: 700,
                               backgroundColor: 'rgba(59, 130, 246, 0.12)',
-                              color: '#60A5FA',
+                              color: '#2563EB',
                               border: '1px solid rgba(59, 130, 246, 0.25)',
                               whiteSpace: 'nowrap',
                             }}
@@ -1885,12 +2212,12 @@ export default function SalesInvoicesLedgerView({
                       )}
 
                       {/* Customer */}
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary, #F8FAFC)' }}>
+                      <td style={{ padding: '12px 12px' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary, #0F172A)' }}>
                           {o.customer_name || (o.customer_display_name && !o.customer_display_name.startsWith('Customer (') ? o.customer_display_name : '') || 'Walk-in Customer'}
                         </div>
                         {o.customer_phone && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary, #94A3B8)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary, #475569)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Phone size={10} style={{ opacity: 0.7 }} />
                             <span>{o.customer_phone}</span>
                           </div>
@@ -1904,9 +2231,9 @@ export default function SalesInvoicesLedgerView({
                               gap: '4px',
                               padding: '1px 6px',
                               borderRadius: '4px',
-                              background: 'rgba(99, 102, 241, 0.12)',
-                              border: '1px solid rgba(99, 102, 241, 0.3)',
-                              color: '#A5B4FC',
+                              background: 'rgba(79, 70, 229, 0.12)',
+                              border: '1px solid rgba(79, 70, 229, 0.3)',
+                              color: '#4F46E5',
                               fontSize: '0.68rem',
                               fontWeight: 700,
                               fontFamily: 'monospace',
@@ -1925,16 +2252,16 @@ export default function SalesInvoicesLedgerView({
                               gap: '4px',
                               padding: '2px 7px',
                               borderRadius: '4px',
-                              background: 'rgba(56, 189, 248, 0.12)',
-                              border: '1px solid rgba(56, 189, 248, 0.28)',
-                              color: '#38BDF8',
+                              background: 'rgba(2, 132, 199, 0.12)',
+                              border: '1px solid rgba(2, 132, 199, 0.28)',
+                              color: '#0284C7',
                               fontSize: '0.70rem',
                               fontWeight: 600,
                               maxWidth: '220px',
                             }}
                             title={`Internal Remark: ${o.notes}`}
                           >
-                            <FileText size={11} color="#38BDF8" style={{ flexShrink: 0 }} />
+                            <FileText size={11} color="#0284C7" style={{ flexShrink: 0 }} />
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {o.notes}
                             </span>
@@ -1943,7 +2270,7 @@ export default function SalesInvoicesLedgerView({
                       </td>
 
                       {/* Cashier */}
-                      <td style={{ padding: '14px 18px', color: 'var(--text-secondary, #94A3B8)' }}>
+                      <td style={{ padding: '12px 12px', color: 'var(--text-secondary, #475569)' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                           <User size={12} style={{ opacity: 0.6 }} />
                           <span>{o.cashier_name || 'Counter Staff'}</span>
@@ -1951,8 +2278,8 @@ export default function SalesInvoicesLedgerView({
                       </td>
 
                       {/* Items Summary */}
-                      <td style={{ padding: '14px 18px', maxWidth: '240px' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary, #F8FAFC)' }}>
+                      <td style={{ padding: '12px 12px', maxWidth: '220px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary, #0F172A)' }}>
                           {totalUnits} pcs ({itemsList.length} items)
                         </div>
                         <div
@@ -1971,21 +2298,22 @@ export default function SalesInvoicesLedgerView({
                       </td>
 
                       {/* Payment Mode */}
-                      <td style={{ padding: '14px 18px' }}>
+                      <td style={{ padding: '12px 12px' }}>
                         <span
                           style={{
-                            padding: '3px 9px',
+                            padding: '3px 8px',
                             borderRadius: '6px',
                             fontSize: '0.72rem',
                             fontWeight: 700,
                             backgroundColor: pm === 'partial' || parseFloat(o.balance_due || 0) > 0 ? 'rgba(236, 72, 153, 0.15)' : `${pmColor}18`,
-                            color: pm === 'partial' || parseFloat(o.balance_due || 0) > 0 ? '#EC4899' : pmColor,
+                            color: pm === 'partial' || parseFloat(o.balance_due || 0) > 0 ? '#DB2777' : pmColor,
                             border: pm === 'partial' || parseFloat(o.balance_due || 0) > 0 ? '1px solid rgba(236, 72, 153, 0.4)' : `1px solid ${pmColor}40`,
                             textTransform: 'uppercase',
                             letterSpacing: '0.04em',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '5px',
+                            whiteSpace: 'nowrap',
                           }}
                         >
                           {o.payment_method === 'split' ? (
@@ -2003,7 +2331,7 @@ export default function SalesInvoicesLedgerView({
                       </td>
 
                       {/* Status */}
-                      <td style={{ padding: '14px 18px' }}>
+                      <td style={{ padding: '12px 12px' }}>
                         {parseFloat(o.balance_due || 0) > 0 ? (
                           <span
                             style={{
@@ -2012,11 +2340,12 @@ export default function SalesInvoicesLedgerView({
                               fontSize: '0.70rem',
                               fontWeight: 700,
                               backgroundColor: 'rgba(236, 72, 153, 0.14)',
-                              color: '#EC4899',
+                              color: '#DB2777',
                               border: '1px solid rgba(236, 72, 153, 0.35)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             <AlertCircle size={10} />
@@ -2030,11 +2359,12 @@ export default function SalesInvoicesLedgerView({
                               fontSize: '0.70rem',
                               fontWeight: 700,
                               backgroundColor: isReturn ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-                              color: isReturn ? '#F87171' : '#34D399',
+                              color: isReturn ? '#DC2626' : '#059669',
                               border: `1px solid ${isReturn ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             {isReturn ? <RotateCcw size={10} /> : <CheckCircle2 size={10} />}
@@ -2044,47 +2374,49 @@ export default function SalesInvoicesLedgerView({
                       </td>
 
                       {/* Total Amount */}
-                      <td style={{ padding: '14px 18px', textAlign: 'right' }}>
+                      <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div
                           style={{
                             fontWeight: 800,
                             fontSize: '0.94rem',
-                            color: isReturn ? '#F87171' : '#34D399',
+                            color: isReturn ? '#DC2626' : '#059669',
                           }}
                         >
                           ₹{Number(o.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         {parseFloat(o.balance_due || 0) > 0 ? (
-                          <div style={{ fontSize: '0.68rem', color: '#EC4899', fontWeight: 700 }}>
+                          <div style={{ fontSize: '0.68rem', color: '#DB2777', fontWeight: 700 }}>
                             Paid: ₹{parseFloat(o.amount_paid || 0).toFixed(2)} | Due: ₹{parseFloat(o.balance_due).toFixed(2)}
                           </div>
                         ) : parseFloat(o.discount_amount) > 0 ? (
-                          <div style={{ fontSize: '0.68rem', color: '#FBBF24' }}>
+                          <div style={{ fontSize: '0.68rem', color: '#D97706', fontWeight: 600 }}>
                             -₹{Number(o.discount_amount).toFixed(2)} discount
                           </div>
                         ) : null}
                       </td>
 
                       {/* Row Action (Collect Due if pending balance) */}
-                      <td style={{ padding: '14px 18px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', width: '120px', minWidth: '120px' }}>
                         {parseFloat(o.balance_due || 0) > 0 ? (
                           <button
                             type="button"
                             onClick={(e) => handleOpenDueSettle(o, e)}
                             title={`Collect remaining due of ₹${parseFloat(o.balance_due).toFixed(2)}`}
                             style={{
-                              padding: '5px 9px',
+                              padding: '5px 10px',
                               fontSize: '0.74rem',
                               fontWeight: 700,
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '4px',
+                              justifyContent: 'center',
+                              gap: '5px',
                               background: 'rgba(236, 72, 153, 0.15)',
                               border: '1px solid rgba(236, 72, 153, 0.4)',
-                              color: '#EC4899',
+                              color: '#DB2777',
                               borderRadius: '6px',
                               cursor: 'pointer',
                               whiteSpace: 'nowrap',
+                              flexShrink: 0,
                             }}
                           >
                             <Wallet size={12} />
@@ -2106,8 +2438,8 @@ export default function SalesInvoicesLedgerView({
         <div
           style={{
             padding: '14px 18px',
-            borderTop: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
-            backgroundColor: 'var(--bg-main, #0B0E17)',
+            borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+            backgroundColor: 'var(--bg-surface-hover, #F8FAFC)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -2119,9 +2451,9 @@ export default function SalesInvoicesLedgerView({
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-muted, #64748B)' }}>
               Showing{' '}
-              <strong style={{ color: 'var(--text-secondary, #94A3B8)' }}>{ledgerStartEntry}–{ledgerEndEntry}</strong>
+              <strong style={{ color: 'var(--text-secondary, #475569)' }}>{ledgerStartEntry}–{ledgerEndEntry}</strong>
               {' '}of{' '}
-              <strong style={{ color: 'var(--text-secondary, #94A3B8)' }}>{filteredOrders.length.toLocaleString('en-IN')}</strong>
+              <strong style={{ color: 'var(--text-secondary, #475569)' }}>{filteredOrders.length.toLocaleString('en-IN')}</strong>
               {' '}orders · Click any row to view full invoice receipt.
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2135,14 +2467,14 @@ export default function SalesInvoicesLedgerView({
                   padding: '0 6px',
                   minWidth: '70px',
                   borderRadius: '6px',
-                  background: 'var(--bg-surface, #161B2C)',
-                  border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-                  color: 'var(--text-primary, #F8FAFC)',
+                  background: 'var(--card-bg, #FFFFFF)',
+                  border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                  color: 'var(--text-primary, #0F172A)',
                   cursor: 'pointer',
                 }}
               >
                 {LEDGER_PAGE_SIZE_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s} style={{ backgroundColor: 'var(--card-bg, #FFFFFF)', color: 'var(--text-primary, #0F172A)' }}>{s}</option>
                 ))}
               </select>
             </div>
@@ -2158,8 +2490,8 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   width: '28px', height: '28px', padding: 0,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  borderRadius: '6px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                  background: 'var(--card-bg, #FFFFFF)', color: 'var(--text-secondary, #475569)',
                   cursor: ledgerPage === 1 ? 'not-allowed' : 'pointer',
                   opacity: ledgerPage === 1 ? 0.4 : 1,
                 }}
@@ -2174,8 +2506,8 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   width: '28px', height: '28px', padding: 0,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  borderRadius: '6px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                  background: 'var(--card-bg, #FFFFFF)', color: 'var(--text-secondary, #475569)',
                   cursor: ledgerPage === 1 ? 'not-allowed' : 'pointer',
                   opacity: ledgerPage === 1 ? 0.4 : 1,
                 }}
@@ -2188,7 +2520,7 @@ export default function SalesInvoicesLedgerView({
                   padding: '0 10px',
                   fontSize: '0.78rem',
                   fontWeight: 700,
-                  color: 'var(--text-primary, #F8FAFC)',
+                  color: 'var(--text-primary, #0F172A)',
                   minWidth: '80px',
                   textAlign: 'center',
                 }}
@@ -2202,8 +2534,8 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   width: '28px', height: '28px', padding: 0,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  borderRadius: '6px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                  background: 'var(--card-bg, #FFFFFF)', color: 'var(--text-secondary, #475569)',
                   cursor: ledgerPage >= ledgerTotalPages ? 'not-allowed' : 'pointer',
                   opacity: ledgerPage >= ledgerTotalPages ? 0.4 : 1,
                 }}
@@ -2218,8 +2550,8 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   width: '28px', height: '28px', padding: 0,
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '6px', border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-                  background: 'var(--bg-surface, #161B2C)', color: 'var(--text-secondary, #94A3B8)',
+                  borderRadius: '6px', border: '1px solid var(--border-color, rgba(255,255,255,0.1))',
+                  background: 'var(--card-bg, #FFFFFF)', color: 'var(--text-secondary, #475569)',
                   cursor: ledgerPage >= ledgerTotalPages ? 'not-allowed' : 'pointer',
                   opacity: ledgerPage >= ledgerTotalPages ? 0.4 : 1,
                 }}
@@ -2533,8 +2865,8 @@ export default function SalesInvoicesLedgerView({
               className="no-print"
               style={{
                 padding: '14px 18px',
-                background: 'var(--bg-surface-solid, #161B2C)',
-                borderTop: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
+                background: 'var(--card-bg, #FFFFFF)',
+                borderTop: '1px solid var(--border-color, #E2E8F0)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
@@ -2548,19 +2880,19 @@ export default function SalesInvoicesLedgerView({
                     gap: '8px',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    background: 'rgba(56, 189, 248, 0.12)',
-                    border: '1px solid rgba(56, 189, 248, 0.25)',
-                    color: 'var(--text-primary, #F8FAFC)',
+                    background: 'rgba(2, 132, 199, 0.08)',
+                    border: '1px solid rgba(2, 132, 199, 0.25)',
+                    color: 'var(--text-primary, #0F172A)',
                     fontSize: '0.74rem',
                   }}
                 >
-                  <FileText size={16} color="#38BDF8" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <FileText size={16} color="#0284C7" style={{ flexShrink: 0, marginTop: '2px' }} />
                   <div>
-                    <div style={{ fontWeight: 800, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ fontWeight: 800, color: '#0284C7', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span>Internal Sale Remark</span>
-                      <span style={{ fontSize: '0.64rem', color: '#94A3B8', fontWeight: 500 }}>(Not on printed bill)</span>
+                      <span style={{ fontSize: '0.64rem', color: 'var(--text-muted, #64748B)', fontWeight: 500 }}>(Not on printed bill)</span>
                     </div>
-                    <div style={{ color: '#E2E8F0', marginTop: '2px', wordBreak: 'break-word', lineHeight: 1.35 }}>
+                    <div style={{ color: 'var(--text-primary, #0F172A)', marginTop: '2px', wordBreak: 'break-word', lineHeight: 1.35, fontWeight: 500 }}>
                       {selectedReceiptOrder.notes}
                     </div>
                   </div>
@@ -2719,10 +3051,10 @@ export default function SalesInvoicesLedgerView({
             style={{
               width: '100%',
               maxWidth: 520,
-              background: 'var(--bg-surface-solid, #161B2C)',
-              border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.12))',
+              background: 'var(--card-bg, #FFFFFF)',
+              border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
               borderRadius: '16px',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
               overflow: 'hidden',
               animation: 'fadeIn 0.15s ease',
             }}
@@ -2732,8 +3064,8 @@ export default function SalesInvoicesLedgerView({
             <div
               style={{
                 padding: '16px 20px',
-                background: 'var(--bg-main, #0B0E17)',
-                borderBottom: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
+                background: 'var(--bg-surface-hover, #F8FAFC)',
+                borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -2752,14 +3084,14 @@ export default function SalesInvoicesLedgerView({
                     border: '1px solid rgba(236,72,153,0.3)',
                   }}
                 >
-                  <Receipt size={17} color="#EC4899" />
+                  <Receipt size={17} color="#DB2777" />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-primary, #F8FAFC)' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-primary, #0F172A)' }}>
                     Collect Due Payment · {selectedDueOrder.invoice_number || `#ORD-${selectedDueOrder.id}`}
                   </h3>
-                  <div style={{ fontSize: '11.5px', color: 'var(--text-muted, #94A3B8)', marginTop: 2 }}>
-                    Debtor: <strong style={{ color: 'var(--text-primary, #F8FAFC)' }}>{selectedDueOrder.customer_name || selectedDueOrder.customer_display_name || 'Customer'}</strong>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-muted, #64748B)', marginTop: 2 }}>
+                    Debtor: <strong style={{ color: 'var(--text-primary, #0F172A)' }}>{selectedDueOrder.customer_name || selectedDueOrder.customer_display_name || 'Customer'}</strong>
                     {selectedDueOrder.customer_phone && ` (${selectedDueOrder.customer_phone})`}
                   </div>
                 </div>
@@ -2771,7 +3103,7 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: 'var(--text-muted, #94A3B8)',
+                  color: 'var(--text-muted, #64748B)',
                   cursor: 'pointer',
                   padding: 4,
                 }}
@@ -2785,34 +3117,34 @@ export default function SalesInvoicesLedgerView({
               style={{
                 padding: '14px 20px',
                 background: 'rgba(236,72,153,0.06)',
-                borderBottom: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+                borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
                 gap: 12,
                 textAlign: 'center',
               }}
             >
-              <div style={{ padding: '8px', background: 'var(--bg-main, #0B0E17)', borderRadius: '8px', border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--text-muted, #94A3B8)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
+              <div style={{ padding: '8px', background: 'var(--card-bg, #FFFFFF)', borderRadius: '8px', border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted, #64748B)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
                   Total Bill
                 </span>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary, #F8FAFC)', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary, #0F172A)', fontFamily: 'monospace' }}>
                   ₹{parseFloat(selectedDueOrder.total_amount || 0).toFixed(2)}
                 </span>
               </div>
-              <div style={{ padding: '8px', background: 'var(--bg-main, #0B0E17)', borderRadius: '8px', border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--text-muted, #94A3B8)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
+              <div style={{ padding: '8px', background: 'var(--card-bg, #FFFFFF)', borderRadius: '8px', border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted, #64748B)', textTransform: 'uppercase', display: 'block', fontWeight: 600 }}>
                   Paid Earlier
                 </span>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: '#10B981', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#059669', fontFamily: 'monospace' }}>
                   ₹{parseFloat(selectedDueOrder.amount_paid || 0).toFixed(2)}
                 </span>
               </div>
               <div style={{ padding: '8px', background: 'rgba(236,72,153,0.12)', borderRadius: '8px', border: '1px solid rgba(236,72,153,0.3)' }}>
-                <span style={{ fontSize: '10.5px', color: '#EC4899', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
+                <span style={{ fontSize: '10.5px', color: '#DB2777', textTransform: 'uppercase', display: 'block', fontWeight: 700 }}>
                   Remaining Due
                 </span>
-                <span style={{ fontSize: '15px', fontWeight: 800, color: '#EC4899', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: '15px', fontWeight: 800, color: '#DB2777', fontFamily: 'monospace' }}>
                   ₹{parseFloat(selectedDueOrder.balance_due || 0).toFixed(2)}
                 </span>
               </div>
@@ -2821,12 +3153,12 @@ export default function SalesInvoicesLedgerView({
             {/* Settle Form */}
             <form onSubmit={handleConfirmDueSettle} style={{ padding: '18px 20px' }}>
               {dueSettleError && (
-                <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#EF4444', fontSize: '12px', marginBottom: 14 }}>
+                <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#DC2626', fontSize: '12px', marginBottom: 14 }}>
                   {dueSettleError}
                 </div>
               )}
               {dueSettleSuccess && (
-                <div style={{ padding: '8px 12px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', color: '#10B981', fontSize: '12px', marginBottom: 14 }}>
+                <div style={{ padding: '8px 12px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', color: '#059669', fontSize: '12px', marginBottom: 14 }}>
                   {dueSettleSuccess}
                 </div>
               )}
@@ -2834,21 +3166,21 @@ export default function SalesInvoicesLedgerView({
               {/* Amount to Collect Input */}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #94A3B8)' }}>
-                    Amount Being Collected Today (₹) <span style={{ color: '#EF4444' }}>*</span>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #475569)' }}>
+                    Amount Being Collected Today (₹) <span style={{ color: '#DC2626' }}>*</span>
                   </label>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
                       onClick={() => setDueSettleAmount(String(parseFloat(selectedDueOrder.balance_due || 0).toFixed(2)))}
-                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: 'rgba(236,72,153,0.15)', border: '1px solid rgba(236,72,153,0.35)', color: '#EC4899', cursor: 'pointer', fontWeight: 600 }}
+                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: 'rgba(236,72,153,0.15)', border: '1px solid rgba(236,72,153,0.35)', color: '#DB2777', cursor: 'pointer', fontWeight: 600 }}
                     >
                       Pay Full (₹{parseFloat(selectedDueOrder.balance_due || 0).toFixed(2)})
                     </button>
                     <button
                       type="button"
                       onClick={() => setDueSettleAmount(String((parseFloat(selectedDueOrder.balance_due || 0) / 2).toFixed(2)))}
-                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: 'var(--bg-main, #0B0E17)', border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))', color: 'var(--text-secondary, #94A3B8)', cursor: 'pointer', fontWeight: 600 }}
+                      style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: 'var(--bg-surface-hover, #F1F5F9)', border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))', color: 'var(--text-secondary, #475569)', cursor: 'pointer', fontWeight: 600 }}
                     >
                       50% (₹{(parseFloat(selectedDueOrder.balance_due || 0) / 2).toFixed(2)})
                     </button>
@@ -2868,9 +3200,9 @@ export default function SalesInvoicesLedgerView({
                     height: 38,
                     padding: '0 12px',
                     borderRadius: '8px',
-                    border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.15))',
-                    background: 'var(--bg-main, #0B0E17)',
-                    color: 'var(--text-primary, #F8FAFC)',
+                    border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
+                    background: 'var(--bg-input, #FFFFFF)',
+                    color: 'var(--text-primary, #0F172A)',
                     fontSize: '14px',
                     fontWeight: 700,
                     fontFamily: 'monospace',
@@ -2882,8 +3214,8 @@ export default function SalesInvoicesLedgerView({
 
               {/* Settlement Payment Method */}
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #94A3B8)', marginBottom: 6 }}>
-                  Payment Method Collected Via <span style={{ color: '#EF4444' }}>*</span>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #475569)', marginBottom: 6 }}>
+                  Payment Method Collected Via <span style={{ color: '#DC2626' }}>*</span>
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {[
@@ -2901,9 +3233,9 @@ export default function SalesInvoicesLedgerView({
                         style={{
                           padding: '10px 8px',
                           borderRadius: '8px',
-                          border: isSel ? '1px solid #EC4899' : '1px solid var(--border-subtle, rgba(255, 255, 255, 0.1))',
-                          background: isSel ? 'rgba(236,72,153,0.14)' : 'var(--bg-main, #0B0E17)',
-                          color: isSel ? '#EC4899' : 'var(--text-secondary, #94A3B8)',
+                          border: isSel ? '1px solid #DB2777' : '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+                          background: isSel ? 'rgba(236,72,153,0.14)' : 'var(--bg-surface-hover, #F8FAFC)',
+                          color: isSel ? '#DB2777' : 'var(--text-secondary, #475569)',
                           cursor: 'pointer',
                           display: 'flex',
                           flexDirection: 'column',
@@ -2923,7 +3255,7 @@ export default function SalesInvoicesLedgerView({
 
               {/* Verified Verification Remark / Notes */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #94A3B8)', marginBottom: 6 }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary, #475569)', marginBottom: 6 }}>
                   Verification Remark / Notes (Optional)
                 </label>
                 <input
@@ -2936,9 +3268,9 @@ export default function SalesInvoicesLedgerView({
                     height: 36,
                     padding: '0 12px',
                     borderRadius: '8px',
-                    border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.15))',
-                    background: 'var(--bg-main, #0B0E17)',
-                    color: 'var(--text-primary, #F8FAFC)',
+                    border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
+                    background: 'var(--bg-input, #FFFFFF)',
+                    color: 'var(--text-primary, #0F172A)',
                     fontSize: '12px',
                     outline: 'none',
                     boxSizing: 'border-box',
@@ -2951,10 +3283,10 @@ export default function SalesInvoicesLedgerView({
                 style={{
                   padding: '10px 12px',
                   borderRadius: '8px',
-                  background: 'var(--bg-main, #0B0E17)',
-                  border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+                  background: 'var(--bg-surface-hover, #F1F5F9)',
+                  border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
                   fontSize: '11px',
-                  color: 'var(--text-muted, #94A3B8)',
+                  color: 'var(--text-muted, #64748B)',
                   lineHeight: 1.45,
                   marginBottom: 18,
                 }}
@@ -2971,9 +3303,9 @@ export default function SalesInvoicesLedgerView({
                   style={{
                     padding: '8px 16px',
                     borderRadius: '8px',
-                    border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.15))',
+                    border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
                     background: 'transparent',
-                    color: 'var(--text-secondary, #94A3B8)',
+                    color: 'var(--text-secondary, #475569)',
                     fontSize: '12px',
                     cursor: 'pointer',
                   }}
@@ -2987,8 +3319,8 @@ export default function SalesInvoicesLedgerView({
                     height: 36,
                     padding: '0 20px',
                     borderRadius: '8px',
-                    border: '1px solid #EC4899',
-                    background: '#EC4899',
+                    border: '1px solid #DB2777',
+                    background: '#DB2777',
                     color: '#fff',
                     fontSize: '12.5px',
                     fontWeight: 700,
