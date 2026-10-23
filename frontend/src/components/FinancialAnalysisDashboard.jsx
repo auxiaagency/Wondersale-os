@@ -48,6 +48,77 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+/**
+ * Lightweight viewport observer that defers rendering heavy chart SVGs
+ * until they approach the viewport (250px rootMargin), drastically reducing
+ * initial render time and avoiding browser main-thread freezes.
+ */
+function LazyChartWrapper({ minHeight = 420, children }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (isVisible) return;
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '250px 0px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isVisible]);
+
+  return (
+    <div ref={containerRef} style={{ minHeight: isVisible ? undefined : minHeight }}>
+      {isVisible ? (
+        children
+      ) : (
+        <div
+          style={{
+            height: minHeight,
+            borderRadius: '16px',
+            backgroundColor: 'var(--card-bg, #1E293B)',
+            border: '1px solid var(--border-color, rgba(255,255,255,0.08))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-secondary, #94A3B8)',
+            fontSize: '0.85rem',
+            letterSpacing: '0.02em',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              style={{
+                width: '18px',
+                height: '18px',
+                border: '2px solid rgba(59, 130, 246, 0.25)',
+                borderTopColor: '#3B82F6',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+            <span>Loading visualization...</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FinancialAnalysisDashboard({
   storeId,
   year = 2026,
@@ -1292,7 +1363,7 @@ export default function FinancialAnalysisDashboard({
       {/* ========================================================================= */}
       {/* SECTION 5: PRODUCT CATEGORY & SUBCATEGORY PIE CHART WITH DRILL-DOWN       */}
       {/* ========================================================================= */}
-      <div>
+      <LazyChartWrapper minHeight={480}>
         <CategoryPieChart
           categories={categories}
           storeId={storeId}
@@ -1300,13 +1371,14 @@ export default function FinancialAnalysisDashboard({
           selectedYear={activeYear}
           timelineRange={timelineRange}
           minDate={earliestRecordDate}
+          onRangeChange={handleTimelineRangeChange}
         />
-      </div>
+      </LazyChartWrapper>
 
       {/* ========================================================================= */}
       {/* SECTION 6: SUPPLIER & SUPPLIED ITEMS PIE CHART WITH DRILL-DOWN            */}
       {/* ========================================================================= */}
-      <div>
+      <LazyChartWrapper minHeight={480}>
         <SupplierPieChart
           suppliers={suppliers}
           storeId={storeId}
@@ -1314,13 +1386,14 @@ export default function FinancialAnalysisDashboard({
           selectedYear={activeYear}
           timelineRange={timelineRange}
           minDate={earliestRecordDate}
+          onRangeChange={handleTimelineRangeChange}
         />
-      </div>
+      </LazyChartWrapper>
 
       {/* ========================================================================= */}
       {/* SECTION 6.5: STORE SECTIONS & DEPARTMENTS PIE CHART WITH DRILL-DOWN       */}
       {/* ========================================================================= */}
-      <div>
+      <LazyChartWrapper minHeight={480}>
         <SectionPieChart
           sections={sections}
           storeId={storeId}
@@ -1328,19 +1401,20 @@ export default function FinancialAnalysisDashboard({
           selectedYear={activeYear}
           timelineRange={timelineRange}
           minDate={earliestRecordDate}
+          onRangeChange={handleTimelineRangeChange}
         />
-      </div>
+      </LazyChartWrapper>
 
       {/* ========================================================================= */}
       {/* SECTION 6.8: BROKEN & DAMAGED INVENTORY WRITE-OFFS (CATEGORY, SECTION, SUPPLIER) */}
       {/* ========================================================================= */}
-      <div>
+      <LazyChartWrapper minHeight={380}>
         <BrokenPieChart
           brokenBreakdown={data?.broken_breakdown || data?.summary?.broken_breakdown}
           currencySymbol="₹"
           onReportUpdated={() => setFetchTrigger((t) => t + 1)}
         />
-      </div>
+      </LazyChartWrapper>
 
       {/* ========================================================================= */}
       {/* SECTION 7: ACCOUNTING WATERFALL FLOW & STAKEHOLDERS PARTNERS LEDGER       */}

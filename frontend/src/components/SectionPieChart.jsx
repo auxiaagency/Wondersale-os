@@ -142,6 +142,7 @@ export default function SectionPieChart({
 
       if (onRangeChange) {
         onRangeChange(newRange);
+        return;
       }
 
       if (isInitialMount.current) {

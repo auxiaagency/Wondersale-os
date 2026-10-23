@@ -752,7 +752,7 @@ export default function DashboardView({
     setLoading(true);
     setError(null);
     try {
-      const d = await fetchDashboardAnalytics(store, range.startDate, range.endDate);
+      const d = await fetchDashboardAnalytics(store, range.startDate, range.endDate, { section: 'overview' });
       setData(d);
       setLastRefreshed(new Date());
     } catch (e) {

@@ -59,6 +59,14 @@ class MonthlyFinancialAnalysisView(APIView):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
 
+        # Fast in-memory cache check (LocMemCache, NO Redis needed)
+        from django.core.cache import cache
+        store_key_part = f"st_{'_'.join(str(i) for i in sorted(target_ids))}" if target_ids else "st_all"
+        cache_key = f"mfa_{store_key_part}_y{year}_m{month}_sd{start_date}_ed{end_date}"
+        cached_data = cache.get(cache_key)
+        if cached_data is not None:
+            return Response(cached_data, status=status.HTTP_200_OK)
+
         data = get_monthly_financial_analysis(
             store_id=target_ids,
             year=year,
@@ -66,6 +74,13 @@ class MonthlyFinancialAnalysisView(APIView):
             start_date=start_date,
             end_date=end_date,
         )
+
+        # Cache for 15 seconds to deduplicate simultaneous chart/tab requests while staying fresh for real-time sales
+        try:
+            cache.set(cache_key, data, timeout=15)
+        except Exception:
+            pass
+
         return Response(data, status=status.HTTP_200_OK)
 
 

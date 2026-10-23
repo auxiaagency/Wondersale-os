@@ -222,6 +222,7 @@ export default function SupplierPieChart({
 
       if (onRangeChange) {
         onRangeChange(newRange);
+        return;
       }
 
       // Skip redundant fetch on first mount if initial suppliers already provided

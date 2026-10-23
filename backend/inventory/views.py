@@ -4892,13 +4892,23 @@ class DashboardAnalyticsView(APIView):
         year = request.query_params.get('year')
         month = request.query_params.get('month')
 
-        data = get_dashboard_analytics(
-            store_id=store_id,
-            start_date=start_date,
-            end_date=end_date,
-            year=year,
-            month=month,
-        )
+        # Fast in-process LocMemCache (NO Redis needed)
+        # Allows overview + the 4 parallel section queries to share the exact same calculation
+        from django.core.cache import cache
+        dash_cache_key = f"dash_raw_st{store_id}_y{year}_m{month}_sd{start_date}_ed{end_date}"
+        data = cache.get(dash_cache_key)
+        if data is None:
+            data = get_dashboard_analytics(
+                store_id=store_id,
+                start_date=start_date,
+                end_date=end_date,
+                year=year,
+                month=month,
+            )
+            try:
+                cache.set(dash_cache_key, data, timeout=15)
+            except Exception:
+                pass
 
         section = request.query_params.get('section', '').strip().lower()
         if not section or section in ('all', 'full'):

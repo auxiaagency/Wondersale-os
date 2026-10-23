@@ -250,6 +250,7 @@ export default function CategoryPieChart({
 
       if (onRangeChange) {
         onRangeChange(newRange);
+        return;
       }
 
       // Skip redundant fetch on first mount if initial categories already provided
