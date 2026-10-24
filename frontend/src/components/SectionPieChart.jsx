@@ -140,13 +140,13 @@ export default function SectionPieChart({
         setPeriodLabel(`${newRange.startDate} – ${newRange.endDate}`);
       }
 
-      if (onRangeChange) {
-        onRangeChange(newRange);
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
         return;
       }
 
-      if (isInitialMount.current) {
-        isInitialMount.current = false;
+      if (onRangeChange) {
+        onRangeChange(newRange);
         return;
       }
 

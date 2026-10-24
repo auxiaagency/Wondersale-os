@@ -220,14 +220,14 @@ export default function SupplierPieChart({
         setPeriodLabel(`${newRange.startDate} – ${newRange.endDate}`);
       }
 
-      if (onRangeChange) {
-        onRangeChange(newRange);
+      // Skip redundant notification/fetch on initial mount
+      if (isInitialMount.current) {
+        isInitialMount.current = false;
         return;
       }
 
-      // Skip redundant fetch on first mount if initial suppliers already provided
-      if (isInitialMount.current) {
-        isInitialMount.current = false;
+      if (onRangeChange) {
+        onRangeChange(newRange);
         return;
       }
 

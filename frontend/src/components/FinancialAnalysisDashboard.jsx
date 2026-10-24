@@ -271,6 +271,22 @@ export default function FinancialAnalysisDashboard({
   const handleTimelineRangeChange = useCallback((newRange) => {
     // Skip the initial programmatic onChange fire from TimelineRangeSelector on mount
     if (!isMountedRef.current) return;
+    if (!newRange) return;
+
+    // Check if the range has actually changed to prevent redundant refetches and feedback loops
+    const cur = timelineRangeRef.current;
+    if (
+      cur &&
+      cur.startDate === newRange.startDate &&
+      cur.endDate === newRange.endDate &&
+      cur.unit === newRange.unit &&
+      cur.count === newRange.count &&
+      cur.isAllTime === newRange.isAllTime &&
+      cur.granularity === newRange.granularity &&
+      cur.label === newRange.label
+    ) {
+      return;
+    }
 
     // Update the display state (for the label in subtitle)
     const updatedRange = {
@@ -521,6 +537,7 @@ export default function FinancialAnalysisDashboard({
           {/* Refresh Action */}
           <button
             onClick={loadAnalysis}
+            disabled={loading}
             title="Refresh Financial Data"
             style={{
               padding: '8px 12px',
@@ -531,13 +548,14 @@ export default function FinancialAnalysisDashboard({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               fontSize: '0.82rem',
               fontWeight: 600,
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            <RefreshCw size={14} />
-            <span>Sync</span>
+            <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
+            <span>{loading ? 'Syncing...' : 'Sync'}</span>
           </button>
 
           {/* Export P&L CSV */}
@@ -565,9 +583,9 @@ export default function FinancialAnalysisDashboard({
       </div>
 
       {/* ========================================================================= */}
-      {/* INLINE LOADING STATE — shown below the always-visible header              */}
+      {/* INITIAL LOADING STATE — shown only when no data has been loaded yet       */}
       {/* ========================================================================= */}
-      {loading && (
+      {loading && !data && (
         <div
           style={{
             display: 'flex',
@@ -621,9 +639,9 @@ export default function FinancialAnalysisDashboard({
       )}
 
       {/* ========================================================================= */}
-      {/* DATA CONTENT — only rendered when not loading and data is available       */}
+      {/* DATA CONTENT — kept mounted when data exists even while re-fetching       */}
       {/* ========================================================================= */}
-      {!loading && data && (
+      {data && (
       <React.Fragment>
 
       {/* Combined Multi-Store Indicator Banner */}
