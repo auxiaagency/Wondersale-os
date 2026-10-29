@@ -7,8 +7,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import NetworkStatusBanner from './components/NetworkStatusBanner';
 import NotFoundView from './components/NotFoundView';
 import { SkeletonStatsCards } from './components/Skeleton';
-import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetchSections, fetchItems, fetchItem, fetchInventoryStats, getStaffMe, logoutStaff, previewExpiredStock, writeOffExpiredStock } from './api';
-import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X, Wallet, Coins } from 'lucide-react';
+import { fetchStores, fetchCategories, fetchSubcategories, fetchSuppliers, fetchSections, fetchHsnCodes, fetchItems, fetchItem, fetchInventoryStats, getStaffMe, logoutStaff, previewExpiredStock, writeOffExpiredStock } from './api';
+import { Package, AlertTriangle, Barcode, TrendingUp, LayoutGrid, ArrowLeft, Plus, Layers, Truck, FolderPlus, History, FileSpreadsheet, BarChart3, X, Wallet, Coins, Tag } from 'lucide-react';
 
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from './utils/stakeholdersSettings';
 import { lazyWithRetry } from './utils/lazyWithRetry';
@@ -19,6 +19,7 @@ const StaffManagementView = lazyWithRetry(() => import('./components/StaffManage
 const SettingsView = lazyWithRetry(() => import('./components/SettingsView'));
 const SuppliersAppView = lazyWithRetry(() => import('./components/SuppliersAppView'));
 const CategorySection = lazyWithRetry(() => import('./components/CategorySection'));
+const HsnSection = lazyWithRetry(() => import('./components/HsnSection'));
 const SupplierSection = lazyWithRetry(() => import('./components/SupplierSection'));
 const SectionSection = lazyWithRetry(() => import('./components/SectionSection'));
 const AuditLogSection = lazyWithRetry(() => import('./components/AuditLogSection'));
@@ -285,11 +286,12 @@ export default function App() {
   const [subcategories, setSubcategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [sections, setSections] = useState([]);
+  const [hsnCodes, setHsnCodes] = useState([]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters for inventory
-  const [inventorySubTab, setInventorySubTab] = useState('management'); // 'management', 'add_item', 'add_category', 'suppliers', 'sections', 'audit_log', 'product_detail'
+  const [inventorySubTab, setInventorySubTab] = useState('management'); // 'management', 'add_item', 'add_category', 'hsn_codes', 'suppliers', 'sections', 'audit_log', 'product_detail'
   const [selectedProductDetailItem, setSelectedProductDetailItem] = useState(null);
   const [productDetailReturnView, setProductDetailReturnView] = useState('inventory');
   const [searchQuery, setSearchQuery] = useState('');
@@ -302,6 +304,9 @@ export default function App() {
   const [hasNoSupplierFilter, setHasNoSupplierFilter] = useState(false);
   const [selectedSection, setSelectedSection] = useState('');
   const [hasNoSectionFilter, setHasNoSectionFilter] = useState(false);
+  const [selectedHsnCode, setSelectedHsnCode] = useState('');
+  const [hasHsnFilterState, setHasHsnFilterState] = useState(''); // '' | 'has_hsn' | 'no_hsn'
+  const [hasVariantsFilterState, setHasVariantsFilterState] = useState(''); // '' | 'has_variants' | 'no_variants'
   const [selectedStockStatus, setSelectedStockStatus] = useState('');
   const [minStockFilter, setMinStockFilter] = useState('');
   const [maxStockFilter, setMaxStockFilter] = useState('');
@@ -345,18 +350,20 @@ export default function App() {
   // Reload taxonomy, suppliers, sections & stores metadata
   const reloadMeta = useCallback(async () => {
     try {
-      const [storesData, categoriesData, subcategoriesData, suppliersData, sectionsData] = await Promise.all([
+      const [storesData, categoriesData, subcategoriesData, suppliersData, sectionsData, hsnData] = await Promise.all([
         fetchStores(),
         fetchCategories(),
         fetchSubcategories(),
         fetchSuppliers(),
         fetchSections(),
+        fetchHsnCodes().catch(() => []),
       ]);
       setStores(storesData);
       setCategories(categoriesData);
       setSubcategories(subcategoriesData);
       setSuppliers(suppliersData);
       setSections(sectionsData);
+      setHsnCodes(Array.isArray(hsnData) ? hsnData : (hsnData?.results || []));
 
       if (Array.isArray(storesData) && storesData.length > 0) {
         const isShEnabled = storesData.some((s) => s.enable_stakeholders !== false);
@@ -449,6 +456,13 @@ export default function App() {
       if (hasVolumeFilterState === 'no_volume') filterParams.has_no_volume = 'true';
       else if (hasVolumeFilterState === 'has_volume') filterParams.has_volume = 'true';
 
+      if (selectedHsnCode) filterParams.hsn_code = selectedHsnCode;
+      if (hasHsnFilterState === 'no_hsn') filterParams.has_no_hsn = 'true';
+      else if (hasHsnFilterState === 'has_hsn') filterParams.has_hsn = 'true';
+
+      if (hasVariantsFilterState === 'no_variants') filterParams.has_no_variants = 'true';
+      else if (hasVariantsFilterState === 'has_variants') filterParams.has_variants = 'true';
+
       // 2. Paginated item query params
       const itemParams = {
         ...filterParams,
@@ -498,7 +512,7 @@ export default function App() {
     }
   // NOTE: intentionally omitting inventoryPage — callers always pass targetPage explicitly.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventoryPageSize, inventorySortBy]);
+  }, [currentUser, isSectionRestricted, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, selectedHsnCode, hasHsnFilterState, hasVariantsFilterState, inventoryPageSize, inventorySortBy]);
 
   // filterResetInProgressRef: set to true whenever a search/filter change resets the page to 1.
   // The page-navigation effect checks this flag so it doesn't fire a duplicate fetch for that reset.
@@ -536,7 +550,7 @@ export default function App() {
       controller.abort();
       inventoryFetchAbortRef.current = null;
     };
-  }, [currentUser, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, inventorySortBy]);
+  }, [currentUser, searchQuery, selectedStore, selectedCategory, selectedSubcategories, selectedSupplier, hasNoSupplierFilter, selectedSection, hasNoSectionFilter, selectedStockStatus, minStockFilter, maxStockFilter, needsBarcodeFilter, hasImageFilter, hasSubcategoryFilterState, hasWeightFilterState, hasVolumeFilterState, selectedHsnCode, hasHsnFilterState, hasVariantsFilterState, inventorySortBy]);
 
   // Page-navigation effect: fires when the user explicitly clicks a pagination button.
   // The filterResetInProgressRef guard prevents a duplicate fetch when the unified
@@ -935,6 +949,28 @@ export default function App() {
               <button
                 type="button"
                 className="inv-tab-btn"
+                onClick={() => setInventorySubTab('hsn_codes')}
+                style={{
+                  padding: '12px 20px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: inventorySubTab === 'hsn_codes' ? '3px solid #10B981' : '3px solid transparent',
+                  color: inventorySubTab === 'hsn_codes' ? '#10B981' : 'var(--text-secondary)',
+                  fontWeight: 700,
+                  fontSize: '0.94rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <Tag size={18} />
+                <span>HSN Codes ({hsnCodes.length})</span>
+              </button>
+
+              <button
+                type="button"
+                className="inv-tab-btn"
                 onClick={() => setInventorySubTab('audit_log')}
                 style={{
                   padding: '12px 20px',
@@ -1247,6 +1283,13 @@ export default function App() {
                 onHasWeightFilterStateChange={setHasWeightFilterState}
                 hasVolumeFilterState={hasVolumeFilterState}
                 onHasVolumeFilterStateChange={setHasVolumeFilterState}
+                hsnCodes={hsnCodes}
+                selectedHsnCode={selectedHsnCode}
+                onHsnCodeChange={setSelectedHsnCode}
+                hasHsnFilterState={hasHsnFilterState}
+                onHasHsnFilterStateChange={setHasHsnFilterState}
+                hasVariantsFilterState={hasVariantsFilterState}
+                onHasVariantsFilterStateChange={setHasVariantsFilterState}
                 onViewItem={(item) => {
                   fetchItem(item.id)
                     .then((fullItem) => {
@@ -1366,6 +1409,7 @@ export default function App() {
               subcategories={subcategories}
               suppliers={suppliers}
               sections={sections}
+              hsnCodes={hsnCodes}
               currentUser={currentUser}
               isSectionRestricted={isSectionRestricted}
               selectedStore={selectedStore}
@@ -1396,6 +1440,15 @@ export default function App() {
               currentStore={stores.find((s) => String(s.id) === String(selectedStore))}
               loading={loading}
               onSectionsUpdated={reloadMeta}
+            />
+          )}
+
+          {/* Sub-Section 3.7: HSN & SAC Codes Directory */}
+          {inventorySubTab === 'hsn_codes' && (
+            <HsnSection
+              hsnCodes={hsnCodes}
+              loading={loading}
+              onHsnUpdated={reloadMeta}
             />
           )}
 
@@ -1469,6 +1522,7 @@ export default function App() {
           subcategories={subcategories}
           suppliers={suppliers}
           sections={sections}
+          hsnCodes={hsnCodes}
           currentUser={currentUser}
           isSectionRestricted={isSectionRestricted}
           selectedStore={selectedStore}
@@ -1511,6 +1565,7 @@ export default function App() {
           subcategories={subcategories}
           suppliers={suppliers}
           sections={sections}
+          hsnCodes={hsnCodes}
           currentUser={currentUser}
           isSectionRestricted={isSectionRestricted}
           selectedStore={selectedStore}
@@ -1552,6 +1607,7 @@ export default function App() {
           subcategories={subcategories}
           suppliers={suppliers}
           sections={sections}
+          hsnCodes={hsnCodes}
           currentFilters={{
             searchQuery,
             selectedSubcategories,
@@ -1565,11 +1621,15 @@ export default function App() {
             needsBarcodeFilter,
             hasWeightFilterState,
             hasVolumeFilterState,
+            selectedHsnCode,
+            hasHsnFilterState,
+            hasVariantsFilterState,
             // Keep backward-compatible aliases:
             hasNoImageFilter: hasImageFilter === 'no_image',
             hasNoSubcategoryFilter: hasSubcategoryFilterState === 'no_subcat',
             hasNoWeightFilter: hasWeightFilterState === 'no_weight',
             hasNoVolumeFilter: hasVolumeFilterState === 'no_volume',
+            hasNoHsnFilter: hasHsnFilterState === 'no_hsn',
           }}
           currentStoreName={
             stores.find((s) => String(s.id) === String(selectedStore))?.name || 'Active Store'

@@ -58,7 +58,9 @@ import {
   fetchGeminiStatus,
   testGeminiApiKey,
   toggleStakeholdersSystem,
+  fetchHsnCodes,
 } from '../api';
+import HsnSection from './HsnSection';
 import { SkeletonStoreGrid } from './Skeleton';
 import { getVipSettings, saveVipSettings } from '../utils/vipSettings';
 import {
@@ -94,11 +96,31 @@ export default function SettingsView({
   onBackToLauncher,
   onStoresUpdated,
 }) {
-  const [activeTab, setActiveTab] = useState('stores'); // 'stores', 'general', 'vip-card', 'gemini-ai'
+  const [activeTab, setActiveTab] = useState('stores'); // 'stores', 'general', 'vip-card', 'gemini-ai', 'hsn-codes'
   const [stores, setStores] = useState([]);
+  const [hsnCodes, setHsnCodes] = useState([]);
+  const [loadingHsn, setLoadingHsn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  const loadHsnCodesData = async () => {
+    setLoadingHsn(true);
+    try {
+      const data = await fetchHsnCodes();
+      setHsnCodes(Array.isArray(data) ? data : (data?.results || []));
+    } catch {
+      // Non-blocking
+    } finally {
+      setLoadingHsn(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'hsn-codes') {
+      loadHsnCodesData();
+    }
+  }, [activeTab]);
 
   // VIP Card settings state
   const [vipSettings, setVipSettingsState] = useState(getVipSettings);
@@ -471,6 +493,27 @@ export default function SettingsView({
         >
           <Sparkles size={18} style={{ color: '#F472B6' }} />
           <span>Gemini AI / Bill OCR ({geminiStatus?.keys_count ?? (geminiStatus?.has_keys ? 1 : 0)})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('hsn-codes')}
+          style={{
+            padding: '12px 20px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'hsn-codes' ? '3px solid #10B981' : '3px solid transparent',
+            color: activeTab === 'hsn-codes' ? '#10B981' : 'var(--text-secondary)',
+            fontWeight: 700,
+            fontSize: '0.94rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Tag size={18} style={{ color: '#10B981' }} />
+          <span>HSN &amp; SAC Codes</span>
         </button>
       </div>
 
@@ -2183,6 +2226,15 @@ export default function SettingsView({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: HSN & SAC Codes Directory */}
+      {activeTab === 'hsn-codes' && (
+        <HsnSection
+          hsnCodes={hsnCodes}
+          loading={loadingHsn}
+          onHsnUpdated={loadHsnCodesData}
+        />
       )}
 
       {/* Modal: Add Store Branch */}

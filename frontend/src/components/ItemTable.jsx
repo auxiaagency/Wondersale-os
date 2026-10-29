@@ -41,6 +41,7 @@ import {
   GripVertical,
   Loader2,
   Palette,
+  Tag,
 } from 'lucide-react';
 import { updateItem, deleteItem, bulkAIGenerateDescriptions } from '../api';
 import { SkeletonInventoryRows } from './Skeleton';
@@ -116,6 +117,13 @@ export default function ItemTable({
   onHasWeightFilterStateChange,
   hasVolumeFilterState = '',
   onHasVolumeFilterStateChange,
+  hsnCodes = [],
+  selectedHsnCode = '',
+  onHsnCodeChange,
+  hasHsnFilterState = '',
+  onHasHsnFilterStateChange,
+  hasVariantsFilterState = '',
+  onHasVariantsFilterStateChange,
   // Backward compatibility fallbacks
   hasNoImageFilter = false,
   onHasNoImageFilterChange,
@@ -125,6 +133,8 @@ export default function ItemTable({
   onHasNoWeightFilterChange,
   hasNoVolumeFilter = false,
   onHasNoVolumeFilterChange,
+  hasNoHsnFilter = false,
+  onHasNoHsnFilterChange,
   onViewItem,
   onEditItem,
   onPrintBarcode,
@@ -612,6 +622,7 @@ export default function ItemTable({
           height: item.height !== null && item.height !== undefined ? item.height : '',
           description: item.description || '',
           supplier_id: item.supplier ? (typeof item.supplier === 'object' ? item.supplier.id : item.supplier) : '',
+          hsn_code_id: item.hsn_code ? (typeof item.hsn_code === 'object' ? item.hsn_code.id : item.hsn_code) : (item.hsn_code_id || ''),
           subcategory_ids: (item.subcategories || []).map((sc) => sc.id),
           primary_subcategory_id:
             item.primary_subcategory?.id ||
@@ -633,6 +644,8 @@ export default function ItemTable({
   const effectiveSubcatFilter = hasSubcategoryFilterState || (hasNoSubcategoryFilter ? 'no_subcat' : '');
   const effectiveWeightFilter = hasWeightFilterState || (hasNoWeightFilter ? 'no_weight' : '');
   const effectiveVolumeFilter = hasVolumeFilterState || (hasNoVolumeFilter ? 'no_volume' : '');
+  const effectiveHsnFilter = hasHsnFilterState || (hasNoHsnFilter ? 'no_hsn' : '');
+  const effectiveVariantsFilter = hasVariantsFilterState || '';
   const effectiveBarcodeFilter = typeof needsBarcodeFilter === 'boolean'
     ? (needsBarcodeFilter ? 'needs_barcode' : '')
     : (needsBarcodeFilter || '');
@@ -655,6 +668,9 @@ export default function ItemTable({
     effectiveBarcodeFilter,
     effectiveWeightFilter,
     effectiveVolumeFilter,
+    selectedHsnCode,
+    effectiveHsnFilter,
+    effectiveVariantsFilter,
     sortBy,
   ]);
 
@@ -672,6 +688,9 @@ export default function ItemTable({
     if (effectiveBarcodeFilter) count += 1;
     if (effectiveWeightFilter) count += 1;
     if (effectiveVolumeFilter) count += 1;
+    if (selectedHsnCode) count += 1;
+    if (effectiveHsnFilter) count += 1;
+    if (effectiveVariantsFilter) count += 1;
     return count;
   }, [
     activeSubcatIds,
@@ -687,6 +706,9 @@ export default function ItemTable({
     effectiveBarcodeFilter,
     effectiveWeightFilter,
     effectiveVolumeFilter,
+    selectedHsnCode,
+    effectiveHsnFilter,
+    effectiveVariantsFilter,
   ]);
 
   const handleResetFilters = () => {
@@ -710,11 +732,20 @@ export default function ItemTable({
     if (onHasNoWeightFilterChange) onHasNoWeightFilterChange(false);
     if (onHasVolumeFilterStateChange) onHasVolumeFilterStateChange('');
     if (onHasNoVolumeFilterChange) onHasNoVolumeFilterChange(false);
+    if (onHsnCodeChange) onHsnCodeChange('');
+    if (onHasHsnFilterStateChange) onHasHsnFilterStateChange('');
+    if (onHasNoHsnFilterChange) onHasNoHsnFilterChange(false);
+    if (onHasVariantsFilterStateChange) onHasVariantsFilterStateChange('');
   };
 
   // Sort items and apply client-side filter fallbacks
   const sortedItems = useMemo(() => {
     let list = [...items];
+
+    // If serverPagination is active, the backend already executed all active filters and pagination!
+    if (serverPagination) {
+      return list;
+    }
 
     if (effectiveImageFilter === 'no_image') {
       list = list.filter((item) => !item.primary_image_url && (!item.images || item.images.length === 0));
@@ -804,6 +835,25 @@ export default function ItemTable({
       list = list.filter(
         (item) => item.length && item.width && item.height && parseFloat(item.length) > 0 && parseFloat(item.width) > 0 && parseFloat(item.height) > 0
       );
+    }
+
+    if (selectedHsnCode) {
+      list = list.filter((item) => {
+        const hId = item.hsn_code ? (typeof item.hsn_code === 'object' ? item.hsn_code.id : item.hsn_code) : item.hsn_code_id;
+        return String(hId) === String(selectedHsnCode);
+      });
+    }
+
+    if (effectiveHsnFilter === 'no_hsn') {
+      list = list.filter((item) => !item.hsn_code && !item.hsn_code_id);
+    } else if (effectiveHsnFilter === 'has_hsn') {
+      list = list.filter((item) => Boolean(item.hsn_code || item.hsn_code_id));
+    }
+
+    if (effectiveVariantsFilter === 'no_variants') {
+      list = list.filter((item) => !item.has_variants);
+    } else if (effectiveVariantsFilter === 'has_variants') {
+      list = list.filter((item) => Boolean(item.has_variants));
     }
 
     // ── Variant Family Grouping: Show only ONE active variant per product family ──
@@ -1054,6 +1104,7 @@ export default function ItemTable({
           height: orig?.height || '',
           description: orig?.description || '',
           supplier_id: orig?.supplier ? (typeof orig.supplier === 'object' ? orig.supplier.id : orig.supplier) : '',
+          hsn_code_id: orig?.hsn_code ? (typeof orig.hsn_code === 'object' ? orig.hsn_code.id : orig.hsn_code) : (orig?.hsn_code_id || ''),
           subcategory_ids: (orig?.subcategories || []).map((sc) => sc.id || sc),
           primary_subcategory_id: orig?.primary_subcategory?.id || orig?.primary_subcategory_id || '',
         };
@@ -1068,6 +1119,11 @@ export default function ItemTable({
         // 2. Supplier
         if (changes.supplierId !== undefined && changes.supplierId !== null) {
           updated.supplier_id = changes.supplierId || '';
+        }
+
+        // 2b. HSN Code
+        if (changes.hsnCodeId !== undefined && changes.hsnCodeId !== null) {
+          updated.hsn_code_id = changes.hsnCodeId || '';
         }
 
         // 3. Subcategory (Append mode)
@@ -1147,6 +1203,10 @@ export default function ItemTable({
     const origSupplierId = original.supplier ? (typeof original.supplier === 'object' ? original.supplier.id : original.supplier) : '';
     if (norm(edited.supplier_id) !== norm(origSupplierId)) return true;
 
+    // HSN Code comparison
+    const origHsnCodeId = original.hsn_code ? (typeof original.hsn_code === 'object' ? original.hsn_code.id : original.hsn_code) : (original.hsn_code_id || '');
+    if (norm(edited.hsn_code_id) !== norm(origHsnCodeId)) return true;
+
     // Section comparison
     if (!isSectionRestricted) {
       const origSectionId = original.section ? (typeof original.section === 'object' ? original.section.id : original.section) : (original.section_details?.id || '');
@@ -1189,6 +1249,7 @@ export default function ItemTable({
             height: edited.height === '' ? null : edited.height,
             description: (edited.description || '').trim(),
             supplier: edited.supplier_id || null,
+            hsn_code: edited.hsn_code_id || null,
             subcategories: edited.subcategory_ids,
             primary_subcategory: edited.primary_subcategory_id || null,
           };
@@ -1884,6 +1945,38 @@ export default function ItemTable({
             </select>
           )}
 
+          {/* 2.5 HSN Code Filter Dropdown */}
+          {hsnCodes.length > 0 && (
+            <select
+              value={selectedHsnCode || ''}
+              onChange={(e) => {
+                onHsnCodeChange && onHsnCodeChange(e.target.value);
+              }}
+              className="form-select"
+              style={{
+                flex: '0 0 auto',
+                width: 'auto',
+                minWidth: '125px',
+                borderRadius: 'var(--radius-pill)',
+                fontSize: '0.82rem',
+                padding: '0 12px',
+                height: '36px',
+                background: selectedHsnCode ? 'rgba(16, 185, 129, 0.12)' : undefined,
+                borderColor: selectedHsnCode ? '#10B981' : undefined,
+                color: selectedHsnCode ? '#059669' : 'var(--text-primary)',
+                fontWeight: selectedHsnCode ? 700 : 500,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <option value="">All HSN Codes ({hsnCodes.length})</option>
+              {hsnCodes.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.code} ({parseFloat(h.gst_rate)}% GST)
+                </option>
+              ))}
+            </select>
+          )}
+
           {/* 3. Stock Level: Advanced Range & Preset Popover */}
           <div style={{ position: 'relative', flex: '0 0 auto', minWidth: '120px', zIndex: 125 }} ref={stockPopoverRef}>
             <button
@@ -2381,6 +2474,127 @@ export default function ItemTable({
                 : 'Volume (All)'}
             </span>
             {effectiveVolumeFilter && <Check size={12} />}
+          </button>
+
+          {/* 8. HSN Presence Tri-State Filter Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = effectiveHsnFilter === '' ? 'has_hsn' : (effectiveHsnFilter === 'has_hsn' ? 'no_hsn' : '');
+              if (onHasHsnFilterStateChange) onHasHsnFilterStateChange(next);
+              if (onHasNoHsnFilterChange) onHasNoHsnFilterChange(next === 'no_hsn');
+            }}
+            className="form-select"
+            style={{
+              flex: '0 0 auto',
+              width: 'auto',
+              minWidth: '110px',
+              height: '36px',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: '0.82rem',
+              padding: '0 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              background: effectiveHsnFilter === 'has_hsn'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : effectiveHsnFilter === 'no_hsn'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : undefined,
+              borderColor: effectiveHsnFilter === 'has_hsn'
+                ? '#10B981'
+                : effectiveHsnFilter === 'no_hsn'
+                ? 'var(--brand-primary)'
+                : undefined,
+              color: effectiveHsnFilter === 'has_hsn'
+                ? '#059669'
+                : effectiveHsnFilter === 'no_hsn'
+                ? 'var(--brand-primary)'
+                : 'var(--text-primary)',
+              fontWeight: effectiveHsnFilter ? 700 : 500,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              transition: 'all 0.15s ease',
+            }}
+            title={
+              effectiveHsnFilter === 'has_hsn'
+                ? 'Showing: Has HSN Code (click for Has No HSN)'
+                : effectiveHsnFilter === 'no_hsn'
+                ? 'Showing: Has No HSN Code (click to clear)'
+                : 'Filter: Click to show items with HSN codes'
+            }
+          >
+            <Tag size={14} />
+            <span>
+              {effectiveHsnFilter === 'has_hsn'
+                ? 'Has HSN'
+                : effectiveHsnFilter === 'no_hsn'
+                ? 'No HSN'
+                : 'HSN (All)'}
+            </span>
+            {effectiveHsnFilter && <Check size={12} />}
+          </button>
+
+          {/* 9. Colour / Design Variants Presence Tri-State Filter Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = effectiveVariantsFilter === '' ? 'has_variants' : (effectiveVariantsFilter === 'has_variants' ? 'no_variants' : '');
+              if (onHasVariantsFilterStateChange) onHasVariantsFilterStateChange(next);
+            }}
+            className="form-select"
+            style={{
+              flex: '0 0 auto',
+              width: 'auto',
+              minWidth: '120px',
+              height: '36px',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: '0.82rem',
+              padding: '0 12px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              background: effectiveVariantsFilter === 'has_variants'
+                ? 'rgba(16, 185, 129, 0.12)'
+                : effectiveVariantsFilter === 'no_variants'
+                ? 'rgba(239, 68, 68, 0.12)'
+                : undefined,
+              borderColor: effectiveVariantsFilter === 'has_variants'
+                ? '#10B981'
+                : effectiveVariantsFilter === 'no_variants'
+                ? 'var(--brand-primary)'
+                : undefined,
+              color: effectiveVariantsFilter === 'has_variants'
+                ? '#059669'
+                : effectiveVariantsFilter === 'no_variants'
+                ? 'var(--brand-primary)'
+                : 'var(--text-primary)',
+              fontWeight: effectiveVariantsFilter ? 700 : 500,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+              transition: 'all 0.15s ease',
+            }}
+            title={
+              effectiveVariantsFilter === 'has_variants'
+                ? 'Showing: Has Colours / Variants (click for Has No Variants)'
+                : effectiveVariantsFilter === 'no_variants'
+                ? 'Showing: Has No Variants (click to clear)'
+                : 'Filter: Click to show items with colour/design variants'
+            }
+          >
+            <Palette size={14} />
+            <span>
+              {effectiveVariantsFilter === 'has_variants'
+                ? 'Has Colours'
+                : effectiveVariantsFilter === 'no_variants'
+                ? 'No Colours'
+                : 'Colours (All)'}
+            </span>
+            {effectiveVariantsFilter && <Check size={12} />}
           </button>
 
           {/* Right Actions: Reset & Close */}
@@ -3523,6 +3737,71 @@ export default function ItemTable({
                               </div>
                             )}
 
+                            {/* HSN Code Badge / Inline Selector */}
+                            {isEditMode ? (
+                              <div
+                                className="inv-hsn-select-wrap"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: 'var(--bg-surface)',
+                                  padding: '3px 10px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  border: '1px solid var(--border-subtle)',
+                                  height: '32px',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <Tag size={13} style={{ color: '#10B981', flexShrink: 0 }} />
+                                <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '0.74rem' }}>HSN:</span>
+                                <select
+                                  value={edited.hsn_code_id || ''}
+                                  onChange={(e) => handleFieldChange(item.id, 'hsn_code_id', e.target.value || null)}
+                                  className="form-select inv-edit-hsn-select"
+                                  style={{ height: '26px', fontSize: '0.78rem', padding: '0 6px', minWidth: '130px', maxWidth: '180px' }}
+                                >
+                                  <option value="">No HSN</option>
+                                  {hsnCodes.map((h) => (
+                                    <option key={h.id} value={h.id}>
+                                      {h.code} ({h.gst_rate}% GST)
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : (
+                              <div
+                                className="badge inv-metric-badge inv-hsn-badge"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  fontSize: '0.78rem',
+                                  padding: '5px 12px',
+                                  borderRadius: 'var(--radius-pill)',
+                                  background: item.hsn_code ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-surface-hover)',
+                                  border: item.hsn_code ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid var(--border-subtle)',
+                                  color: item.hsn_code ? '#34D399' : 'var(--text-muted)',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                  height: '28px',
+                                  flexShrink: 0,
+                                }}
+                                title={
+                                  item.hsn_code
+                                    ? `HSN Code: ${item.hsn_code.code} (${item.hsn_code.gst_rate}% GST${item.hsn_code.description ? ` - ${item.hsn_code.description}` : ''})`
+                                    : 'No HSN code assigned'
+                                }
+                              >
+                                <Tag size={13} />
+                                <span>
+                                  {item.hsn_code
+                                    ? `HSN: ${item.hsn_code.code} (${item.hsn_code.gst_rate}%)`
+                                    : 'HSN: —'}
+                                </span>
+                              </div>
+                            )}
+
                             {/* Description Line / Field */}
                             {isEditMode ? (
                               <div className="inv-desc-input-wrap" style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 240px', minWidth: 0 }}>
@@ -4099,6 +4378,34 @@ export default function ItemTable({
                                     >
                                       <Truck size={11} />
                                       <span>{sib.supplier_name ? `Supplier: ${sib.supplier_name}` : 'Supplier: —'}</span>
+                                    </div>
+
+                                    {/* HSN Code Badge */}
+                                    <div
+                                      className="badge inv-metric-badge inv-hsn-badge"
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        fontSize: '0.72rem',
+                                        padding: '3px 9px',
+                                        borderRadius: 'var(--radius-pill)',
+                                        background: sib.hsn_code ? 'rgba(16, 185, 129, 0.10)' : 'var(--bg-surface-hover)',
+                                        border: sib.hsn_code ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
+                                        color: sib.hsn_code ? '#34D399' : 'var(--text-muted)',
+                                        fontWeight: 600,
+                                        whiteSpace: 'nowrap',
+                                        height: '24px',
+                                        flexShrink: 0,
+                                      }}
+                                      title={
+                                        sib.hsn_code
+                                          ? `HSN Code: ${sib.hsn_code.code} (${sib.hsn_code.gst_rate}% GST${sib.hsn_code.description ? ` - ${sib.hsn_code.description}` : ''})`
+                                          : 'No HSN code assigned'
+                                      }
+                                    >
+                                      <Tag size={11} />
+                                      <span>{sib.hsn_code ? `HSN: ${sib.hsn_code.code} (${sib.hsn_code.gst_rate}%)` : 'HSN: —'}</span>
                                     </div>
 
                                     {/* Description Snippet */}
@@ -4781,6 +5088,7 @@ export default function ItemTable({
         sections={sections}
         suppliers={suppliers}
         subcategories={subcategories}
+        hsnCodes={hsnCodes}
         isSectionRestricted={isSectionRestricted}
         onConfirmChanges={({ changes, changesDesc, count }) => {
           setIsBulkEditModalOpen(false);

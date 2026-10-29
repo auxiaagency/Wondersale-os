@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Store, Category, SubCategory, Supplier, Item, StockMovement, ItemImage, ItemPriceHistory
+from .models import Store, Category, SubCategory, Supplier, HsnCode, Item, StockMovement, ItemImage, ItemPriceHistory
+
+
+@admin.register(HsnCode)
+class HsnCodeAdmin(admin.ModelAdmin):
+    list_display = ['code', 'description', 'gst_rate', 'is_active', 'created_at']
+    search_fields = ['code', 'description']
+    list_filter = ['is_active', 'gst_rate']
 
 
 class ItemImageInline(admin.TabularInline):

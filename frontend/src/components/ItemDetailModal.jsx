@@ -63,6 +63,7 @@ export default function ItemDetailModal({
   subcategories = [],
   suppliers = [],
   sections = [],
+  hsnCodes = [],
   currentUser,
   isSectionRestricted: propIsSectionRestricted,
   onClose,
@@ -90,6 +91,7 @@ export default function ItemDetailModal({
   // Edit fields
   const [name, setName] = useState(item?.name || '');
   const [supplierId, setSupplierId] = useState(item?.supplier || item?.supplier_id || item?.supplier_details?.id || '');
+  const [hsnCodeId, setHsnCodeId] = useState(item?.hsn_code ? (typeof item.hsn_code === 'object' ? item.hsn_code.id : item.hsn_code) : (item?.hsn_code_id || ''));
   const [sectionId, setSectionId] = useState(() => (isSectionRestricted && currentUser?.section ? currentUser.section : (item?.section || item?.section_id || item?.section_details?.id || '')));
   const [costPrice, setCostPrice] = useState(item?.cost_price || '');
   const [sellingPrice, setSellingPrice] = useState(item?.selling_price || '');
@@ -182,6 +184,7 @@ export default function ItemDetailModal({
     if (item) {
       setName(item.name || '');
       setSupplierId(item.supplier || item.supplier_id || item.supplier_details?.id || '');
+      setHsnCodeId(item.hsn_code ? (typeof item.hsn_code === 'object' ? item.hsn_code.id : item.hsn_code) : (item.hsn_code_id || ''));
       setSectionId(isSectionRestricted && currentUser?.section ? currentUser.section : (item.section || item.section_id || item.section_details?.id || ''));
       setCostPrice(item.cost_price || '');
       setSellingPrice(item.selling_price || '');
@@ -425,6 +428,7 @@ export default function ItemDetailModal({
       const payload = {
         name: name.trim(),
         supplier: supplierId || null,
+        hsn_code: hsnCodeId || null,
         section: isSectionRestricted && currentUser?.section ? currentUser.section : (sectionId || null),
         cost_price: parseFloat(costPrice),
         selling_price: parseFloat(sellingPrice),
@@ -532,11 +536,29 @@ export default function ItemDetailModal({
           }}
         >
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <h3 style={{ fontSize: '1.25rem' }}>{item.name}</h3>
               <span className="badge badge-neutral mono" style={{ fontSize: '0.8rem' }}>
                 UID: {item.uid}
               </span>
+              {item.hsn_code && (
+                <span
+                  className="badge"
+                  style={{
+                    fontSize: '0.78rem',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    color: '#F59E0B',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  title={item.hsn_code.description ? `${item.hsn_code.description} (${item.hsn_code.gst_rate}% GST)` : `HSN Code ${item.hsn_code.code}`}
+                >
+                  <FileText size={11} />
+                  <span>HSN: {item.hsn_code.code} ({item.hsn_code.gst_rate}% GST)</span>
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
@@ -916,8 +938,8 @@ export default function ItemDetailModal({
               />
             </div>
 
-            {/* Supplier & Section Selection Row */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
+            {/* Supplier, HSN Code & Section Selection Row */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '18px' }}>
               <div>
                 <label className="form-label" style={{ marginBottom: '6px' }}>
                   Supplier / Vendor <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>(Optional)</span>
@@ -932,6 +954,25 @@ export default function ItemDetailModal({
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} {s.contact_person ? `(${s.contact_person})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ marginBottom: '6px' }}>
+                  HSN / SAC Code <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>(Optional)</span>
+                </label>
+                <select
+                  value={hsnCodeId || ''}
+                  onChange={(e) => setHsnCodeId(e.target.value)}
+                  className="form-input"
+                  style={{ height: '42px', fontSize: '0.86rem' }}
+                >
+                  <option value="">No HSN Code Assigned</option>
+                  {hsnCodes.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.code} ({h.gst_rate}% GST){h.description ? ` - ${h.description.slice(0, 18)}` : ''}
                     </option>
                   ))}
                 </select>

@@ -22,12 +22,14 @@ export default function BulkEditModal({
   sections = [],
   suppliers = [],
   subcategories = [],
+  hsnCodes = [],
   isSectionRestricted = false,
   onConfirmChanges, // ({ changes, changesDesc, count }) => void
 }) {
   const [supplierId, setSupplierId] = useState('KEEP_CURRENT');
   const [sectionId, setSectionId] = useState('KEEP_CURRENT');
   const [subcategoryId, setSubcategoryId] = useState('KEEP_CURRENT');
+  const [hsnCodeId, setHsnCodeId] = useState('KEEP_CURRENT');
   const [costPrice, setCostPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [mrp, setMrp] = useState('');
@@ -62,6 +64,13 @@ export default function BulkEditModal({
       changes.subcategoryId = subcategoryId;
       const subObj = subcategories.find((s) => String(s.id) === String(subcategoryId));
       changesDesc.push(`Add Subcategory "${subObj?.name || subcategoryId}"`);
+    }
+
+    // HSN Code
+    if (hsnCodeId !== 'KEEP_CURRENT') {
+      changes.hsnCodeId = hsnCodeId === '' ? '' : hsnCodeId;
+      const hsnObj = hsnCodes.find((h) => String(h.id) === String(hsnCodeId));
+      changesDesc.push(hsnCodeId === '' ? 'Clear HSN Code (No HSN)' : `Set HSN Code to "${hsnObj?.code || hsnCodeId}" (${hsnObj?.gst_rate || 0}% GST)`);
     }
 
     // Cost Price
@@ -254,24 +263,46 @@ export default function BulkEditModal({
             </div>
           </div>
 
-          {/* Subcategory */}
-          <div>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
-              <Tag size={13} color="#38BDF8" /> Add Subcategory
-            </label>
-            <select
-              value={subcategoryId}
-              onChange={(e) => setSubcategoryId(e.target.value)}
-              className="form-input"
-              style={{ width: '100%', height: '36px', fontSize: '0.82rem' }}
-            >
-              <option value="KEEP_CURRENT">-- Keep Unchanged --</option>
-              {subcategories.map((sc) => (
-                <option key={sc.id} value={sc.id}>
-                  {sc.name} ({sc.category_name || 'Category'})
-                </option>
-              ))}
-            </select>
+          {/* Subcategory & HSN Code Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+                <Tag size={13} color="#38BDF8" /> Add Subcategory
+              </label>
+              <select
+                value={subcategoryId}
+                onChange={(e) => setSubcategoryId(e.target.value)}
+                className="form-input"
+                style={{ width: '100%', height: '36px', fontSize: '0.82rem' }}
+              >
+                <option value="KEEP_CURRENT">-- Keep Unchanged --</option>
+                {subcategories.map((sc) => (
+                  <option key={sc.id} value={sc.id}>
+                    {sc.name} ({sc.category_name || 'Category'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem' }}>
+                <FileText size={13} color="#F59E0B" /> HSN / SAC Code
+              </label>
+              <select
+                value={hsnCodeId}
+                onChange={(e) => setHsnCodeId(e.target.value)}
+                className="form-input"
+                style={{ width: '100%', height: '36px', fontSize: '0.82rem' }}
+              >
+                <option value="KEEP_CURRENT">-- Keep Unchanged --</option>
+                <option value="">No HSN Code (Clear)</option>
+                {hsnCodes.map((hsn) => (
+                  <option key={hsn.id} value={hsn.id}>
+                    {hsn.code} ({hsn.gst_rate}% GST){hsn.description ? ` - ${hsn.description}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Prices Grid */}

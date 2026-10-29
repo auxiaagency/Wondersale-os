@@ -492,6 +492,16 @@ export default function ProductDetailView({ item, onBack, onUpdateItem, onOpenBa
               <SpecRow icon={<Box size={15} />} label="Volume" value={volMetrics.volumeCm3 ? `${volMetrics.volumeCm3} cm3  -  ${volMetrics.volumeLiters} L` : null} accent="#34D399" />
               <SpecRow icon={<Truck size={15} />} label="Volumetric Weight (shipping)" value={volMetrics.volumetricWeightKg ? `${volMetrics.volumetricWeightKg} kg` : null} accent="#A78BFA" />
               <SpecRow icon={<Package size={15} />} label="Supplier / Vendor" value={supplierName || null} accent="#F472B6" />
+              <SpecRow
+                icon={<Tag size={15} />}
+                label="Statutory HSN Code"
+                value={
+                  pItem.hsn_code
+                    ? `${pItem.hsn_code.code} (${pItem.hsn_code.gst_rate}% GST${pItem.hsn_code.description ? ` - ${pItem.hsn_code.description}` : ''})`
+                    : null
+                }
+                accent="#10B981"
+              />
             </div>
           </div>
 

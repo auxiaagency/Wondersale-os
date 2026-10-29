@@ -207,6 +207,7 @@ export default function AddItemSection({
   subcategories = [],
   suppliers = [],
   sections = [],
+  hsnCodes = [],
   currentUser,
   isSectionRestricted: propIsSectionRestricted,
   selectedStore,
@@ -247,6 +248,7 @@ export default function AddItemSection({
   const [customUid, setCustomUid] = useState('');
   const [selectedSubcatIds, setSelectedSubcatIds] = useState([]);
   const [supplierId, setSupplierId] = useState('');
+  const [hsnCodeId, setHsnCodeId] = useState('');
   const [sectionId, setSectionId] = useState(() => (isSectionRestricted && currentUser?.section ? String(currentUser.section) : ''));
 
   useEffect(() => {
@@ -639,6 +641,7 @@ export default function AddItemSection({
     setCustomUid('');
     setSelectedSubcatIds([]);
     setSupplierId('');
+    setHsnCodeId('');
     setSectionId(isSectionRestricted && currentUser?.section ? String(currentUser.section) : '');
     setCostPrice('');
     setSellingPrice('');
@@ -746,6 +749,7 @@ export default function AddItemSection({
         store: targetStoreId,
         subcategories: selectedSubcatIds,
         supplier: supplierId || null,
+        hsn_code: hsnCodeId || null,
         section: isSectionRestricted && currentUser?.section ? currentUser.section : (sectionId || null),
         cost_price: parseFloat(costPrice),
         selling_price: parseFloat(sellingPrice),
@@ -812,6 +816,7 @@ export default function AddItemSection({
     const validStoredImages = serializedImages.filter(Boolean);
 
     const matchedSupplier = suppliers.find((s) => String(s.id) === String(supplierId));
+    const matchedHsn = hsnCodes.find((h) => String(h.id) === String(hsnCodeId));
     const effectiveSecId = isSectionRestricted && currentUser?.section ? String(currentUser.section) : sectionId;
     const matchedSection = sections.find((sec) => String(sec.id) === String(effectiveSecId));
 
@@ -824,6 +829,9 @@ export default function AddItemSection({
       subcategoryObjects: [...selectedSubcategoryObjects],
       supplierId: supplierId || '',
       supplierName: matchedSupplier ? matchedSupplier.name : '',
+      hsnCodeId: hsnCodeId || '',
+      hsnCode: matchedHsn ? matchedHsn.code : '',
+      hsnGstRate: matchedHsn ? matchedHsn.gst_rate : '',
       sectionId: effectiveSecId || '',
       sectionName: matchedSection ? matchedSection.name : (isSectionRestricted ? (currentUser?.section_name || '') : ''),
       costPrice: costPrice,
@@ -946,6 +954,14 @@ export default function AddItemSection({
           updated.supplierId = changes.supplierId || '';
           const sObj = suppliers.find((s) => String(s.id) === String(changes.supplierId));
           updated.supplierName = sObj ? sObj.name : '';
+        }
+
+        // 2b. HSN Code
+        if (changes.hsnCodeId !== undefined && changes.hsnCodeId !== null) {
+          updated.hsnCodeId = changes.hsnCodeId || '';
+          const hObj = hsnCodes.find((h) => String(h.id) === String(changes.hsnCodeId));
+          updated.hsnCode = hObj ? hObj.code : '';
+          updated.hsnGstRate = hObj ? hObj.gst_rate : '';
         }
 
         // 3. Subcategory (Append mode)
@@ -1219,6 +1235,7 @@ export default function AddItemSection({
           store: item.store || storeTargetId,
           subcategories: item.subcategories || [],
           supplier: item.supplierId || item.supplier || null,
+          hsn_code: item.hsnCodeId || item.hsn_code || null,
           section: isSectionRestricted && currentUser?.section ? currentUser.section : (item.sectionId || item.section || null),
           cost_price: parseFloat(item.cost_price) || 0,
           selling_price: parseFloat(item.selling_price) || 0,
@@ -1275,6 +1292,7 @@ export default function AddItemSection({
           store: item.store || (currentStoreObj?.id || effectiveStoreId),
           subcategories: item.subcategories || [],
           supplier: item.supplierId || item.supplier || null,
+          hsn_code: item.hsnCodeId || item.hsn_code || null,
           section: isSectionRestricted && currentUser?.section ? currentUser.section : (item.sectionId || item.section || null),
           cost_price: parseFloat(item.cost_price) || 0,
           selling_price: parseFloat(item.selling_price) || 0,
@@ -2015,13 +2033,13 @@ export default function AddItemSection({
           </div>
         )}
 
-        {/* LINE 2: Supplier, Section, Stock Quantity, Expiry Date, Weight, Add Images Button */}
+        {/* LINE 2: Supplier, HSN Code, Section, Stock Quantity, Expiry Date, Weight, Add Images Button */}
         <div
           className="add-item-grid-line2"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(140px, 1.4fr) minmax(140px, 1.4fr) minmax(90px, 0.9fr) minmax(120px, 1.1fr) minmax(90px, 0.9fr) minmax(140px, 1.3fr)',
-            gap: '14px',
+            gridTemplateColumns: 'minmax(130px, 1.3fr) minmax(130px, 1.3fr) minmax(130px, 1.3fr) minmax(85px, 0.8fr) minmax(110px, 1fr) minmax(85px, 0.8fr) minmax(130px, 1.2fr)',
+            gap: '12px',
             marginBottom: '20px',
             alignItems: 'flex-start',
           }}
@@ -2043,6 +2061,28 @@ export default function AddItemSection({
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} {s.contact_person ? `(${s.contact_person})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 1a. HSN / SAC Code */}
+          <div className="add-item-field-hsn">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <FileText size={12} style={{ color: '#F59E0B' }} />
+              <span>HSN Code</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>(Optional)</span>
+            </label>
+            <select
+              value={hsnCodeId}
+              onChange={(e) => setHsnCodeId(e.target.value)}
+              className="form-input"
+              style={{ height: '42px', fontSize: '0.84rem' }}
+            >
+              <option value="">No HSN Code</option>
+              {hsnCodes.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.code} ({h.gst_rate}% GST){h.description ? ` - ${h.description.slice(0, 18)}` : ''}
                 </option>
               ))}
             </select>
@@ -4011,6 +4051,7 @@ export default function AddItemSection({
         sections={sections}
         suppliers={suppliers}
         subcategories={subcategories}
+        hsnCodes={hsnCodes}
         isSectionRestricted={isSectionRestricted}
         onConfirmChanges={({ changes, changesDesc, count }) => {
           setIsBulkEditModalOpen(false);

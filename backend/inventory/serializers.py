@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db.models import Q
 
 from .models import (
-    Store, Category, SubCategory, Supplier, Section, Item, StockMovement, ItemImage,
+    Store, Category, SubCategory, Supplier, Section, HsnCode, Item, StockMovement, ItemImage,
     ItemVariant, Customer, SaleOrder, SaleOrderItem, OrderPaymentTransaction, VIPCardTransaction,
     CounterPayout, DailyRegisterShift, AIDescriptionBatchJob, BrokenItemReport,
     SupplierOrder, SupplierOrderItem, SupplierLedgerEntry
@@ -502,6 +502,33 @@ class CategoryNestedSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'subcategories', 'created_at', 'updated_at']
 
 
+class HsnCodeSerializer(serializers.ModelSerializer):
+    items_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HsnCode
+        fields = [
+            'id',
+            'code',
+            'description',
+            'gst_rate',
+            'is_active',
+            'items_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'items_count', 'created_at', 'updated_at']
+
+    def get_items_count(self, obj):
+        return getattr(obj, '_items_count', None) or obj.items.count()
+
+
+class HsnCodeNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HsnCode
+        fields = ['id', 'code', 'description', 'gst_rate', 'is_active']
+
+
 class ItemSerializer(serializers.ModelSerializer):
     effective_mrp = serializers.DecimalField(
         max_digits=12,
@@ -547,6 +574,13 @@ class ItemSerializer(serializers.ModelSerializer):
     section_name = serializers.CharField(source='section.name', read_only=True, allow_null=True)
     section_color = serializers.CharField(source='section.color', read_only=True, allow_null=True)
     section_code = serializers.CharField(source='section.code', read_only=True, allow_null=True)
+    hsn_code = HsnCodeNestedSerializer(read_only=True)
+    hsn_code_id = serializers.PrimaryKeyRelatedField(
+        queryset=HsnCode.objects.all(),
+        source='hsn_code',
+        required=False,
+        allow_null=True
+    )
     store_details = StoreNestedSerializer(source='store', read_only=True)
     store = serializers.PrimaryKeyRelatedField(queryset=Store.objects.all())
     images = ItemImageSerializer(many=True, read_only=True)
@@ -581,6 +615,8 @@ class ItemSerializer(serializers.ModelSerializer):
             'section_color',
             'section_code',
             'section_details',
+            'hsn_code',
+            'hsn_code_id',
             'store',
             'store_details',
             'location_section',
@@ -633,6 +669,7 @@ class ItemSerializer(serializers.ModelSerializer):
             'section_color',
             'section_code',
             'section_details',
+            'hsn_code',
             'sibling_variants',
             'variant_count',
             'created_at',
@@ -778,6 +815,17 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    hsn_code = serializers.PrimaryKeyRelatedField(
+        queryset=HsnCode.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    hsn_code_id = serializers.PrimaryKeyRelatedField(
+        queryset=HsnCode.objects.all(),
+        source='hsn_code',
+        required=False,
+        allow_null=True
+    )
     description = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -836,6 +884,8 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
             'supplier_id',
             'section',
             'section_id',
+            'hsn_code',
+            'hsn_code_id',
             'store',
             'location_section',
             'expiry_date',
@@ -1597,8 +1647,15 @@ class SaleOrderItemSerializer(serializers.ModelSerializer):
             'is_return',
             'original_order_item_id',
             'total_price',
+            'hsn_code',
+            'hsn_code_snapshot',
+            'hsn_gst_rate_snapshot',
         ]
-        read_only_fields = ['id', 'returned_quantity', 'returnable_quantity', 'effective_unit_price', 'has_discount', 'is_return', 'original_order_item_id']
+        read_only_fields = [
+            'id', 'returned_quantity', 'returnable_quantity', 'effective_unit_price',
+            'has_discount', 'is_return', 'original_order_item_id',
+            'hsn_code', 'hsn_code_snapshot', 'hsn_gst_rate_snapshot'
+        ]
 
     def get_returnable_quantity(self, obj):
         return max(0, obj.quantity - (obj.returned_quantity or 0))
@@ -1924,6 +1981,7 @@ class SaleOrderSerializer(serializers.ModelSerializer):
                     line_total = (unit_sp * qty).quantize(Decimal('0.01'))
                     new_subtotal += line_total
 
+                    hsn_obj = getattr(item_obj, 'hsn_code', None)
                     SaleOrderItem.objects.create(
                         sale_order=instance,
                         item=item_obj,
@@ -1934,6 +1992,9 @@ class SaleOrderSerializer(serializers.ModelSerializer):
                         unit_mrp=item_obj.effective_mrp,
                         quantity=qty,
                         total_price=line_total,
+                        hsn_code=hsn_obj,
+                        hsn_code_snapshot=hsn_obj.code if hsn_obj else "",
+                        hsn_gst_rate_snapshot=hsn_obj.gst_rate if hsn_obj else None,
                     )
 
                 # D. Update Financials
@@ -2644,6 +2705,9 @@ class CheckoutSerializer(serializers.Serializer):
                     is_return=True,
                     original_order_item_id=line_obj.id,
                     total_price=refund_line,
+                    hsn_code=line_obj.hsn_code,
+                    hsn_code_snapshot=line_obj.hsn_code_snapshot,
+                    hsn_gst_rate_snapshot=line_obj.hsn_gst_rate_snapshot,
                 )
 
                 if line_obj.item:
@@ -2675,6 +2739,7 @@ class CheckoutSerializer(serializers.Serializer):
                 qty = line['quantity']
                 variant_obj = line.get('variant')
                 variant_name = line.get('variant_name', '')
+                hsn_obj = getattr(item, 'hsn_code', None)
 
                 SaleOrderItem.objects.create(
                     sale_order=sale_order,
@@ -2690,6 +2755,9 @@ class CheckoutSerializer(serializers.Serializer):
                     is_return=False,
                     original_order_item_id=None,
                     total_price=line['total_price'],
+                    hsn_code=hsn_obj,
+                    hsn_code_snapshot=hsn_obj.code if hsn_obj else "",
+                    hsn_gst_rate_snapshot=hsn_obj.gst_rate if hsn_obj else None,
                 )
 
                 if variant_obj:

@@ -56,6 +56,7 @@ from .models import (
     DailyRegisterShift,
     Supplier,
     Section,
+    HsnCode,
     AIDescriptionBatchJob,
     BrokenItemReport,
     SupplierOrder,
@@ -68,6 +69,8 @@ from .serializers import (
     SubCategorySerializer,
     SupplierSerializer,
     SectionSerializer,
+    HsnCodeSerializer,
+    HsnCodeNestedSerializer,
     ItemSerializer,
     ItemCreateUpdateSerializer,
     ItemImageSerializer,
@@ -190,6 +193,37 @@ class SubCategoryViewSet(viewsets.ModelViewSet):
         if category_id:
             qs = qs.filter(category_id=category_id)
         return qs
+
+
+class HsnCodeViewSet(viewsets.ModelViewSet):
+    """
+    CRUD ViewSet for HSN Codes master directory.
+    Provides fast indexed filtering and safe delete checks.
+    """
+    queryset = HsnCode.objects.all()
+    serializer_class = HsnCodeSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() in ('true', '1'))
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(Q(code__icontains=search) | Q(description__icontains=search))
+        return qs.order_by('code')
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        item_count = instance.items.count()
+        if item_count > 0:
+            return Response(
+                {
+                    "error": f"Cannot delete HSN Code '{instance.code}' because it is assigned to {item_count} product(s). Please reassign those products or deactivate this HSN code instead."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class SupplierViewSet(viewsets.ModelViewSet):
@@ -454,7 +488,7 @@ class OptionalPageNumberPagination(PageNumberPagination):
 
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.select_related(
-        'store', 'supplier', 'section', 'primary_subcategory', 'primary_subcategory__category'
+        'store', 'supplier', 'section', 'hsn_code', 'primary_subcategory', 'primary_subcategory__category'
     ).prefetch_related(
         'subcategories', 'subcategories__category', 'images', 'design_variants', 'design_variants__image'
     ).all()
@@ -695,7 +729,9 @@ class ItemViewSet(viewsets.ModelViewSet):
                         Q(description__icontains=search_query) |
                         Q(section__name__icontains=search_query) |
                         Q(location_section__icontains=search_query) |
-                        Q(subcategories__name__icontains=search_query)
+                        Q(subcategories__name__icontains=search_query) |
+                        Q(hsn_code__code__icontains=search_query) |
+                        Q(hsn_code__description__icontains=search_query)
                     )
                     if clean_alphanum and len(clean_alphanum) >= 3 and clean_alphanum != search_query:
                         phrase_cond |= Q(uid__icontains=clean_alphanum) | Q(legacy_uid__icontains=clean_alphanum)
@@ -712,7 +748,9 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 Q(description__icontains=w) |
                                 Q(section__name__icontains=w) |
                                 Q(location_section__icontains=w) |
-                                Q(subcategories__name__icontains=w)
+                                Q(subcategories__name__icontains=w) |
+                                Q(hsn_code__code__icontains=w) |
+                                Q(hsn_code__description__icontains=w)
                             )
                         qs = qs.filter(phrase_cond | word_cond)
                     else:
@@ -842,6 +880,27 @@ class ItemViewSet(viewsets.ModelViewSet):
                 width__isnull=False, width__gt=0,
                 height__isnull=False, height__gt=0
             )
+
+        # Filter by HSN
+        hsn_code_id = self.request.query_params.get('hsn_code')
+        if hsn_code_id:
+            qs = qs.filter(hsn_code_id=hsn_code_id)
+
+        # Filter by HSN presence
+        has_no_hsn = self.request.query_params.get('has_no_hsn')
+        has_hsn = self.request.query_params.get('has_hsn')
+        if has_no_hsn is not None and has_no_hsn.lower() in ('true', '1'):
+            qs = qs.filter(hsn_code__isnull=True)
+        elif has_hsn is not None and has_hsn.lower() in ('true', '1'):
+            qs = qs.filter(hsn_code__isnull=False)
+
+        # Filter by Colour/Design Variants presence
+        has_no_variants = self.request.query_params.get('has_no_variants')
+        has_variants = self.request.query_params.get('has_variants')
+        if has_no_variants is not None and has_no_variants.lower() in ('true', '1'):
+            qs = qs.filter(Q(has_variants=False) | Q(has_variants__isnull=True))
+        elif has_variants is not None and has_variants.lower() in ('true', '1'):
+            qs = qs.filter(has_variants=True)
 
         # Sorting parameter (matches frontend sortBy options)
         ordering = self.request.query_params.get('ordering') or self.request.query_params.get('sort')

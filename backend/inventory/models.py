@@ -136,6 +136,46 @@ class SubCategory(models.Model):
         return f"{self.category.name} > {self.name}"
 
 
+class HsnCode(models.Model):
+    """
+    Statutory Harmonized System of Nomenclature (HSN) master table.
+    Links code to official description and default GST slab rate.
+    """
+    code = models.CharField(
+        max_length=16,
+        unique=True,
+        db_index=True,
+        help_text="Official HSN/SAC code (typically 4, 6, or 8 digits)."
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Human-readable goods description (e.g., 'Cotton T-Shirts, Knitted')."
+    )
+    gst_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('18.00'),
+        help_text="Statutory GST percentage slab (e.g. 0.00, 3.00, 5.00, 12.00, 18.00, 28.00)."
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Soft-disable obsolete HSN codes without breaking historical references."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'HSN Code'
+        verbose_name_plural = 'HSN Codes'
+
+    def __str__(self):
+        return f"{self.code} ({self.gst_rate}% - {self.description[:30]})"
+
+
 class Supplier(models.Model):
     """
     Distributor / Wholesaler / Vendor entity from which inventory is procured.
@@ -418,6 +458,14 @@ class Item(models.Model):
         on_delete=models.SET_NULL,
         related_name='items',
         help_text="Store section / department / aisle."
+    )
+    hsn_code = models.ForeignKey(
+        HsnCode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='items',
+        help_text="HSN code for GST classification."
     )
     store = models.ForeignKey(
         Store,
@@ -1597,6 +1645,27 @@ class SaleOrderItem(models.Model):
         help_text="ID of the original SaleOrderItem being returned."
     )
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
+    hsn_code = models.ForeignKey(
+        'HsnCode',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sale_items',
+        help_text="Direct link to HsnCode master at checkout."
+    )
+    hsn_code_snapshot = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text="Immutable string snapshot of the HSN code at the moment of sale."
+    )
+    hsn_gst_rate_snapshot = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Snapshot of the HSN GST rate at the moment of sale."
+    )
 
     class Meta:
         ordering = ['id']

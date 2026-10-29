@@ -265,6 +265,9 @@ export default function ExportCsvModal({
     const headers = [
       'UID / Barcode',
       'Product Name',
+      'HSN / SAC Code',
+      'HSN GST Rate (%)',
+      'HSN Description',
       'Parent Category',
       'Subcategories',
       'Supplier / Vendor',
@@ -329,9 +332,16 @@ export default function ExportCsvModal({
         ? ((l * w * h) / 5000).toFixed(3)
         : (item.volumetric_weight_kg !== null && item.volumetric_weight_kg !== undefined ? Number(item.volumetric_weight_kg).toFixed(3) : '');
 
+      const hsnCode = item.hsn_code ? (typeof item.hsn_code === 'object' ? item.hsn_code.code : item.hsn_code) : (item.hsn_code_code || '');
+      const hsnGstRate = item.hsn_code && typeof item.hsn_code === 'object' && item.hsn_code.gst_rate !== undefined ? `${item.hsn_code.gst_rate}%` : (item.hsn_gst_rate !== undefined && item.hsn_gst_rate !== '' ? `${item.hsn_gst_rate}%` : '');
+      const hsnDesc = item.hsn_code && typeof item.hsn_code === 'object' && item.hsn_code.description ? item.hsn_code.description : (item.hsn_description || '');
+
       return [
         item.uid || '',
         item.name || '',
+        hsnCode,
+        hsnGstRate,
+        hsnDesc,
         categoryNames || '',
         subcatNames || '',
         supplierName,

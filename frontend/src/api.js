@@ -446,6 +446,66 @@ export async function deleteCategory(id) {
   return true;
 }
 
+// ----------------- HSN Codes APIs -----------------
+
+export async function fetchHsnCodes(params = {}) {
+  const url = new URL(`${window.location.origin}${API_BASE}/hsn-codes/`);
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '') {
+      url.searchParams.append(key, val);
+    }
+  });
+  const res = await fetch(url.toString(), {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to fetch HSN codes');
+  return res.json();
+}
+
+export async function createHsnCode(data) {
+  const res = await fetch(`${API_BASE}/hsn-codes/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const message = Object.entries(errData)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('; ') || 'Failed to create HSN code';
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function updateHsnCode(id, data) {
+  const res = await fetch(`${API_BASE}/hsn-codes/${id}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const message = Object.entries(errData)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      .join('; ') || 'Failed to update HSN code';
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function deleteHsnCode(id) {
+  const res = await fetch(`${API_BASE}/hsn-codes/${id}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || errData.detail || 'Failed to delete HSN code');
+  }
+  return true;
+}
+
 // ----------------- SubCategories APIs -----------------
 
 export async function fetchSubcategories(params = {}) {

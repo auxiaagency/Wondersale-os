@@ -6,6 +6,7 @@ from .views import (
     SubCategoryViewSet,
     SupplierViewSet,
     SectionViewSet,
+    HsnCodeViewSet,
     ItemViewSet,
     ItemImageViewSet,
     StockMovementViewSet,
@@ -29,6 +30,7 @@ router.register(r'suppliers', SupplierViewSet, basename='supplier')
 router.register(r'supplier-orders', SupplierOrderViewSet, basename='supplier-order')
 router.register(r'supplier-ledger-entries', SupplierLedgerEntryViewSet, basename='supplier-ledger-entry')
 router.register(r'sections', SectionViewSet, basename='section')
+router.register(r'hsn-codes', HsnCodeViewSet, basename='hsn-code')
 router.register(r'items', ItemViewSet, basename='item')
 router.register(r'images', ItemImageViewSet, basename='item-image')
 router.register(r'stock-movements', StockMovementViewSet, basename='stock-movement')
