@@ -6923,11 +6923,6 @@ export default function BillingView({
                                         title={displayName}
                                       >
                                         {displayName}
-                                        {(item.hsn_code_snapshot || item.hsn_code?.code) && (
-                                          <span style={{ marginLeft: '6px', fontSize: '0.65rem', fontWeight: 600, color: '#4B5563', textTransform: 'none' }}>
-                                            [HSN: {item.hsn_code_snapshot || item.hsn_code?.code}{item.hsn_gst_rate_snapshot ? ` @ ${item.hsn_gst_rate_snapshot}%` : ''}]
-                                          </span>
-                                        )}
                                       </div>
                                     </td>
                                   </tr>

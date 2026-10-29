@@ -2736,11 +2736,6 @@ export default function SalesInvoicesLedgerView({
                                 <tr>
                                   <td colSpan={5} style={{ paddingTop: '5px', fontWeight: 800, color: '#000000', textTransform: 'uppercase', lineHeight: 1.25 }}>
                                     {item.item_name}
-                                    {(item.hsn_code_snapshot || item.hsn_code?.code) && (
-                                      <span style={{ marginLeft: '6px', fontSize: '0.65rem', fontWeight: 600, color: '#4B5563', textTransform: 'none' }}>
-                                        [HSN: {item.hsn_code_snapshot || item.hsn_code?.code}{item.hsn_gst_rate_snapshot ? ` @ ${item.hsn_gst_rate_snapshot}%` : ''}]
-                                      </span>
-                                    )}
                                   </td>
                                 </tr>
                                 <tr style={{ borderBottom: i < selectedReceiptOrder.items.length - 1 ? '1px dotted #E5E7EB' : 'none' }}>
