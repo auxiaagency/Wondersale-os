@@ -255,7 +255,20 @@ export default function CategoryPieChart({
       }
 
       if (onRangeChange) {
-        onRangeChange(newRange);
+        // Only notify parent if the selected range actually differs from propTimelineRange
+        const cur = propTimelineRange;
+        const isSameAsParent =
+          cur &&
+          (cur.startDate || '') === (newRange.startDate || '') &&
+          (cur.endDate || '') === (newRange.endDate || '') &&
+          cur.unit === newRange.unit &&
+          cur.count === newRange.count &&
+          Boolean(cur.isAllTime) === Boolean(newRange.isAllTime) &&
+          (cur.granularity || cur.xAxisGrouping || '') === (newRange.granularity || newRange.xAxisGrouping || '');
+
+        if (!isSameAsParent) {
+          onRangeChange(newRange);
+        }
         return;
       }
 

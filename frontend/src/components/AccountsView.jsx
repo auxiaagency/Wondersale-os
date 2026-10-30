@@ -243,14 +243,16 @@ export default function AccountsView({
     setMasterTimelineRange((prev) => {
       if (
         prev &&
-        prev.startDate === newRange.startDate &&
-        prev.endDate === newRange.endDate &&
+        (prev.startDate || '') === (newRange.startDate || '') &&
+        (prev.endDate || '') === (newRange.endDate || '') &&
         prev.unit === newRange.unit &&
         prev.count === newRange.count &&
-        prev.isAllTime === newRange.isAllTime &&
-        prev.granularity === newRange.granularity &&
-        prev.label === newRange.label
+        Boolean(prev.isAllTime) === Boolean(newRange.isAllTime) &&
+        (prev.granularity || prev.xAxisGrouping || '') === (newRange.granularity || newRange.xAxisGrouping || '')
       ) {
+        if (prev.label !== newRange.label) {
+          return { ...prev, label: newRange.label };
+        }
         return prev;
       }
       return newRange;

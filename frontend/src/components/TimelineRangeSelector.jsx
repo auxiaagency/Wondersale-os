@@ -229,6 +229,7 @@ export default function TimelineRangeSelector({
 
   const popoverRef = useRef(null);
   const lastEmittedRangeKeyRef = useRef('');
+  const isComponentMountedRef = useRef(false);
 
   // Controlled value synchronization
   useEffect(() => {
@@ -407,6 +408,14 @@ export default function TimelineRangeSelector({
     if (lastEmittedRangeKeyRef.current === key) return;
     lastEmittedRangeKeyRef.current = key;
 
+    // If controlled by value prop and this is the initial mount, avoid emitting redundant onChange
+    if (!isComponentMountedRef.current) {
+      isComponentMountedRef.current = true;
+      if (value) {
+        return;
+      }
+    }
+
     if (onChange) {
       onChange({
         unit: isAllTime ? 'all' : customStartDate ? 'custom' : activeUnit,
@@ -419,7 +428,7 @@ export default function TimelineRangeSelector({
         isAllTime,
       });
     }
-  }, [activeUnit, activeCount, xAxisGrouping, currentRange.startDate, currentRange.endDate, isAllTime, customStartDate, rangeLabel, onChange]);
+  }, [activeUnit, activeCount, xAxisGrouping, currentRange.startDate, currentRange.endDate, isAllTime, customStartDate, rangeLabel, onChange, value]);
 
   // Scope pill switcher
   const handleScopeChange = (unit, count = null) => {

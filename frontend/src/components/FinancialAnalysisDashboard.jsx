@@ -190,13 +190,17 @@ export default function FinancialAnalysisDashboard({
       const cur = timelineRangeRef.current;
       if (
         cur &&
-        cur.startDate === propTimelineRange.startDate &&
-        cur.endDate === propTimelineRange.endDate &&
-        cur.granularity === propTimelineRange.granularity &&
+        (cur.startDate || '') === (propTimelineRange.startDate || '') &&
+        (cur.endDate || '') === (propTimelineRange.endDate || '') &&
+        (cur.granularity || cur.xAxisGrouping || '') === (propTimelineRange.granularity || propTimelineRange.xAxisGrouping || '') &&
         cur.unit === propTimelineRange.unit &&
         cur.count === propTimelineRange.count &&
-        cur.isAllTime === propTimelineRange.isAllTime
+        Boolean(cur.isAllTime) === Boolean(propTimelineRange.isAllTime)
       ) {
+        if (cur.label !== propTimelineRange.label && propTimelineRange.label) {
+          timelineRangeRef.current = { ...cur, label: propTimelineRange.label };
+          setTimelineRange((prev) => ({ ...prev, label: propTimelineRange.label }));
+        }
         return;
       }
       setTimelineRange(propTimelineRange);
@@ -277,14 +281,18 @@ export default function FinancialAnalysisDashboard({
     const cur = timelineRangeRef.current;
     if (
       cur &&
-      cur.startDate === newRange.startDate &&
-      cur.endDate === newRange.endDate &&
+      (cur.startDate || '') === (newRange.startDate || '') &&
+      (cur.endDate || '') === (newRange.endDate || '') &&
       cur.unit === newRange.unit &&
       cur.count === newRange.count &&
-      cur.isAllTime === newRange.isAllTime &&
-      cur.granularity === newRange.granularity &&
-      cur.label === newRange.label
+      Boolean(cur.isAllTime) === Boolean(newRange.isAllTime) &&
+      (cur.granularity || cur.xAxisGrouping || '') === (newRange.granularity || newRange.xAxisGrouping || '')
     ) {
+      // Range is semantically identical, only update display label if necessary
+      if (cur.label !== newRange.label) {
+        timelineRangeRef.current = { ...cur, label: newRange.label };
+        setTimelineRange((prev) => ({ ...prev, label: newRange.label }));
+      }
       return;
     }
 
@@ -606,7 +614,7 @@ export default function FinancialAnalysisDashboard({
       {/* ========================================================================= */}
       {/* INLINE ERROR STATE                                                         */}
       {/* ========================================================================= */}
-      {!loading && (error || !data) && (
+      {!loading && !data && error && (
         <div
           style={{
             padding: '32px',
