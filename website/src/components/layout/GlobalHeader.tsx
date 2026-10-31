@@ -63,7 +63,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-[#FDF8EE] border-b border-[#EADFC7]/80 shadow-xs">
+      <header className="sticky top-0 z-40 bg-[#F6E9C8] border-b border-[#DBC599] shadow-xs">
         {/* ======================================================== */}
         {/* DESKTOP VIEWPORT NAVBAR (md:flex, lg, xl - Enhanced)   */}
         <div className="hidden md:block w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12">
@@ -79,7 +79,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products, brands and appliances..."
-                className="w-full h-11 bg-[#5A0A10] text-sm text-[#FDF8EE] placeholder:text-[#C59A9F] rounded-full pl-11 pr-20 border border-[#7A0C16] focus:outline-none focus:ring-2 focus:ring-[#7A0C16] transition-all shadow-inner"
+                className="w-full h-11 bg-[#680114] text-sm text-[#F6E9C8] placeholder:text-[#D8B4B8] rounded-full pl-11 pr-20 border border-[#520210] focus:outline-none focus:ring-2 focus:ring-[#88091E] transition-all shadow-inner"
               />
               <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-2 text-[#D8B4B8]">
                 <button
@@ -103,13 +103,13 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             <nav className="flex items-center gap-6 text-sm font-semibold text-[#3D2517] shrink-0">
               <Link
                 href="/"
-                className="hover:text-[#7A0C16] py-1 transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-[#7A0C16] hover:after:w-full after:transition-all"
+                className="hover:text-[#680114] py-1 transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-[#680114] hover:after:w-full after:transition-all"
               >
                 Home
               </Link>
               <Link
                 href="/categories"
-                className="hover:text-[#7A0C16] py-1 transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-[#7A0C16] hover:after:w-full after:transition-all"
+                className="hover:text-[#680114] py-1 transition-colors relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-[#680114] hover:after:w-full after:transition-all"
               >
                 Categories
               </Link>
@@ -117,7 +117,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 href="/account"
                 aria-label="Account"
                 title="Account"
-                className="p-2 rounded-full hover:bg-[#FAF3E0] text-[#735A4A] hover:text-[#7A0C16] transition-colors flex items-center justify-center"
+                className="p-2 rounded-full hover:bg-[#EFE0BC] text-[#735A4A] hover:text-[#680114] transition-colors flex items-center justify-center"
               >
                 <User className="w-5 h-5" />
               </Link>
@@ -128,12 +128,12 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <Link
                 href="/cart"
                 aria-label="Shopping Cart"
-                className="group relative flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] transition-all shadow-sm"
+                className="group relative flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] transition-all shadow-sm"
               >
                 <div className="relative">
                   <ShoppingBag className="w-4.5 h-4.5 group-hover:scale-110 transition-transform" />
                   {isHydrated && cartCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-amber-400 text-[#5A0A10] text-[10px] font-black rounded-full min-w-4 h-4 px-1 flex items-center justify-center font-sans">
+                    <span className="absolute -top-2 -right-2 bg-amber-400 text-[#3E010C] text-[10px] font-black rounded-full min-w-4 h-4 px-1 flex items-center justify-center font-sans">
                       {cartCount}
                     </span>
                   )}
@@ -157,7 +157,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <Link
                 href="/account"
                 aria-label="Account"
-                className="relative p-2 rounded-full hover:bg-[#FAF3E0] text-[#735A4A] hover:text-[#7A0C16] transition-colors"
+                className="relative p-2 rounded-full hover:bg-[#EFE0BC] text-[#735A4A] hover:text-[#680114] transition-colors"
               >
                 <User className="w-5 h-5" />
               </Link>
@@ -165,11 +165,11 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <Link
                 href="/cart"
                 aria-label="Shopping Cart"
-                className="relative p-2 rounded-full hover:bg-[#FAF3E0] text-[#735A4A] hover:text-[#7A0C16] transition-colors"
+                className="relative p-2 rounded-full hover:bg-[#EFE0BC] text-[#735A4A] hover:text-[#680114] transition-colors"
               >
                 <ShoppingBag className="w-5 h-5" />
                 {isHydrated && cartCount > 0 && (
-                  <span className="absolute top-1 right-1 bg-[#7A0C16] text-[#FDF8EE] text-[9px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">
+                  <span className="absolute top-1 right-1 bg-[#680114] text-[#F6E9C8] text-[9px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">
                     {cartCount}
                   </span>
                 )}
@@ -178,7 +178,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
           </div>
 
           {/* Search Bar Component */}
-          <div className="px-4 py-2.5 bg-[#FDF8EE] border-b border-[#EADFC7]">
+          <div className="px-4 py-2.5 bg-[#F6E9C8] border-b border-[#DBC599]">
             <form onSubmit={handleSearch} className="relative flex items-center w-full">
               <Search className="w-4 h-4 text-[#D8B4B8] absolute left-3.5 pointer-events-none" />
               <input
@@ -186,7 +186,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products, brands and more..."
-                className="w-full bg-[#5A0A10] text-xs rounded-full pl-9 pr-16 py-2.5 text-[#FDF8EE] placeholder:text-[#C59A9F] focus:outline-none focus:ring-1 focus:ring-[#7A0C16] border border-[#7A0C16] transition-all shadow-inner"
+                className="w-full bg-[#680114] text-xs rounded-full pl-9 pr-16 py-2.5 text-[#F6E9C8] placeholder:text-[#D8B4B8] focus:outline-none focus:ring-1 focus:ring-[#88091E] border border-[#520210] transition-all shadow-inner"
               />
               <div className="absolute right-3 flex items-center gap-1 text-[#D8B4B8]">
                 <button
@@ -212,8 +212,8 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       {/* Pincode Modal Bottom Sheet */}
       {showPincodeModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-[#FAF3E0] rounded-t-2xl sm:rounded-2xl p-5 shadow-xl animate-in fade-in slide-in-from-bottom duration-200 border border-[#EADFC7]">
-            <div className="flex items-center justify-between pb-3 border-b border-[#EADFC7]">
+          <div className="w-full max-w-sm bg-[#EFE0BC] rounded-t-2xl sm:rounded-2xl p-5 shadow-xl animate-in fade-in slide-in-from-bottom duration-200 border border-[#DBC599]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#DBC599]">
               <h3 className="text-sm font-bold text-[#2C1810]">Select Delivery Location</h3>
               <button
                 onClick={() => setShowPincodeModal(false)}
@@ -238,12 +238,12 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     setPincodeError("");
                   }}
                   placeholder="e.g. 462001"
-                  className="w-full h-11 px-3 bg-[#FDF8EE] border border-[#D5C4A1] rounded-lg text-sm text-[#2C1810] focus:outline-none focus:border-[#7A0C16] focus:ring-1 focus:ring-[#7A0C16]"
+                  className="w-full h-11 px-3 bg-[#F6E9C8] border border-[#C4AA78] rounded-lg text-sm text-[#2C1810] focus:outline-none focus:border-[#680114] focus:ring-1 focus:ring-[#680114]"
                 />
               </div>
 
               {pincodeError && (
-                <div className="flex items-center gap-1.5 text-xs text-[#7A0C16] bg-[#FCEDEE] p-2 rounded-lg border border-[#F6D8DA]">
+                <div className="flex items-center gap-1.5 text-xs text-[#680114] bg-[#FAEBEF] p-2 rounded-lg border border-[#F4D3D8]">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{pincodeError}</span>
                 </div>
@@ -252,7 +252,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <button
                 type="submit"
                 disabled={inputPincode.length !== 6 || isSubmitting}
-                className="w-full h-11 bg-[#5A0A10] hover:bg-[#7A0C16] disabled:opacity-50 text-[#FDF8EE] text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                className="w-full h-11 bg-[#680114] hover:bg-[#88091E] disabled:opacity-50 text-[#F6E9C8] text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
               >
                 {isSubmitting ? "Checking Serviceability..." : "Apply PIN Code"}
               </button>

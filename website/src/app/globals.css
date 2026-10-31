@@ -2,30 +2,30 @@
 
 :root {
   /* Warm Cream & Burgundy Aesthetic Palette (from Hero Reference) */
-  --surface: #FDF8EE;
-  --surface-cream: #FAF3E0;
-  --surface-card: #FAF3E0;
-  --surface-grey: #F4ECDC;
-  --border: #EADFC7;
-  --border-strong: #D5C4A1;
+  --surface: #F6E9C8;
+  --surface-cream: #EFE0BC;
+  --surface-card: #EFE0BC;
+  --surface-grey: #E8D7B0;
+  --border: #DBC599;
+  --border-strong: #C4AA78;
   --ink: #2C1810;
   --body: #4A3428;
   --muted: #735A4A;
 
   /* Brand Burgundy Accent Tokens */
-  --red-900: #42060B;
-  --red-800: #5A0A10;
-  --red-700: #7A0C16;
-  --red-600: #9E101D;
-  --red-500: #C51B26;
-  --red-100: #F6D8DA;
-  --red-50: #FCEDEE;
+  --red-900: #3E010C;
+  --red-800: #520210;
+  --red-700: #680114;
+  --red-600: #88091E;
+  --red-500: #B2152E;
+  --red-100: #F4D3D8;
+  --red-50: #FAEBEF;
 
   /* Warm Gold / Beige Tokens */
-  --beige-100: #FDF8EE;
-  --beige-200: #F4ECDC;
-  --beige-300: #EADFC7;
-  --beige-400: #D5C4A1;
+  --beige-100: #F6E9C8;
+  --beige-200: #EFE0BC;
+  --beige-300: #DBC599;
+  --beige-400: #C4AA78;
 
   /* Status Color Tokens */
   --success: #1E824C;

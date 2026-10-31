@@ -199,17 +199,16 @@ export default function HomePage() {
   const padTime = (num: number) => String(num).padStart(2, "0");
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#F6E9C8] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
       {/* 1. Global Header */}
       <GlobalHeader />
 
-      <main className="flex-1 w-full bg-[#FDF8EE]">
+      <main className="flex-1 w-full bg-[#F6E9C8]">
         <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 flex flex-col gap-7">
 
-          {/* 2. HERO CAMPAIGN BANNER (Rich Burgundy with Circular Image Portal matching screenshot) */}
           {/* 2. HERO CAMPAIGN BANNER (Rich Burgundy with Off-Center Circular Portal matching screenshot) */}
           <section className="w-full">
-            <div className="relative overflow-hidden rounded-2xl md:rounded-[2.25rem] bg-[#5A0A10] shadow-lg text-[#FDF8EE]">
+            <div className="relative overflow-hidden rounded-2xl md:rounded-[2.25rem] bg-[#680114] shadow-lg text-[#F6E9C8]">
               {HERO_SLIDES.map((slide, index) => {
                 const isActive = index === currentSlide;
                 return (
@@ -222,19 +221,19 @@ export default function HomePage() {
                     <div className="w-full relative flex flex-col md:flex-row items-center justify-between px-5 py-5 sm:px-7 sm:py-6 md:px-12 md:py-7 min-h-[220px] md:min-h-[250px] lg:min-h-[270px] gap-4 md:gap-6">
                       {/* Left: Text & CTA Content */}
                       <div className="max-w-md lg:max-w-lg z-10 space-y-2 md:space-y-3 text-center md:text-left">
-                        <span className="inline-block border border-[#EADFC7]/50 bg-black/15 backdrop-blur-xs text-[#FDF8EE] text-[9px] md:text-[10px] px-2.5 py-0.5 md:px-3 md:py-0.5 rounded-full tracking-wider uppercase font-semibold">
+                        <span className="inline-block border border-[#DBC599]/50 bg-black/20 backdrop-blur-xs text-[#F6E9C8] text-[9px] md:text-[10px] px-2.5 py-0.5 md:px-3 md:py-0.5 rounded-full tracking-wider uppercase font-semibold">
                           {slide.badge}
                         </span>
-                        <h2 className="text-xl sm:text-2xl md:text-4xl lg:text-[42px] text-[#FDF8EE] leading-tight font-serif font-bold tracking-tight">
+                        <h2 className="text-xl sm:text-2xl md:text-4xl lg:text-[42px] text-[#F6E9C8] leading-tight font-serif font-bold tracking-tight">
                           {slide.title}
                         </h2>
-                        <p className="text-xs md:text-sm text-[#EADFC7]/90 font-medium max-w-sm line-clamp-2 md:line-clamp-none">
+                        <p className="text-xs md:text-sm text-[#EFE0BC]/90 font-medium max-w-sm line-clamp-2 md:line-clamp-none">
                           {slide.subtitle}
                         </p>
                         <div className="pt-1 md:pt-1.5 flex justify-center md:justify-start">
                           <Link
                             href={slide.buttonLink}
-                            className="bg-[#FDF8EE] hover:bg-[#F4ECDC] text-[#5A0A10] text-xs md:text-sm px-4 py-2 md:px-5 md:py-2.5 rounded-xl flex items-center gap-1.5 md:gap-2 active:scale-95 transition-all shadow-sm font-bold cursor-pointer"
+                            className="bg-[#F6E9C8] hover:bg-[#EFE0BC] text-[#680114] text-xs md:text-sm px-4 py-2 md:px-5 md:py-2.5 rounded-xl flex items-center gap-1.5 md:gap-2 active:scale-95 transition-all shadow-sm font-bold cursor-pointer"
                           >
                             <span>{slide.buttonText}</span>
                             <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
@@ -244,7 +243,7 @@ export default function HomePage() {
 
                       {/* Right: Incomplete Circular Portal Image (overflowing top/bottom as in screenshot) */}
                       <div className="relative flex items-center justify-center shrink-0 w-full md:w-auto mt-2 md:mt-0">
-                        <div className="relative w-44 h-44 sm:w-56 sm:h-56 md:w-72 md:h-72 lg:w-80 lg:h-80 md:-my-12 md:-mr-6 rounded-full border-[8px] sm:border-[10px] md:border-[14px] border-[#FDF8EE] overflow-hidden shadow-2xl bg-[#EADFC7] shrink-0">
+                        <div className="relative w-44 h-44 sm:w-56 sm:h-56 md:w-72 md:h-72 lg:w-80 lg:h-80 md:-my-12 md:-mr-6 rounded-full border-[8px] sm:border-[10px] md:border-[14px] border-[#F6E9C8] overflow-hidden shadow-2xl bg-[#E8D7B0] shrink-0">
                           <img
                             alt={slide.alt}
                             className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
@@ -258,7 +257,7 @@ export default function HomePage() {
               })}
 
               {/* Decorative 4-point star accent on bottom right (from reference design) */}
-              <div className="hidden md:block absolute bottom-3 right-3 text-[#EADFC7]/30 pointer-events-none select-none">
+              <div className="hidden md:block absolute bottom-3 right-3 text-[#EFE0BC]/30 pointer-events-none select-none">
                 <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
                   <path d="M12 0L14.2 9.8L24 12L14.2 14.2L12 24L9.8 14.2L0 12L9.8 9.8L12 0Z" />
                 </svg>
@@ -283,24 +282,24 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* 3. EXPLORE DEPARTMENTS / CATEGORY ICON ROW (Outlined minimalist circular icons matching reference) */}
+          {/* 3. EXPLORE CATEGORIES / CATEGORY ICON ROW (Deep burgundy outline circular icons) */}
           <section className="w-full">
             <div className="flex items-center justify-between mb-4 px-1">
               <div>
                 <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#2C1810]">
-                  Explore Departments
+                  Explore Categories
                 </h2>
               </div>
               <Link
                 href="/categories"
-                className="text-xs text-[#5A0A10] font-bold flex items-center gap-0.5 hover:underline"
+                className="text-xs text-[#680114] font-bold flex items-center gap-0.5 hover:underline"
               >
                 <span>View All</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
 
-            {/* Mobile View: 5 categories */}
+            {/* Mobile View: 5 categories with deep burgundy outline */}
             <div className="grid grid-cols-5 md:hidden gap-2 items-center justify-items-center">
               {categories.slice(0, 5).map((cat) => {
                 const Icon = CATEGORY_ICONS[cat.slug] || Utensils;
@@ -310,10 +309,10 @@ export default function HomePage() {
                     href={`/category/${cat.slug}`}
                     className="flex flex-col items-center group w-full p-1 transition-transform active:scale-95"
                   >
-                    <div className="w-13 h-13 rounded-full bg-transparent border-1.5 border-[#5A0A10] flex items-center justify-center transition-all group-hover:bg-[#5A0A10]/5 shadow-2xs">
-                      <Icon className="w-5 h-5 text-[#5A0A10] stroke-[1.75]" />
+                    <div className="w-13 h-13 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114]/10 shadow-2xs">
+                      <Icon className="w-5.5 h-5.5 text-[#680114] stroke-[2]" />
                     </div>
-                    <span className="text-[11px] text-[#2C1810] text-center mt-1.5 line-clamp-1 font-medium group-hover:text-[#5A0A10] transition-colors">
+                    <span className="text-[11px] text-[#2C1810] text-center mt-1.5 line-clamp-1 font-semibold group-hover:text-[#680114] transition-colors">
                       {cat.name}
                     </span>
                   </Link>
@@ -321,7 +320,7 @@ export default function HomePage() {
               })}
             </div>
 
-            {/* Desktop View: Full 9 departments with outlines matching reference */}
+            {/* Desktop View: Full 9 categories with deep burgundy outline matching reference */}
             <div className="hidden md:grid md:grid-cols-9 gap-4 items-center justify-items-center">
               {categories.slice(0, 8).map((cat) => {
                 const Icon = CATEGORY_ICONS[cat.slug] || Utensils;
@@ -331,30 +330,30 @@ export default function HomePage() {
                     href={`/category/${cat.slug}`}
                     className="flex flex-col items-center group w-full p-1 transition-transform hover:-translate-y-0.5"
                   >
-                    <div className="w-14 h-14 rounded-full bg-transparent border-1.5 border-[#5A0A10] flex items-center justify-center transition-all group-hover:bg-[#5A0A10] group-hover:border-[#5A0A10] group-hover:text-[#FDF8EE] shadow-2xs">
-                      <Icon className="w-6 h-6 text-[#5A0A10] group-hover:text-[#FDF8EE] stroke-[1.75] transition-colors" />
+                    <div className="w-14 h-14 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
+                      <Icon className="w-6 h-6 text-[#680114] group-hover:text-[#F6E9C8] stroke-[2] transition-colors" />
                     </div>
-                    <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-medium group-hover:text-[#5A0A10] transition-colors">
+                    <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-semibold group-hover:text-[#680114] transition-colors">
                       {cat.name}
                     </span>
                   </Link>
                 );
               })}
 
-              {/* More / All Categories Icon */}
+              {/* More / All Categories Icon with deep burgundy outline */}
               <Link
                 href="/categories"
                 className="flex flex-col items-center group w-full p-1 transition-transform hover:-translate-y-0.5"
               >
-                <div className="w-14 h-14 rounded-full bg-transparent border-1.5 border-[#5A0A10] flex items-center justify-center transition-all group-hover:bg-[#5A0A10] group-hover:border-[#5A0A10] group-hover:text-[#FDF8EE] shadow-2xs">
+                <div className="w-14 h-14 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
                   <div className="grid grid-cols-2 gap-1 p-2">
-                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
-                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
-                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
-                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
                   </div>
                 </div>
-                <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-medium group-hover:text-[#5A0A10] transition-colors">
+                <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-semibold group-hover:text-[#680114] transition-colors">
                   More
                 </span>
               </Link>
