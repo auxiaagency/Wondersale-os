@@ -64,6 +64,7 @@ INSTALLED_APPS = [
     'staff.apps.StaffConfig',
     'stakeholders.apps.StakeholdersConfig',
     'accounting.apps.AccountingConfig',
+    'website.apps.WebsiteConfig',
 ]
 
 MIDDLEWARE = [
@@ -252,6 +253,7 @@ if not DEBUG:
     CORS_ALLOW_ALL_ORIGINS = False
     CORS_ALLOWED_ORIGINS = [
         'https://wonder.sale',
+        'https://www.wonder.sale',
         'https://app.wonder.sale',
         'https://api.wonder.sale',
     ]
@@ -278,6 +280,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:8000',
     'https://wonder.sale',
+    'https://www.wonder.sale',
     'https://app.wonder.sale',
     'https://api.wonder.sale',
 ]

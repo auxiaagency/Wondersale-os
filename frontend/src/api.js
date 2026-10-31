@@ -3628,6 +3628,58 @@ export async function deleteOwnerExpenseAttachment(expenseId, attachmentId) {
   return res.json();
 }
 
+// ==============================================================================
+// WEBSITE APP (ONLINE STOREFRONT INTEGRATION)
+// ==============================================================================
+
+export async function fetchWebsiteStats() {
+  const res = await fetch('/api/website/admin/stats/', {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to fetch website stats'));
+  }
+  return res.json();
+}
+
+export async function fetchWebsiteOrders(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.status) qs.append('status', params.status);
+  if (params.search) qs.append('search', params.search);
+  if (params.page) qs.append('page', params.page);
+  const res = await fetch(`/api/website/admin/orders/?${qs.toString()}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to fetch website orders'));
+  }
+  return res.json();
+}
+
+export async function updateWebsiteOrderStatus(orderId, statusData) {
+  const res = await fetch(`/api/website/admin/orders/${orderId}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(statusData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update website order status'));
+  }
+  return res.json();
+}
+
+export async function toggleItemWebsiteListing(itemId, isListed) {
+  const res = await fetch(`/api/inventory/items/${itemId}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ is_listed_on_website: isListed }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update item website listing status'));
+  }
+  return res.json();
+}
+
 
 
 

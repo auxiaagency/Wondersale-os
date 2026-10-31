@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/staff/', include('staff.urls')),
     path('api/stakeholders/', include('stakeholders.urls')),
     path('api/accounting/', include('accounting.urls')),
+    path('api/website/', include('website.urls')),
 ]
 
 # Custom generic error handlers that leak no system information

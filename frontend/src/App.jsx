@@ -32,6 +32,7 @@ const AccountsView = lazyWithRetry(() => import('./components/AccountsView'));
 const DashboardView = lazyWithRetry(() => import('./components/DashboardView'));
 const EmployeeManagementView = lazyWithRetry(() => import('./components/EmployeeManagementView'));
 const EmployeePortalView = lazyWithRetry(() => import('./components/EmployeePortalView'));
+const WebsiteManagementView = lazyWithRetry(() => import('./components/WebsiteManagementView'));
 
 // Lazy-loaded modals
 const ItemDetailModal = lazyWithRetry(() => import('./components/ItemDetailModal'));
@@ -709,6 +710,13 @@ export default function App() {
           {/* Phase 1: Employee Portal — accessible by ALL authenticated staff */}
           {activeView === 'employee_portal' && currentUser && (
             <EmployeePortalView
+              currentUser={currentUser}
+              onBackToLauncher={() => handleNavigate('launcher')}
+            />
+          )}
+
+          {activeView === 'website' && isModuleAccessible(currentUser, 'website') && (
+            <WebsiteManagementView
               currentUser={currentUser}
               onBackToLauncher={() => handleNavigate('launcher')}
             />

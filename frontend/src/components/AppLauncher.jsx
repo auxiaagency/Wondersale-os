@@ -33,6 +33,7 @@ import {
   Settings,
   ChevronDown,
   Truck,
+  Globe,
 } from 'lucide-react';
 import { isStakeholdersEnabled, onStakeholdersSettingChange } from '../utils/stakeholdersSettings';
 
@@ -121,6 +122,14 @@ export const SYSTEM_MODULES = [
     color: '#FEC501',
     bgGlow: 'rgba(254, 197, 1, 0.16)',
     description: 'Employee access & permissions',
+  },
+  {
+    id: 'website',
+    title: 'Website',
+    icon: Globe,
+    color: '#0EA5E9',
+    bgGlow: 'rgba(14, 165, 233, 0.16)',
+    description: 'Online store catalog & orders',
   },
   {
     id: 'settings',
