@@ -61,6 +61,7 @@ from .models import (
     BrokenItemReport,
     SupplierOrder,
     SupplierOrderItem,
+    SupplierOrderAttachment,
     SupplierLedgerEntry,
 )
 from .serializers import (
@@ -93,6 +94,7 @@ from .serializers import (
     generate_next_payout_number,
     SupplierOrderSerializer,
     SupplierOrderItemSerializer,
+    SupplierOrderAttachmentSerializer,
     SupplierLedgerEntrySerializer,
 )
 from .services import (
@@ -264,17 +266,17 @@ class SupplierViewSet(viewsets.ModelViewSet):
         total_items_count = items_qs.count()
         total_units_in_stock = items_qs.aggregate(total=Sum('quantity'))['total'] or 0
         total_stock_value = sum(((it.quantity or 0) * (it.cost_price or Decimal('0.00'))) for it in items_qs)
-        total_retail_value = sum(((it.quantity or 0) * (it.price or Decimal('0.00'))) for it in items_qs)
+        total_retail_value = sum(((it.quantity or 0) * (getattr(it, 'selling_price', None) or it.cost_price or Decimal('0.00'))) for it in items_qs)
 
         # Sales of products from this supplier
         item_ids = list(items_qs.values_list('id', flat=True))
         sale_items_qs = SaleOrderItem.objects.filter(item_id__in=item_ids)
         if store_id:
-            sale_items_qs = sale_items_qs.filter(order__store_id=store_id)
+            sale_items_qs = sale_items_qs.filter(sale_order__store_id=store_id)
         if start_date:
-            sale_items_qs = sale_items_qs.filter(order__created_at__date__gte=start_date)
+            sale_items_qs = sale_items_qs.filter(sale_order__created_at__date__gte=start_date)
         if end_date:
-            sale_items_qs = sale_items_qs.filter(order__created_at__date__lte=end_date)
+            sale_items_qs = sale_items_qs.filter(sale_order__created_at__date__lte=end_date)
         
         sales_aggregate = sale_items_qs.aggregate(
             total_sold_units=Sum('quantity'),
@@ -285,13 +287,27 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
         # Orders stats
         orders_qs = SupplierOrder.objects.filter(supplier=supplier)
+        ledger_qs = SupplierLedgerEntry.objects.filter(supplier=supplier)
         if store_id:
             orders_qs = orders_qs.filter(store_id=store_id)
+            ledger_qs = ledger_qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
         
         total_orders_count = orders_qs.count()
         total_ordered_amount = float(orders_qs.aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00'))
-        total_paid_amount = float(orders_qs.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00'))
-        total_owed_amount = max(0.0, total_ordered_amount - total_paid_amount)
+
+        # Total paid = sum of ledger payments (plus credits reduce owed, debits increase owed)
+        ledger_payments = ledger_qs.filter(entry_type='payment').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        ledger_credits = ledger_qs.filter(entry_type='credit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        ledger_debits = ledger_qs.filter(entry_type='debit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        # Fallback to orders' paid_amount if no ledger entries exist
+        order_paid_total = orders_qs.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
+        effective_paid = max(ledger_payments, order_paid_total)
+
+        total_paid_amount = float(effective_paid)
+        # Outstanding owed = Ordered amount + Debits - Payments - Credits (negative means advance/overpaid)
+        total_owed_amount = float(Decimal(str(total_ordered_amount)) + ledger_debits - effective_paid - ledger_credits)
+
         unpaid_orders_count = orders_qs.filter(status='unpaid').count()
         partial_orders_count = orders_qs.filter(status='partial').count()
         paid_orders_count = orders_qs.filter(status='paid').count()
@@ -316,7 +332,7 @@ class SupplierViewSet(viewsets.ModelViewSet):
 
 
 class SupplierOrderViewSet(viewsets.ModelViewSet):
-    queryset = SupplierOrder.objects.select_related('supplier', 'store', 'recorded_by').prefetch_related('items').all()
+    queryset = SupplierOrder.objects.select_related('supplier', 'store', 'recorded_by').prefetch_related('items__item', 'attachments').all()
     serializer_class = SupplierOrderSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
@@ -351,7 +367,35 @@ class SupplierOrderViewSet(viewsets.ModelViewSet):
         if member:
             kwargs['recorded_by'] = member
             kwargs['recorded_by_name'] = getattr(member, 'full_name', str(member))
-        serializer.save(**kwargs)
+        instance = serializer.save(**kwargs)
+        self._handle_attachments(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._handle_attachments(instance)
+
+    def _handle_attachments(self, instance):
+        uploaded_files = self.request.FILES.getlist('attachments') or self.request.FILES.getlist('attachments[]')
+        for f in uploaded_files:
+            file_name = f.name
+            file_type = getattr(f, 'content_type', '')
+            file_size = getattr(f, 'size', 0)
+            SupplierOrderAttachment.objects.create(
+                order=instance,
+                file=f,
+                file_name=file_name,
+                file_type=file_type,
+                file_size=file_size,
+            )
+
+    @action(detail=True, methods=['delete'], url_path='attachments/(?P<attachment_id>[^/.]+)')
+    def delete_attachment(self, request, pk=None, attachment_id=None):
+        instance = self.get_object()
+        att = SupplierOrderAttachment.objects.filter(order=instance, id=attachment_id).first()
+        if not att:
+            return Response({'detail': 'Attachment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        att.delete()
+        return Response(SupplierOrderSerializer(instance, context={'request': request}).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='record-payment')
     def record_payment(self, request, pk=None):
@@ -1588,12 +1632,15 @@ class ItemViewSet(viewsets.ModelViewSet):
             # Auto-create supplier orders for bulk created items
             try:
                 supplier_items_map = {}
-                for it_obj, raw_it in zip(to_save_models, valid_items):
-                    if it_obj.supplier_id:
-                        s_id = it_obj.supplier_id
+                for item_obj, _qty, _subcats in created_items:
+                    persisted = saved_items_by_uid.get(item_obj.uid)
+                    if not persisted:
+                        continue
+                    if persisted.supplier_id:
+                        s_id = persisted.supplier_id
                         if s_id not in supplier_items_map:
                             supplier_items_map[s_id] = []
-                        supplier_items_map[s_id].append((it_obj, raw_it))
+                        supplier_items_map[s_id].append(persisted)
 
                 batch_key = str(request.data.get('batch_key') or '').strip()
                 for s_id, items_list in supplier_items_map.items():
@@ -1611,11 +1658,11 @@ class ItemViewSet(viewsets.ModelViewSet):
 
                     order_total = sum(
                         Decimal(str(it.cost_price or '0.00')) * Decimal(str(it.quantity or 1))
-                        for it, _ in items_list
+                        for it in items_list
                     )
 
                     if not target_order:
-                        first_store = items_list[0][0].store
+                        first_store = items_list[0].store
                         target_order = SupplierOrder.objects.create(
                             supplier=supplier_obj,
                             store=first_store,
@@ -1634,7 +1681,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                         target_order.save(update_fields=['total_amount', 'status'])
 
                     order_items_to_create = []
-                    for it, _ in items_list:
+                    for it in items_list:
                         qty = int(it.quantity or 1)
                         cost = Decimal(str(it.cost_price or '0.00'))
                         order_items_to_create.append(SupplierOrderItem(

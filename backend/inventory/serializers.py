@@ -7,7 +7,7 @@ from .models import (
     Store, Category, SubCategory, Supplier, Section, HsnCode, Item, StockMovement, ItemImage,
     ItemVariant, Customer, SaleOrder, SaleOrderItem, OrderPaymentTransaction, VIPCardTransaction,
     CounterPayout, DailyRegisterShift, AIDescriptionBatchJob, BrokenItemReport,
-    SupplierOrder, SupplierOrderItem, SupplierLedgerEntry
+    SupplierOrder, SupplierOrderItem, SupplierOrderAttachment, SupplierLedgerEntry
 )
 from .services import adjust_stock, generate_next_uid, report_broken_item
 
@@ -134,14 +134,22 @@ class SupplierSerializer(serializers.ModelSerializer):
         return obj.orders.count()
 
     def get_total_owed(self, obj):
-        # Sum outstanding amount of unpaid and partial orders
-        total = Decimal('0.00')
-        for order in obj.orders.filter(status__in=['unpaid', 'partial']):
-            total += order.outstanding_amount
-        return float(total)
+        from django.db.models import Sum
+        orders_total = obj.orders.aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+        ledger_qs = obj.ledger_entries.all()
+        ledger_payments = ledger_qs.filter(entry_type='payment').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        ledger_credits = ledger_qs.filter(entry_type='credit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        ledger_debits = ledger_qs.filter(entry_type='debit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        order_paid_total = obj.orders.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
+        effective_paid = max(ledger_payments, order_paid_total)
+        net_owed = orders_total + ledger_debits - effective_paid - ledger_credits
+        return float(net_owed)
 
 
 class SupplierOrderItemSerializer(serializers.ModelSerializer):
+    sold_quantity = serializers.SerializerMethodField()
+    current_quantity = serializers.SerializerMethodField()
+
     class Meta:
         model = SupplierOrderItem
         fields = [
@@ -151,18 +159,56 @@ class SupplierOrderItemSerializer(serializers.ModelSerializer):
             'item_name',
             'item_uid',
             'quantity',
+            'sold_quantity',
+            'current_quantity',
             'cost_price',
             'line_total',
             'created_at',
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'created_at', 'sold_quantity', 'current_quantity']
+
+    def get_sold_quantity(self, obj):
+        if not obj.item:
+            return 0
+        from django.db.models import Sum
+        sold = obj.item.sale_items.filter(is_return=False).aggregate(total=Sum('quantity'))['total'] or 0
+        return int(sold)
+
+    def get_current_quantity(self, obj):
+        if not obj.item:
+            return 0
+        return int(obj.item.quantity or 0)
+
+
+class SupplierOrderAttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SupplierOrderAttachment
+        fields = [
+            'id',
+            'file',
+            'file_url',
+            'file_name',
+            'file_type',
+            'file_size',
+            'uploaded_at',
+        ]
+        read_only_fields = ['id', 'file_url', 'file_name', 'file_type', 'file_size', 'uploaded_at']
+
+    def get_file_url(self, obj):
+        if obj.file:
+            return obj.file.url
+        return None
 
 
 class SupplierOrderSerializer(serializers.ModelSerializer):
     items = SupplierOrderItemSerializer(many=True, read_only=True)
+    attachments = SupplierOrderAttachmentSerializer(many=True, read_only=True)
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
     outstanding_amount = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    bill_file_url = serializers.SerializerMethodField()
 
     class Meta:
         model = SupplierOrder
@@ -186,15 +232,22 @@ class SupplierOrderSerializer(serializers.ModelSerializer):
             'payment_date',
             'payment_notes',
             'bill_file',
+            'bill_file_url',
             'notes',
             'batch_key',
             'recorded_by',
             'recorded_by_name',
             'items',
+            'attachments',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'order_number', 'supplier_name', 'store_name', 'outstanding_amount', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'order_number', 'supplier_name', 'store_name', 'outstanding_amount', 'bill_file_url', 'created_at', 'updated_at']
+
+    def get_bill_file_url(self, obj):
+        if obj.bill_file:
+            return obj.bill_file.url
+        return None
 
 
 class SupplierLedgerEntrySerializer(serializers.ModelSerializer):

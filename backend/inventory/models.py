@@ -306,6 +306,45 @@ class SupplierOrderItem(models.Model):
         return f"{self.item_name} x {self.quantity} ({self.order.order_number})"
 
 
+class SupplierOrderAttachment(models.Model):
+    """
+    Multiple Bill / Document Attachments for a Supplier Order.
+    Supports photos (JPG, PNG, WebP) and PDFs simultaneously.
+    """
+    order = models.ForeignKey(
+        SupplierOrder,
+        on_delete=models.CASCADE,
+        related_name='attachments'
+    )
+    file = models.FileField(
+        upload_to='supplier_bills/%Y/%m/',
+        help_text="Uploaded invoice, photo or PDF"
+    )
+    file_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default=''
+    )
+    file_type = models.CharField(
+        max_length=50,
+        blank=True,
+        default=''
+    )
+    file_size = models.PositiveIntegerField(
+        default=0,
+        help_text="File size in bytes"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'Supplier Order Attachment'
+        verbose_name_plural = 'Supplier Order Attachments'
+
+    def __str__(self):
+        return f"{self.order.order_number} - {self.file_name or self.file.name}"
+
+
 class SupplierLedgerEntry(models.Model):
     ENTRY_TYPES = [
         ('debit', 'Debit (We owe more)'),

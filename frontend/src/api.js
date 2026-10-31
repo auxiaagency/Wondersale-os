@@ -731,6 +731,27 @@ export async function createSupplierLedgerEntry(data) {
   return res.json();
 }
 
+export async function deleteSupplierOrder(id) {
+  const res = await fetch(`${API_BASE}/supplier-orders/${id}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error('Failed to delete supplier order');
+  return true;
+}
+
+export async function deleteSupplierOrderAttachment(orderId, attachmentId) {
+  const res = await fetch(`${API_BASE}/supplier-orders/${orderId}/attachments/${attachmentId}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || 'Failed to delete attachment');
+  }
+  return res.json();
+}
+
 export async function deleteSupplierLedgerEntry(id) {
   const res = await fetch(`${API_BASE}/supplier-ledger-entries/${id}/`, {
     method: 'DELETE',
