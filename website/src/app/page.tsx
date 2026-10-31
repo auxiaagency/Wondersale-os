@@ -207,33 +207,34 @@ export default function HomePage() {
         <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 flex flex-col gap-7">
 
           {/* 2. HERO CAMPAIGN BANNER (Rich Burgundy with Circular Image Portal matching screenshot) */}
+          {/* 2. HERO CAMPAIGN BANNER (Rich Burgundy with Off-Center Circular Portal matching screenshot) */}
           <section className="w-full">
-            <div className="relative overflow-hidden rounded-3xl md:rounded-[2.5rem] bg-[#5A0A10] shadow-xl text-[#FDF8EE]">
+            <div className="relative overflow-hidden rounded-2xl md:rounded-[2.25rem] bg-[#5A0A10] shadow-lg text-[#FDF8EE]">
               {HERO_SLIDES.map((slide, index) => {
                 const isActive = index === currentSlide;
                 return (
                   <div
                     key={slide.id}
                     className={`w-full transition-opacity duration-700 ease-in-out ${
-                      isActive ? "block opacity-100" : "hidden opacity-0"
+                    isActive ? "block opacity-100" : "hidden opacity-0"
                     }`}
                   >
-                    <div className="w-full relative overflow-hidden flex flex-col md:flex-row items-center justify-between p-4 pb-7 sm:p-6 md:p-12 min-h-0 md:min-h-[340px] gap-3.5 md:gap-8">
+                    <div className="w-full relative flex flex-col md:flex-row items-center justify-between px-5 py-5 sm:px-7 sm:py-6 md:px-12 md:py-7 min-h-[220px] md:min-h-[250px] lg:min-h-[270px] gap-4 md:gap-6">
                       {/* Left: Text & CTA Content */}
-                      <div className="max-w-xl z-10 space-y-2 md:space-y-4 text-center md:text-left">
-                        <span className="inline-block border border-[#D8B4B8]/60 bg-white/10 backdrop-blur-xs text-[#FDF8EE] text-[9px] md:text-[11px] px-2.5 py-0.5 md:px-3.5 md:py-1 rounded-full tracking-wider uppercase font-bold shadow-xs">
+                      <div className="max-w-md lg:max-w-lg z-10 space-y-2 md:space-y-3 text-center md:text-left">
+                        <span className="inline-block border border-[#EADFC7]/50 bg-black/15 backdrop-blur-xs text-[#FDF8EE] text-[9px] md:text-[10px] px-2.5 py-0.5 md:px-3 md:py-0.5 rounded-full tracking-wider uppercase font-semibold">
                           {slide.badge}
                         </span>
-                        <h2 className="text-xl sm:text-2xl md:text-5xl text-[#FDF8EE] leading-tight font-serif font-bold tracking-tight">
+                        <h2 className="text-xl sm:text-2xl md:text-4xl lg:text-[42px] text-[#FDF8EE] leading-tight font-serif font-bold tracking-tight">
                           {slide.title}
                         </h2>
-                        <p className="text-xs md:text-base text-[#EADFC7] font-medium max-w-md line-clamp-2 md:line-clamp-none">
+                        <p className="text-xs md:text-sm text-[#EADFC7]/90 font-medium max-w-sm line-clamp-2 md:line-clamp-none">
                           {slide.subtitle}
                         </p>
-                        <div className="pt-0.5 md:pt-2 flex justify-center md:justify-start">
+                        <div className="pt-1 md:pt-1.5 flex justify-center md:justify-start">
                           <Link
                             href={slide.buttonLink}
-                            className="bg-[#FDF8EE] hover:bg-[#F4ECDC] text-[#5A0A10] text-xs md:text-sm px-4 py-1.5 md:px-7 md:py-3 rounded-xl md:rounded-2xl flex items-center gap-1.5 md:gap-2 active:scale-95 transition-all shadow-md font-bold cursor-pointer"
+                            className="bg-[#FDF8EE] hover:bg-[#F4ECDC] text-[#5A0A10] text-xs md:text-sm px-4 py-2 md:px-5 md:py-2.5 rounded-xl flex items-center gap-1.5 md:gap-2 active:scale-95 transition-all shadow-sm font-bold cursor-pointer"
                           >
                             <span>{slide.buttonText}</span>
                             <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
@@ -241,10 +242,9 @@ export default function HomePage() {
                         </div>
                       </div>
 
-                      {/* Right: Circular Boundary Image Frame */}
-                      <div className="relative flex items-center justify-center shrink-0">
-                        {/* Circular Portal Frame with Thick Cream Border */}
-                        <div className="relative w-36 h-36 sm:w-48 sm:h-48 md:w-96 md:h-96 rounded-full border-[5px] sm:border-[8px] md:border-[14px] border-[#F4ECDC] overflow-hidden shadow-xl bg-[#EADFC7]">
+                      {/* Right: Incomplete Circular Portal Image (overflowing top/bottom as in screenshot) */}
+                      <div className="relative flex items-center justify-center shrink-0 w-full md:w-auto mt-2 md:mt-0">
+                        <div className="relative w-44 h-44 sm:w-56 sm:h-56 md:w-72 md:h-72 lg:w-80 lg:h-80 md:-my-12 md:-mr-6 rounded-full border-[8px] sm:border-[10px] md:border-[14px] border-[#FDF8EE] overflow-hidden shadow-2xl bg-[#EADFC7] shrink-0">
                           <img
                             alt={slide.alt}
                             className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
@@ -257,18 +257,25 @@ export default function HomePage() {
                 );
               })}
 
+              {/* Decorative 4-point star accent on bottom right (from reference design) */}
+              <div className="hidden md:block absolute bottom-3 right-3 text-[#EADFC7]/30 pointer-events-none select-none">
+                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                  <path d="M12 0L14.2 9.8L24 12L14.2 14.2L12 24L9.8 14.2L0 12L9.8 9.8L12 0Z" />
+                </svg>
+              </div>
+
               {/* Slider Dots Indicator */}
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2 z-20">
+              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-20">
                 {HERO_SLIDES.map((slide, idx) => (
                   <button
                     key={slide.id}
                     type="button"
                     onClick={() => setCurrentSlide(idx)}
                     aria-label={`Go to slide ${idx + 1}`}
-                    className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                       idx === currentSlide
-                        ? "w-7 bg-[#C51B26]"
-                        : "w-2 bg-white/40 hover:bg-white/70"
+                        ? "w-6 bg-[#C51B26]"
+                        : "w-1.5 bg-white/40 hover:bg-white/70"
                     }`}
                   />
                 ))}
@@ -276,20 +283,17 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* 3. EXPLORE DEPARTMENTS / CATEGORY ICON ROW (Warm Cream Minimalist Icons) */}
+          {/* 3. EXPLORE DEPARTMENTS / CATEGORY ICON ROW (Outlined minimalist circular icons matching reference) */}
           <section className="w-full">
             <div className="flex items-center justify-between mb-4 px-1">
               <div>
-                <h2 className="text-xl md:text-2xl text-[#2C1810] font-serif font-bold tracking-tight">
+                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#2C1810]">
                   Explore Departments
                 </h2>
-                <p className="text-xs text-[#735A4A] font-sans font-medium mt-0.5 hidden sm:block">
-                  Handcrafted cookware, electronics, toys & daily essentials
-                </p>
               </div>
               <Link
                 href="/categories"
-                className="text-xs text-[#7A0C16] font-bold flex items-center gap-0.5 hover:underline"
+                className="text-xs text-[#5A0A10] font-bold flex items-center gap-0.5 hover:underline"
               >
                 <span>View All</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -306,10 +310,10 @@ export default function HomePage() {
                     href={`/category/${cat.slug}`}
                     className="flex flex-col items-center group w-full p-1 transition-transform active:scale-95"
                   >
-                    <div className="w-13 h-13 rounded-full bg-[#F4ECDC] border border-[#D5C4A1]/80 flex items-center justify-center transition-all group-hover:border-[#7A0C16] shadow-2xs">
-                      <Icon className="w-5.5 h-5.5 text-[#7A0C16]" />
+                    <div className="w-13 h-13 rounded-full bg-transparent border-1.5 border-[#5A0A10] flex items-center justify-center transition-all group-hover:bg-[#5A0A10]/5 shadow-2xs">
+                      <Icon className="w-5 h-5 text-[#5A0A10] stroke-[1.75]" />
                     </div>
-                    <span className="text-[11px] text-[#2C1810] text-center mt-1.5 line-clamp-1 font-semibold group-hover:text-[#7A0C16] transition-colors">
+                    <span className="text-[11px] text-[#2C1810] text-center mt-1.5 line-clamp-1 font-medium group-hover:text-[#5A0A10] transition-colors">
                       {cat.name}
                     </span>
                   </Link>
@@ -317,8 +321,8 @@ export default function HomePage() {
               })}
             </div>
 
-            {/* Desktop View: Full 9 departments */}
-            <div className="hidden md:grid md:grid-cols-9 gap-3 items-center justify-items-center">
+            {/* Desktop View: Full 9 departments with outlines matching reference */}
+            <div className="hidden md:grid md:grid-cols-9 gap-4 items-center justify-items-center">
               {categories.slice(0, 8).map((cat) => {
                 const Icon = CATEGORY_ICONS[cat.slug] || Utensils;
                 return (
@@ -327,10 +331,10 @@ export default function HomePage() {
                     href={`/category/${cat.slug}`}
                     className="flex flex-col items-center group w-full p-1 transition-transform hover:-translate-y-0.5"
                   >
-                    <div className="w-15 h-15 rounded-full bg-[#F4ECDC] border border-[#D5C4A1]/80 flex items-center justify-center transition-all group-hover:border-[#7A0C16] group-hover:bg-[#EADFC7] shadow-xs">
-                      <Icon className="w-6 h-6 text-[#7A0C16]" />
+                    <div className="w-14 h-14 rounded-full bg-transparent border-1.5 border-[#5A0A10] flex items-center justify-center transition-all group-hover:bg-[#5A0A10] group-hover:border-[#5A0A10] group-hover:text-[#FDF8EE] shadow-2xs">
+                      <Icon className="w-6 h-6 text-[#5A0A10] group-hover:text-[#FDF8EE] stroke-[1.75] transition-colors" />
                     </div>
-                    <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-semibold group-hover:text-[#7A0C16] transition-colors">
+                    <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-medium group-hover:text-[#5A0A10] transition-colors">
                       {cat.name}
                     </span>
                   </Link>
@@ -342,10 +346,15 @@ export default function HomePage() {
                 href="/categories"
                 className="flex flex-col items-center group w-full p-1 transition-transform hover:-translate-y-0.5"
               >
-                <div className="w-15 h-15 rounded-full bg-[#F4ECDC] border border-[#D5C4A1]/80 flex items-center justify-center transition-all group-hover:border-[#7A0C16] group-hover:bg-[#EADFC7] shadow-xs">
-                  <span className="text-xl text-[#7A0C16]">⊞</span>
+                <div className="w-14 h-14 rounded-full bg-transparent border-1.5 border-[#5A0A10] flex items-center justify-center transition-all group-hover:bg-[#5A0A10] group-hover:border-[#5A0A10] group-hover:text-[#FDF8EE] shadow-2xs">
+                  <div className="grid grid-cols-2 gap-1 p-2">
+                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
+                    <span className="w-1.5 h-1.5 border border-[#5A0A10] group-hover:border-[#FDF8EE] rounded-xs" />
+                  </div>
                 </div>
-                <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-semibold group-hover:text-[#7A0C16] transition-colors">
+                <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-medium group-hover:text-[#5A0A10] transition-colors">
                   More
                 </span>
               </Link>
@@ -357,7 +366,7 @@ export default function HomePage() {
             id="deals"
             icon="⚡"
             title="Deals of the Day"
-            subtitle="Handpicked limited-time discounts with 2-hour Bhopal express delivery"
+            subtitle="Handpicked limited-time discounts with 2-hour express doorstep delivery"
             bgClass="bg-[#F4ECDC]/90 border border-[#D5C4A1]"
             badge={
               <div className="bg-[#EADFC7] text-[#5A0A10] border border-[#D5C4A1] px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] font-bold shadow-2xs">
@@ -522,7 +531,7 @@ export default function HomePage() {
             id="best-sellers"
             icon={<TrendingUp className="w-5 h-5 text-[#7A0C16]" />}
             title="Best Sellers"
-            subtitle="Most loved and highest ordered products across Bhopal"
+            subtitle="Most loved and highest ordered products from our superstore"
             bgClass="bg-[#FAF3E0] border border-[#EADFC7] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#7A0C16] bg-[#FCEDEE] px-2 py-0.5 rounded-full border border-[#F6D8DA]">

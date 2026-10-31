@@ -144,7 +144,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.stopPropagation();
               onToggleWishlist?.(id);
             }}
-            className={`absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 backdrop-blur-xs border border-[#EADFC7] flex items-center justify-center transition-all z-10 hover:scale-110 cursor-pointer ${
+            className={`absolute top-1 right-1 w-5 h-5 rounded-full bg-[#FAF3E0] border border-[#D5C4A1] flex items-center justify-center transition-all z-10 hover:scale-110 cursor-pointer shadow-2xs ${
               isWishlisted ? "text-[#7A0C16]" : "text-[#735A4A] hover:text-[#7A0C16]"
             }`}
             aria-label="Wishlist"

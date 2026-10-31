@@ -212,18 +212,18 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       {/* Pincode Modal Bottom Sheet */}
       {showPincodeModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-5 shadow-xl animate-in fade-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">Select Delivery Location</h3>
+          <div className="w-full max-w-sm bg-[#FAF3E0] rounded-t-2xl sm:rounded-2xl p-5 shadow-xl animate-in fade-in slide-in-from-bottom duration-200 border border-[#EADFC7]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#EADFC7]">
+              <h3 className="text-sm font-bold text-[#2C1810]">Select Delivery Location</h3>
               <button
                 onClick={() => setShowPincodeModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-full"
+                className="p-1 text-[#735A4A] hover:text-[#2C1810] rounded-full"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-600 mt-2">
+            <p className="text-xs text-[#735A4A] mt-2">
               Enter your 6-digit Indian PIN code to check instant express delivery & nationwide shipping.
             </p>
 
@@ -238,12 +238,12 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                     setPincodeError("");
                   }}
                   placeholder="e.g. 462001"
-                  className="w-full h-11 px-3 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-[#D91E2A] focus:ring-1 focus:ring-[#D91E2A]"
+                  className="w-full h-11 px-3 bg-[#FDF8EE] border border-[#D5C4A1] rounded-lg text-sm text-[#2C1810] focus:outline-none focus:border-[#7A0C16] focus:ring-1 focus:ring-[#7A0C16]"
                 />
               </div>
 
               {pincodeError && (
-                <div className="flex items-center gap-1.5 text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-100">
+                <div className="flex items-center gap-1.5 text-xs text-[#7A0C16] bg-[#FCEDEE] p-2 rounded-lg border border-[#F6D8DA]">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{pincodeError}</span>
                 </div>
@@ -252,7 +252,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
               <button
                 type="submit"
                 disabled={inputPincode.length !== 6 || isSubmitting}
-                className="w-full h-11 bg-[#D91E2A] hover:bg-[#B31520] disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+                className="w-full h-11 bg-[#5A0A10] hover:bg-[#7A0C16] disabled:opacity-50 text-[#FDF8EE] text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
               >
                 {isSubmitting ? "Checking Serviceability..." : "Apply PIN Code"}
               </button>
