@@ -256,12 +256,6 @@ export default function HomePage() {
                 );
               })}
 
-              {/* Decorative 4-point star accent on bottom right (from reference design) */}
-              <div className="hidden md:block absolute bottom-3 right-3 text-[#EFE0BC]/30 pointer-events-none select-none">
-                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
-                  <path d="M12 0L14.2 9.8L24 12L14.2 14.2L12 24L9.8 14.2L0 12L9.8 9.8L12 0Z" />
-                </svg>
-              </div>
 
               {/* Slider Dots Indicator */}
               <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-20">
