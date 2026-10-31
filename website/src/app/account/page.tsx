@@ -69,7 +69,7 @@ export default function AccountPage() {
           <h1 className="font-bold text-lg text-[#2C1810] tracking-tight font-serif">My Account</h1>
           <div className="flex items-center gap-1 text-[11px] font-medium text-[#735A4A] bg-[#FAF3E0] px-2.5 py-0.5 rounded-full border border-[#EADFC7]">
             <MapPin className="h-3 w-3 text-[#7A0C16]" />
-            <span>Bhopal, MP</span>
+            <span>Active Account</span>
           </div>
         </div>
       </header>
@@ -99,7 +99,7 @@ export default function AccountPage() {
               </div>
 
               <div className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 bg-[#FAF3E0] text-[#7A0C16] rounded-md text-[11px] font-semibold border border-[#EADFC7]">
-                <span>Verified {location.city || "Bhopal"} Member</span>
+                <span>Verified Wondersale Member</span>
               </div>
 
               <div className="mt-2 text-xs text-neutral-500 space-y-0.5 font-normal">
@@ -199,8 +199,8 @@ export default function AccountPage() {
               </div>
               <div className="text-[11px] text-neutral-500">
                 {location.isExpressAvailable
-                  ? "Bhopal 2-Hr Express Zone"
-                  : "Pan-India Standard Shipping"}
+                  ? "Express Doorstep Zone"
+                  : "Standard Shipping"}
               </div>
             </div>
           </div>
@@ -233,10 +233,10 @@ export default function AccountPage() {
               <span className="font-bold text-xs text-neutral-900 tracking-tight">
                 Active Delivery
               </span>
-              <span className="text-[11px] font-medium text-neutral-500">#WS-BHP-8921</span>
+              <span className="text-[11px] font-medium text-neutral-500">#WS-ORD-8921</span>
             </div>
             <span className="text-[10px] font-bold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded-full flex items-center gap-0.5 border border-red-100">
-              <Zap className="h-3 w-3 fill-current" /> 2-Hr Express
+              <Zap className="h-3 w-3 fill-current" /> Express Delivery
             </span>
           </div>
 
@@ -247,7 +247,7 @@ export default function AccountPage() {
             </p>
             <p className="text-[11px] text-[#D91E2A] font-bold mt-0.5">Expected Today by 4:30 PM</p>
             <p className="text-[10px] text-neutral-500">
-              Packed at Bhopal Warehouse Hub (Govindpura)
+              Packed at Wondersale Fulfillment Hub
             </p>
           </div>
 
@@ -287,7 +287,7 @@ export default function AccountPage() {
           {/* Actions */}
           <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-neutral-100">
             <Link
-              href="/track-order?orderId=WS-BHP-8921"
+              href="/track-order?orderId=WS-ORD-8921"
               className="flex-1 bg-[#D91E2A] hover:bg-[#B31520] text-white py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all"
             >
               <span>Track Live Delivery</span>
@@ -296,7 +296,7 @@ export default function AccountPage() {
           </div>
         </section>
 
-        {/* 5. BHOPAL STORE PERKS */}
+        {/* 5. STORE PERKS */}
         <section className="bg-white rounded-xl p-3.5 border border-neutral-200 shadow-xs">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
@@ -304,26 +304,25 @@ export default function AccountPage() {
                 <Building className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="font-bold text-xs text-neutral-900">Bhopal Retail Member Desk</h3>
-                <p className="text-[10px] text-neutral-500">Zone MP-462001 Exclusive Privileges</p>
+                <h3 className="font-bold text-xs text-neutral-900">Retail Member Desk</h3>
+                <p className="text-[10px] text-neutral-500">Exclusive Store Privileges</p>
               </div>
             </div>
             <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-              Store Open
+              Online &amp; Store Active
             </span>
           </div>
           <div className="mt-3 bg-neutral-50 rounded-lg p-2.5 text-xs text-neutral-800 space-y-2 border border-neutral-100">
             <div className="flex items-center gap-2 text-[11px]">
               <Zap className="h-3.5 w-3.5 text-[#D91E2A] shrink-0 fill-current" />
               <span>
-                Free <strong>2-Hour Express Delivery</strong> across Arera Colony &amp; MP Nagar
+                Free <strong>Express Delivery</strong> on eligible orders
               </span>
             </div>
             <div className="flex items-center gap-2 text-[11px]">
               <Award className="h-3.5 w-3.5 text-[#D91E2A] shrink-0" />
               <span>
-                Show this profile at <strong>Chetak Bridge Superstore</strong> for 5% in-store
-                credit
+                Exclusive member rewards &amp; instant warranty support
               </span>
             </div>
           </div>
@@ -337,7 +336,7 @@ export default function AccountPage() {
               <div>
                 <div className="text-xs font-semibold text-neutral-900">Saved Addresses</div>
                 <div className="text-[10px] text-neutral-500">
-                  2 Addresses: E-7 Arera Colony &amp; MP Nagar Office
+                  Manage primary and office delivery addresses
                 </div>
               </div>
             </div>
@@ -352,7 +351,7 @@ export default function AccountPage() {
                   Payment Methods &amp; UPI
                 </div>
                 <div className="text-[10px] text-neutral-500">
-                  PhonePe, Google Pay &amp; 1 HDFC Card saved
+                  PhonePe, Google Pay &amp; Cards
                 </div>
               </div>
             </div>
@@ -383,7 +382,7 @@ export default function AccountPage() {
                   Shipping &amp; Delivery Coverage
                 </div>
                 <div className="text-[10px] text-neutral-500">
-                  2-Hour Express zones &amp; free delivery rules
+                  Express delivery zones &amp; shipping rules
                 </div>
               </div>
             </div>
@@ -418,7 +417,7 @@ export default function AccountPage() {
                 <div className="text-xs font-semibold text-neutral-900">
                   Help &amp; 24/7 Support
                 </div>
-                <div className="text-[10px] text-neutral-500">Call Bhopal Desk: 0755-4209999</div>
+                <div className="text-[10px] text-neutral-500">Call Support Desk: 0755-4209999</div>
               </div>
             </div>
             <ChevronRight className="h-4 w-4 text-neutral-400" />
@@ -435,7 +434,7 @@ export default function AccountPage() {
             <span>Log Out from Account</span>
           </button>
           <p className="text-center text-[10px] text-neutral-400 mt-2">
-            Wondersale Bhopal v4.8.2 • Built with ❤️ for Madhya Pradesh
+            Wondersale v4.8.2 • Built with ❤️ for India
           </p>
         </div>
       </main>

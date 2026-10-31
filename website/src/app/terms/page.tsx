@@ -31,7 +31,7 @@ export default function TermsPage() {
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-800 transition-colors"
           >
             <Store className="h-3.5 w-3.5 text-[#D91E2A]" />
-            <span className="text-[11px]">Bhopal Desk</span>
+            <span className="text-[11px]">Help Desk</span>
           </a>
         </div>
       </header>
@@ -41,8 +41,7 @@ export default function TermsPage() {
           <h2 className="font-bold text-sm text-neutral-900">1. Commercial Terms &amp; Scope</h2>
           <p>
             These Terms of Service govern the retail purchase and delivery of products through the
-            Wondersale storefront, operated by <strong>Wondersale Retail Private Limited</strong>,
-            Zone-I, MP Nagar, Bhopal, Madhya Pradesh 462011.
+            Wondersale storefront, operated by <strong>Wondersale Retail Private Limited</strong>.
           </p>
           <p>
             By placing an order on Wondersale, you agree to these terms, our Shipping Policy, and
@@ -68,7 +67,7 @@ export default function TermsPage() {
             3. Hyperlocal Delivery &amp; Handover
           </h2>
           <p>
-            Express 2-Hour Delivery applies to serviceable Bhopal pincodes during operational store
+            Express 2-Hour Delivery applies to serviceable express pincodes during operational store
             hours (8:00 AM – 8:00 PM). A <strong>secure 4-digit handover OTP</strong> must be
             provided to the delivery rider upon arrival.
           </p>

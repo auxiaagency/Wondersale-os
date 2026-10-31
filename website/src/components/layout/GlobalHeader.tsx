@@ -185,7 +185,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products across Bhopal..."
+                placeholder="Search products, brands and more..."
                 className="w-full bg-[#5A0A10] text-xs rounded-full pl-9 pr-16 py-2.5 text-[#FDF8EE] placeholder:text-[#C59A9F] focus:outline-none focus:ring-1 focus:ring-[#7A0C16] border border-[#7A0C16] transition-all shadow-inner"
               />
               <div className="absolute right-3 flex items-center gap-1 text-[#D8B4B8]">
@@ -224,8 +224,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             </div>
 
             <p className="text-xs text-slate-600 mt-2">
-              Enter your 6-digit Indian PIN code to check instant 2-hour delivery in Bhopal &
-              nationwide shipping.
+              Enter your 6-digit Indian PIN code to check instant express delivery & nationwide shipping.
             </p>
 
             <form onSubmit={handlePincodeSubmit} className="mt-4 space-y-3">

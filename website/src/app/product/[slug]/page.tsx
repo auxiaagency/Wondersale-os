@@ -100,15 +100,15 @@ const DEFAULT_PRODUCT: ProductDetailData = {
   reviews: [
     {
       name: "Rohit Verma",
-      location: "Arera Colony, Bhopal",
+      location: "Verified Buyer",
       rating: 5,
       title: "Lightning fast delivery!",
-      text: "Received in just 90 mins via Wondersale Express! Genuine Prestige cooker with spillage control lid working great on induction. Highly recommend Bhopal store service.",
+      text: "Received in just 90 mins via Wondersale Express! Genuine Prestige cooker with spillage control lid working great on induction. Highly recommend store service.",
       date: "Yesterday",
     },
     {
       name: "Meenakshi S.",
-      location: "MP Nagar, Bhopal",
+      location: "Verified Buyer",
       rating: 4,
       title: "Genuine product with warranty",
       text: "Got bill with GST and authorized stamp. Heavy alpha bottom, cooks dal and rice without burning. Delivered in intact sealed retail carton.",
@@ -116,10 +116,10 @@ const DEFAULT_PRODUCT: ProductDetailData = {
     },
     {
       name: "Deepak Patel",
-      location: "Kolar Road, Bhopal",
+      location: "Verified Buyer",
       rating: 5,
-      title: "Best price in Bhopal market",
-      text: "Checked local electronics market in Zone 1, Wondersale price with instant coupon was ₹300 cheaper and delivered right to my apartment.",
+      title: "Best price in market",
+      text: "Checked local electronics market, Wondersale price with instant coupon was ₹300 cheaper and delivered right to my apartment.",
       date: "1 week ago",
     },
   ],
@@ -145,7 +145,7 @@ function ProductDetailContent() {
   const [pincode, setPincode] = useState(location?.pincode || "462001");
   const [isChangingPincode, setIsChangingPincode] = useState(false);
   const [pincodeMessage, setPincodeMessage] = useState(
-    "⚡ Bhopal Express 2-Hour Delivery Guaranteed"
+    "⚡ Express 2-Hour Delivery Guaranteed"
   );
   const [isPincodeValid, setIsPincodeValid] = useState(true);
   const [copiedCoupon, setCopiedCoupon] = useState(false);
@@ -197,13 +197,13 @@ function ProductDetailContent() {
             inStock: p.variants?.[0]?.inStock ?? true,
             stockCount: p.variants?.[0]?.stockQuantity || 15,
             imageUrl: p.variants?.[0]?.images?.[0]?.url || DEFAULT_PRODUCT.imageUrl,
-            bestsellerRank: `#1 in ${p.category?.name || "Bhopal Store"}`,
+            bestsellerRank: `#1 in ${p.category?.name || "Popular Store"}`,
             variants: variantsList,
             specs: [
               { label: "Brand", value: p.brand?.name || "Wondersale" },
               { label: "Category", value: p.category?.name || "General" },
-              { label: "Stock Location", value: "Bhopal MP Nagar Hub" },
-              { label: "Dispatch Guarantee", value: "2-Hour Express Delivery in Bhopal" },
+              { label: "Stock Location", value: "Central Fulfillment Hub" },
+              { label: "Dispatch Guarantee", value: "2-Hour Express Delivery Available" },
               { label: "Warranty", value: "Manufacturer Domestic Warranty" },
             ],
             reviews: DEFAULT_PRODUCT.reviews,
@@ -238,7 +238,7 @@ function ProductDetailContent() {
         setIsPincodeValid(true);
         setPincodeMessage(
           data.data.isExpressAvailable
-            ? `⚡ Bhopal Express 2-Hour Delivery Available to ${data.data.city} (${clean})`
+            ? `⚡ Express 2-Hour Delivery Available to ${data.data.city} (${clean})`
             : `Standard Delivery Available (${data.data.estimatedDays} to ${data.data.city})`
         );
         setIsChangingPincode(false);
@@ -286,7 +286,7 @@ function ProductDetailContent() {
       specNote: selectedVariant?.note || "In Stock",
       mrpPaise: currentMrpPaise,
       sellingPricePaise: currentSellingPricePaise,
-      badge: "⚡ Bhopal 2-Hr Express Delivery Ready",
+      badge: "⚡ Express 2-Hr Delivery Ready",
       imageUrl: productImg,
     });
     setIsAddedToCart(true);
@@ -302,7 +302,7 @@ function ProductDetailContent() {
       specNote: selectedVariant?.note || "In Stock",
       mrpPaise: currentMrpPaise,
       sellingPricePaise: currentSellingPricePaise,
-      badge: "⚡ Bhopal 2-Hr Express Delivery Ready",
+      badge: "⚡ Express 2-Hr Delivery Ready",
       imageUrl: productImg,
     });
     router.push("/cart");
@@ -423,8 +423,8 @@ function ProductDetailContent() {
                   <div className="p-3 rounded-xl bg-[#FDF8EE] border border-[#EADFC7] flex items-start gap-2.5">
                     <Zap className="w-5 h-5 text-[#7A0C16] shrink-0" />
                     <div>
-                      <h4 className="font-bold text-[#2C1810]">Bhopal 2-Hr Express</h4>
-                      <p className="text-[#735A4A] text-[11px] mt-0.5">Dispatched directly from MP Nagar Hub</p>
+                      <h4 className="font-bold text-[#2C1810]">Express 2-Hr Delivery</h4>
+                      <p className="text-[#735A4A] text-[11px] mt-0.5">Dispatched directly from Fulfillment Hub</p>
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-[#FDF8EE] border border-[#EADFC7] flex items-start gap-2.5">
@@ -446,7 +446,7 @@ function ProductDetailContent() {
                   <span className="text-xs font-bold text-[#7A0C16] tracking-wider uppercase">
                     {product.brand} OFFICIAL STORE
                   </span>
-                  <span className="text-xs text-[#735A4A] font-medium">Bhopal Stock Verified</span>
+                  <span className="text-xs text-[#735A4A] font-medium">Store Stock Verified</span>
                 </div>
                 <h1 className="font-serif font-bold text-2xl lg:text-3xl text-[#2C1810] leading-snug">
                   {product.title}
@@ -510,7 +510,7 @@ function ProductDetailContent() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-[#2C1810]">
                     <MapPin className="w-4 h-4 text-[#7A0C16]" />
-                    <span>Deliver to: {pincode} - {pincode.startsWith("462") ? "Bhopal, MP" : "India"}</span>
+                    <span>Deliver to: {pincode}</span>
                   </div>
                   <button
                     onClick={() => setIsChangingPincode(!isChangingPincode)}
@@ -598,7 +598,7 @@ function ProductDetailContent() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wider">Customer Reviews</h3>
                   <div className="flex items-center gap-1.5 text-xs text-[#735A4A]">
-                    <span>Verified Bhopal Buyers</span>
+                    <span>Verified Store Buyers</span>
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -758,7 +758,7 @@ function ProductDetailContent() {
           </div>
         </section>
 
-        {/* 4. BHOPAL HYPERLOCAL DELIVERY */}
+        {/* 4. HYPERLOCAL DELIVERY */}
         <section className="p-3.5">
           <div className="rounded-2xl border border-[#EADFC7] bg-[#FAF3E0] p-3.5 shadow-2xs">
             <div className="flex items-center justify-between border-b border-[#EADFC7]/60 pb-2.5">
@@ -771,7 +771,7 @@ function ProductDetailContent() {
                     Deliver to
                   </p>
                   <p className="text-xs font-bold text-[#2C1810]">
-                    {pincode} - {pincode.startsWith("462") ? "Bhopal, MP" : "India"}
+                    {pincode}
                   </p>
                 </div>
               </div>
@@ -820,7 +820,7 @@ function ProductDetailContent() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
               </span>
-              <span>In Stock (Bhopal MP Nagar Warehouse)</span>
+              <span>In Stock (Fulfillment Center)</span>
             </div>
 
             <div className="mt-3.5 grid grid-cols-3 gap-2 border-t border-[#EADFC7]/60 pt-3 text-center">
@@ -940,7 +940,7 @@ function ProductDetailContent() {
           <div className="flex items-center justify-between pb-3">
             <h2 className="text-sm font-bold text-[#2C1810]">Verified Customer Reviews</h2>
             <div className="flex items-center gap-1 text-xs text-[#735A4A]">
-              <span>Verified Bhopal Buyers</span>
+              <span>Verified Store Buyers</span>
             </div>
           </div>
           <div className="space-y-3 pt-2">

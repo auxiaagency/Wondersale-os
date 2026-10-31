@@ -200,9 +200,7 @@ function OrderConfirmationContent() {
               Thank you <span className="font-semibold text-neutral-900">{recipientName}</span>!
               Your order has been routed to{" "}
               <span className="font-semibold text-[#D91E2A]">
-                {isBhopal
-                  ? "Wondersale Superstore, MP Nagar, Bhopal"
-                  : "Wondersale Central Fulfillment Hub"}
+                Wondersale Central Fulfillment Hub
               </span>
               .
             </p>
@@ -226,7 +224,7 @@ function OrderConfirmationContent() {
                   </div>
                   <p className="text-[10px] text-neutral-500">
                     {isBhopal
-                      ? `Bhopal Express Delivery Guarantee to ${liveOrder?.address?.city || location.locality || "Bhopal"}`
+                      ? `Express Delivery Guarantee to ${liveOrder?.address?.city || location.locality || "your doorstep"}`
                       : `Fast Pan-India Tracked Courier to ${liveOrder?.address?.pincode || location.pincode}`}
                   </p>
                 </div>
@@ -261,7 +259,7 @@ function OrderConfirmationContent() {
                 <time className="text-[10px] font-medium text-neutral-400">Just now</time>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
-                Order verified and accepted by {isBhopal ? "Bhopal Hub" : "Central Hub"}
+                Order verified and accepted by Fulfillment Hub
               </p>
             </div>
 
@@ -272,7 +270,7 @@ function OrderConfirmationContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-xs font-bold text-[#D91E2A]">
-                  Packed at {isBhopal ? "Bhopal Warehouse Hub" : "National Distribution Center"}
+                  Packed at Fulfillment Hub
                 </h3>
                 <time className="text-[10px] font-bold text-[#D91E2A]">Active</time>
               </div>
@@ -281,7 +279,7 @@ function OrderConfirmationContent() {
               </p>
               <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#D91E2A] bg-red-50 px-2 py-1 rounded w-fit border border-red-200">
                 <ShieldCheck className="h-3 w-3" />
-                {isBhopal ? "Zone A-4, Chetak Bridge Logistics Yard" : "Zone N-1, National Hub"}
+                Central Dispatch Yard
               </div>
             </div>
 
@@ -336,18 +334,18 @@ function OrderConfirmationContent() {
 
           <div className="flex items-center gap-3 mt-3">
             <div className="relative w-12 h-12 rounded-full overflow-hidden bg-neutral-200 shrink-0 border-2 border-red-200 flex items-center justify-center text-xs font-bold text-neutral-700">
-              {isBhopal ? "MS" : "WS"}
+              WS
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-xs font-bold text-neutral-900 truncate">
-                {isBhopal ? "Mukesh S." : "Wondersale Express Fleet"}
+                Wondersale Express Fleet
               </h3>
               <p className="text-[10px] text-neutral-500 truncate">
-                {isBhopal ? "Wondersale Express Partner" : "Tracked Dispatch Service"}
+                Tracked Dispatch Partner
               </p>
               <div className="flex items-center gap-1 mt-0.5">
                 <span className="text-[11px] font-bold text-neutral-900">4.8 ★</span>
-                <span className="text-[10px] text-neutral-400">(1,240 deliveries in Bhopal)</span>
+                <span className="text-[10px] text-neutral-400">(1,240+ verified deliveries)</span>
               </div>
             </div>
           </div>
@@ -457,7 +455,7 @@ function OrderConfirmationContent() {
             )}
             <div className="flex justify-between text-neutral-600">
               <span>
-                {isBhopal ? "Bhopal Express 2-Hr Delivery" : "Standard Nationwide Shipping"}
+                {isBhopal ? "Express 2-Hour Delivery" : "Standard Nationwide Shipping"}
               </span>
               <span className="font-bold text-emerald-700">
                 {deliveryFeePaise === 0 ? (
@@ -530,14 +528,14 @@ function OrderConfirmationContent() {
             Continue Shopping
           </Link>
           <div className="p-3.5 rounded-xl bg-neutral-100 border border-neutral-200 text-center">
-            <p className="text-[11px] text-neutral-500">Need assistance with your Bhopal order?</p>
+            <p className="text-[11px] text-neutral-500">Need assistance with your order?</p>
             <div className="flex items-center justify-center gap-1.5 mt-1">
               <Store className="h-4 w-4 text-[#D91E2A]" />
               <a
                 href="tel:07554209999"
                 className="text-xs font-bold text-[#D91E2A] hover:underline"
               >
-                Wondersale Bhopal Store Desk: 0755-4209999
+                Store Help Desk: 0755-4209999
               </a>
             </div>
             <span className="text-[10px] text-neutral-500 block mt-0.5">

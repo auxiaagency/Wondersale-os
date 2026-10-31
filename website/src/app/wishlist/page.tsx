@@ -100,7 +100,7 @@ export default function WishlistPage() {
               My Saved Wishlist
             </h1>
             <p className="text-xs text-[#735A4A] mt-1">
-              Items saved here stay reserved for 2-hour doorstep delivery in Bhopal
+              Items saved here stay reserved for express doorstep delivery
             </p>
           </div>
           <span className="text-xs font-semibold bg-[#FAF3E0] text-[#7A0C16] border border-[#EADFC7] px-3 py-1.5 rounded-full">
@@ -140,7 +140,7 @@ export default function WishlistPage() {
               Your Wishlist is Empty
             </h2>
             <p className="text-xs md:text-sm text-[#735A4A] max-w-md mx-auto mt-2 mb-6 leading-relaxed">
-              Explore thousands of verified products across our 8 Bhopal retail departments and tap the heart icon on any product to save it for later.
+              Explore thousands of verified products across our retail departments and tap the heart icon on any product to save it for later.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Link

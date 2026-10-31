@@ -349,7 +349,7 @@ export default function CartPage() {
                       Your Cart ({totalQuantity} {totalQuantity === 1 ? "item" : "items"})
                     </h1>
                     <p className="text-xs text-[#735A4A] mt-0.5">
-                      Items saved in cart are verified against authentic Bhopal store stock
+                      Items saved in cart are verified against authentic store stock
                     </p>
                   </div>
                   <div className="flex items-center gap-2 bg-[#FAF3E0] border border-[#EADFC7] px-3 py-2 rounded-2xl text-xs">
@@ -393,7 +393,7 @@ export default function CartPage() {
                               more for{" "}
                               <span className="text-[#7A0C16] font-bold">
                                 {location.isExpressAvailable
-                                  ? "FREE Bhopal Express 2-Hour Delivery"
+                                  ? "FREE Express 2-Hour Delivery"
                                   : "FREE Standard Delivery"}
                               </span>
                             </>
@@ -405,7 +405,7 @@ export default function CartPage() {
                         </p>
                         <p className="text-[11px] text-[#735A4A]">
                           {location.isExpressAvailable
-                            ? `Guaranteed dispatch straight from Bhopal MP Nagar Hub`
+                            ? `Guaranteed dispatch straight from Fulfillment Hub`
                             : `Fast Nationwide courier to ${location.pincode} (${location.city})`}
                         </p>
                       </div>
@@ -570,7 +570,7 @@ export default function CartPage() {
                             </span>
                           </div>
                           <p className="text-[11px] text-[#7A0C16] font-semibold mt-2">
-                            Bhopal direct dispatch
+                            Express direct dispatch
                           </p>
                         </label>
 
@@ -825,7 +825,7 @@ export default function CartPage() {
               </div>
               <h2 className="text-xl font-bold text-[#2C1810]">Your Cart is Empty</h2>
               <p className="text-xs text-[#735A4A] max-w-md mx-auto mt-2 mb-6">
-                Explore best-selling retail products across the Bhopal catalog and get guaranteed 2-hour doorstep delivery.
+                Explore best-selling retail products and get guaranteed express doorstep delivery.
               </p>
               <Link
                 href="/"
@@ -1144,7 +1144,7 @@ export default function CartPage() {
               </div>
               <h2 className="text-base font-bold text-[#2C1810]">Your Cart is Empty</h2>
               <p className="text-xs text-[#735A4A] max-w-xs mx-auto mt-1 mb-4">
-                Explore deals across Bhopal Superstore catalog and get instant 2-hour doorstep delivery.
+                Explore deals across our catalog and get instant express doorstep delivery.
               </p>
               <Link
                 href="/"
@@ -1580,7 +1580,7 @@ export default function CartPage() {
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#FDF8EE] border-t-transparent" />
                   <span>
                     {location.isExpressAvailable
-                      ? "Securing Order with Bhopal Hub..."
+                      ? "Securing Order with Fulfillment Hub..."
                       : "Processing Pan-India Order..."}
                   </span>
                 </>
@@ -1640,10 +1640,10 @@ export default function CartPage() {
                 )}
               </div>
 
-              {/* Bhopal Quick Chips */}
+              {/* Express Quick Chips */}
               <div className="pt-3 border-t border-[#EADFC7]">
                 <p className="text-[11px] font-semibold text-[#735A4A] mb-1.5">
-                  Popular Bhopal Localities (2-Hour Express):
+                  Popular Express Localities:
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {[

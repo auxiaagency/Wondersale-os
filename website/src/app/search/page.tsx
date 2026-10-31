@@ -47,7 +47,7 @@ const INITIAL_RECENT_SEARCHES = [
   "Bajaj Mixer",
 ];
 
-const TRENDING_BHOPAL = [
+const TRENDING_SEARCHES = [
   { rank: "#1", query: "Wall Clock" },
   { rank: "#2", query: "Non-stick Tawa" },
   { rank: "#3", query: "Electric Kettle" },
@@ -248,7 +248,7 @@ function SearchContent() {
           </Link>
         </form>
 
-        {/* Bhopal Location Context Strip */}
+        {/* Location Context Strip */}
         <div className="flex items-center justify-between px-4 py-1.5 bg-neutral-100 text-xs text-neutral-600 border-t border-neutral-200">
           <div className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
             <MapPin className="h-3.5 w-3.5 text-[#D91E2A] shrink-0" />
@@ -259,10 +259,10 @@ function SearchContent() {
               </span>
             </span>
             <span className="text-[11px] text-neutral-500">
-              ({location.locality || "Bhopal Hub"})
+              ({location.locality || "Fulfillment Hub"})
             </span>
           </div>
-          <span className="text-[11px] font-bold text-[#D91E2A] shrink-0">Bhopal Hub</span>
+          <span className="text-[11px] font-bold text-[#D91E2A] shrink-0">Express Hub</span>
         </div>
       </header>
 
@@ -379,10 +379,10 @@ function SearchContent() {
 
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5 mb-2">
-                <TrendingUp className="h-3.5 w-3.5 text-[#D91E2A]" /> Trending in Bhopal
+                <TrendingUp className="h-3.5 w-3.5 text-[#D91E2A]" /> Trending Searches
               </h3>
               <div className="flex flex-wrap gap-2">
-                {TRENDING_BHOPAL.map((trend) => (
+                {TRENDING_SEARCHES.map((trend) => (
                   <button
                     key={trend.query}
                     onClick={() => handleSelectRecent(trend.query)}
@@ -409,15 +409,15 @@ function SearchContent() {
                     </span>
                   </>
                 ) : (
-                  <>Showing {filteredProducts.length} retail products from Bhopal catalog</>
+                  <>Showing {filteredProducts.length} retail products from catalog</>
                 )}
               </h1>
               <p className="text-[11px] text-neutral-500 font-normal">
-                Direct stock from Bhopal Superstore & Warehouse
+                Direct stock from Superstore & Warehouse
               </p>
             </div>
             <span className="text-[10px] bg-red-100 text-[#D91E2A] px-1.5 py-0.5 rounded font-bold">
-              Verified MP Stock
+              Verified Stock
             </span>
           </div>
 
@@ -509,7 +509,7 @@ function SearchContent() {
                 className="h-3.5 w-3.5 rounded text-[#D91E2A] focus:ring-[#D91E2A] border-neutral-300"
               />
               <span className="text-[11px] font-bold text-[#D91E2A] flex items-center gap-0.5">
-                <Zap className="h-3 w-3 fill-current" /> 2-Hr Bhopal Fast
+                <Zap className="h-3 w-3 fill-current" /> 2-Hr Express
               </span>
             </label>
           </div>
@@ -601,7 +601,7 @@ function SearchContent() {
             </div>
             <h3 className="text-xs font-bold text-neutral-900">Looking for something else?</h3>
             <p className="text-[11px] text-neutral-600 max-w-xs mx-auto mt-1 mb-3">
-              Explore our complete Bhopal retail superstore warehouse catalog by department.
+              Explore our complete retail superstore warehouse catalog by department.
             </p>
             <Link
               href="/categories"

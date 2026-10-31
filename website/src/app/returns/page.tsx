@@ -63,7 +63,7 @@ export default function ReturnsPolicyPage() {
           <h2 className="text-lg font-black tracking-tight">7-Day Doorstep Replacement</h2>
           <p className="text-xs text-red-50 mt-1 leading-relaxed">
             Received a damaged, defective, or incorrect product? Get an instant doorstep replacement
-            verified by our local Bhopal rider fleet or free courier pickup.
+            verified by our dedicated rider fleet or free courier pickup.
           </p>
         </section>
 
@@ -173,15 +173,14 @@ export default function ReturnsPolicyPage() {
           </div>
         </section>
 
-        {/* In-Store Swap at Chetak Bridge */}
+        {/* In-Store Swap */}
         <section className="bg-red-50/50 rounded-xl p-3 border border-red-200 text-xs">
           <div className="flex items-center gap-2 mb-1">
             <Store className="h-4 w-4 text-[#D91E2A]" />
             <strong className="text-neutral-900">Prefer Instant In-Store Exchange?</strong>
           </div>
           <p className="text-[11px] text-neutral-600 leading-relaxed">
-            Walk into our retail store at{" "}
-            <strong>Zone-I, MP Nagar, Bhopal (Near Chetak Bridge)</strong> with your tax invoice for
+            Visit any Wondersale Retail Superstore with your tax invoice for
             an immediate on-the-spot replacement or store credit.
           </p>
         </section>

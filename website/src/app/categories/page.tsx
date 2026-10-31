@@ -674,13 +674,13 @@ export default function AllCategoriesPage() {
                 {/* Verified Pill Badge */}
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/10 text-amber-200 backdrop-blur-sm border border-white/15">
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  Verified Bhopal Store Inventory
+                  Verified Store Inventory
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-bold tracking-tight font-serif text-[#FDF8EE]">
                   Explore All 8 Retail Departments
                 </h2>
                 <p className="text-sm sm:text-base text-[#D8B4B8] font-normal leading-relaxed">
-                  Click any department below to view verified products with 2–Hour Express Delivery in Bhopal &amp; Pan–India shipping.
+                  Click any department below to view verified products with Express Doorstep Delivery &amp; Pan–India shipping.
                 </p>
               </div>
 
@@ -706,7 +706,7 @@ export default function AllCategoriesPage() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#735A4A]">
                   Select Department ({DEPARTMENTS.length})
                 </h3>
-                <span className="text-[11px] text-[#735A4A]/80 font-medium">Bhopal Hub Stock</span>
+                <span className="text-[11px] text-[#735A4A]/80 font-medium">Express Stock Ready</span>
               </div>
 
               <div className="space-y-2.5">

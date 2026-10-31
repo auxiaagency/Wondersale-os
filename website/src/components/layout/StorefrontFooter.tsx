@@ -18,13 +18,13 @@ export const StorefrontFooter: React.FC = () => {
               <WondersaleLogo size="md" variant="dark" />
             </div>
             <p className="text-xs text-[#D8B4B8] leading-relaxed mb-4">
-              Wondersale is Bhopal’s preferred retail superstore offering electronics, appliances,
-              toys, snacks, and homeware directly to your doorstep.
+              Wondersale is your trusted retail superstore offering electronics, appliances,
+              toys, snacks, and homeware directly to your doorstep with express delivery.
             </p>
             <div className="space-y-1.5 text-xs text-[#D8B4B8]">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-amber-300 flex-shrink-0" />
-                <span>Zone-I, MP Nagar, Bhopal, Madhya Pradesh 462011</span>
+                <span>Wondersale Flagship Superstore & Fulfillment Hub</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-amber-300 flex-shrink-0" />

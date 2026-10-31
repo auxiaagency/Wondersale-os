@@ -134,14 +134,14 @@ export default function LoginPage() {
           <div className="flex items-center gap-1.5 mb-2.5">
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-[#D91E2A]">
               <Zap className="h-3 w-3 fill-current" />
-              Bhopal Retail Superstore
+              Retail Superstore
             </span>
           </div>
           <h1 className="font-extrabold text-[22px] tracking-tight text-neutral-900 leading-snug mb-1.5">
             Sign In / Register
           </h1>
           <p className="text-xs text-neutral-600 leading-relaxed mb-3">
-            Get access to express 2-hour Bhopal deliveries, tracked orders, and exclusive store
+            Get access to express doorstep deliveries, tracked orders, and exclusive store
             member deals.
           </p>
 
@@ -353,13 +353,13 @@ export default function LoginPage() {
             <span>100% Secure authentication via official telecom SMS gateway</span>
           </div>
           <p className="text-[10px] leading-relaxed text-neutral-400 max-w-xs mx-auto">
-            By continuing, you agree to Wondersale Bhopal&apos;s{" "}
+            By continuing, you agree to Wondersale&apos;s{" "}
             <span className="underline hover:text-[#D91E2A]">Terms of Service</span> and{" "}
             <span className="underline hover:text-[#D91E2A]">Privacy Policy</span>.
           </p>
           <div className="pt-2 text-[10px] text-neutral-600 font-medium flex items-center justify-center gap-1">
             <Phone className="h-3 w-3 text-[#D91E2A]" />
-            <span>Bhopal Store Desk: 0755-4209999 (9 AM - 10 PM)</span>
+            <span>Store Help Desk: 0755-4209999 (9 AM - 10 PM)</span>
           </div>
         </footer>
       </div>

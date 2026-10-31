@@ -37,7 +37,7 @@ export default function ShippingPolicyPage() {
     if (res.success) {
       setResultMessage(
         pincodeInput.startsWith("462")
-          ? `✓ Verified! Pincode ${pincodeInput} is eligible for Bhopal 2-Hour Express Delivery.`
+          ? `✓ Verified! Pincode ${pincodeInput} is eligible for 2-Hour Express Delivery.`
           : `✓ Verified! Pincode ${pincodeInput} is covered under Pan-India Standard Tracked Courier.`
       );
     } else {
@@ -71,7 +71,7 @@ export default function ShippingPolicyPage() {
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-800 transition-colors"
           >
             <Store className="h-3.5 w-3.5 text-[#D91E2A]" />
-            <span className="text-[11px]">Bhopal Desk</span>
+            <span className="text-[11px]">Help Desk</span>
           </a>
         </div>
       </header>
@@ -114,10 +114,10 @@ export default function ShippingPolicyPage() {
             </p>
           )}
 
-          {/* Bhopal Quick Chips */}
+          {/* Quick Chips */}
           <div className="mt-3 pt-2.5 border-t border-neutral-100">
             <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">
-              Popular Bhopal Localities (2-Hr Express):
+              Popular Localities (2-Hr Express):
             </p>
             <div className="flex flex-wrap gap-1.5">
               {[
@@ -158,11 +158,11 @@ export default function ShippingPolicyPage() {
                 <h3 className="text-xs font-bold text-neutral-900">Hyperlocal 2-Hour Express</h3>
               </div>
               <span className="text-[10px] font-bold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
-                Bhopal Exclusive
+                Express Zone
               </span>
             </div>
             <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
-              Rapid doorstep dispatch from Wondersale Superstore, MP Nagar Zone A-4 for orders
+              Rapid doorstep dispatch from Wondersale Fulfillment Hub for orders
               placed between 8:00 AM – 8:00 PM. Tamper-evident seal verified.
             </p>
           </div>
@@ -174,7 +174,7 @@ export default function ShippingPolicyPage() {
                 <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center">
                   <Clock className="h-3.5 w-3.5" />
                 </div>
-                <h3 className="text-xs font-bold text-neutral-900">Bhopal Today Evening</h3>
+                <h3 className="text-xs font-bold text-neutral-900">Scheduled Evening Delivery</h3>
               </div>
               <span className="text-[10px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
                 6:00 PM – 9:00 PM
@@ -182,7 +182,7 @@ export default function ShippingPolicyPage() {
             </div>
             <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
               Order before 4:00 PM for scheduled evening delivery straight to your residential
-              doorstep across Bhopal city limits.
+              doorstep across serviceable zones.
             </p>
           </div>
 
@@ -212,7 +212,7 @@ export default function ShippingPolicyPage() {
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-neutral-50 rounded-lg p-2.5 border border-neutral-200 text-center">
               <span className="text-[10px] font-bold text-neutral-500 uppercase block">
-                Bhopal Local
+                Express Zone
               </span>
               <span className="font-extrabold text-sm text-[#D91E2A] mt-0.5 block">FREE ₹499+</span>
               <span className="text-[10px] text-neutral-400 block mt-0.5">
@@ -256,7 +256,7 @@ export default function ShippingPolicyPage() {
             href="/"
             className="w-full py-3 px-4 bg-[#D91E2A] hover:bg-[#B31520] text-white rounded-xl text-xs font-bold tracking-tight flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95"
           >
-            <span>Explore Bhopal Deals &amp; Shop Now</span>
+            <span>Explore Deals &amp; Shop Now</span>
             <ChevronRight className="h-4 w-4" />
           </Link>
           <div className="p-3 rounded-xl bg-neutral-100 border border-neutral-200 text-center">
@@ -265,7 +265,7 @@ export default function ShippingPolicyPage() {
               href="tel:07554209999"
               className="text-xs font-bold text-[#D91E2A] hover:underline block mt-0.5"
             >
-              Wondersale Bhopal Helpdesk: 0755-4209999
+              Wondersale Helpdesk: 0755-4209999
             </a>
           </div>
         </section>

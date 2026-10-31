@@ -157,9 +157,6 @@ function TrackOrderContent() {
             </Link>
             <div className="flex items-center gap-2">
               <WondersaleLogo size="sm" showSubtitle={false} />
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-[#D91E2A] uppercase tracking-wider">
-                Bhopal
-              </span>
             </div>
           </div>
 
@@ -183,7 +180,7 @@ function TrackOrderContent() {
             </span>
           </div>
           <span className="text-[10px] font-medium text-neutral-500">
-            {isBhopal ? "Hub: MP Nagar Zone A" : "Central Hub"}
+            Fulfillment Hub Dispatch
           </span>
         </div>
       </header>
@@ -195,7 +192,7 @@ function TrackOrderContent() {
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-100">
             <span className="text-xs font-semibold text-neutral-600">Quick Shipment Switcher</span>
             <span className="text-[10px] font-bold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded border border-red-100">
-              {isBhopal ? "Express 2-Hour Delivery (MP Nagar Hub)" : "Pan-India Courier"}
+              {isBhopal ? "Express 2-Hour Delivery" : "Pan-India Courier"}
             </span>
           </div>
 
@@ -254,7 +251,7 @@ function TrackOrderContent() {
               <div className="bg-white/20 rounded-lg px-2.5 py-1.5 backdrop-blur-md text-right border border-white/20">
                 <div className="text-[9px] uppercase font-bold text-red-100">Destination</div>
                 <div className="text-xs font-bold text-white truncate max-w-[110px]">
-                  {activeOrder?.address?.city || location.locality || "Bhopal"}
+                  {activeOrder?.address?.city || location.locality || "Your City"}
                 </div>
               </div>
             </div>
@@ -289,11 +286,11 @@ function TrackOrderContent() {
               <div className="relative z-10 flex justify-between items-start text-[10px]">
                 <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-xs border border-neutral-200 font-semibold text-neutral-800">
                   <span className="w-2 h-2 rounded-full bg-[#D91E2A] inline-block mr-1"></span>
-                  <span>{isBhopal ? "Govindpura / MP Nagar Hub" : "Central Warehouse"}</span>
+                  <span>Fulfillment Hub</span>
                 </div>
                 <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-xs border border-neutral-200 font-semibold text-neutral-800">
                   <MapPin className="h-3 w-3 text-[#D91E2A] inline-block mr-0.5" />
-                  <span>{activeOrder?.address?.line1 || "Arera Colony"}</span>
+                  <span>{activeOrder?.address?.line1 || "Customer Address"}</span>
                 </div>
               </div>
 
@@ -303,7 +300,7 @@ function TrackOrderContent() {
                   <span className="text-xs font-bold text-neutral-900 flex items-center gap-1">
                     <Zap className="h-3.5 w-3.5 text-[#D91E2A] fill-current" />
                     <span>
-                      {isBhopal ? "Mukesh S. • Near Chetak Bridge" : "In Flight with Courier"}
+                      {isBhopal ? "Express Rider on Route" : "In Flight with Courier"}
                     </span>
                   </span>
                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 rounded">
@@ -426,7 +423,7 @@ function TrackOrderContent() {
                 <span className="text-[10px] text-neutral-400">01:30 PM</span>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
-                Packed at Bhopal Warehouse Hub, Govindpura/MP Nagar
+                Packed at Central Fulfillment Hub
               </p>
             </div>
 

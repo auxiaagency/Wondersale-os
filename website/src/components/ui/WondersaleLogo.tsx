@@ -24,54 +24,56 @@ export interface WondersaleLogoProps {
 
 export const WondersaleLogo: React.FC<WondersaleLogoProps> = ({
   size = "md",
-  showSubtitle = true,
-  subtitle = "Bhopal Store & Online Pan-India",
+  showSubtitle = false,
+  subtitle = "",
   href = "/",
   variant = "light",
   className = "",
 }) => {
   const isDark = variant === "dark";
 
-  // Dimension mapping
+  // Dimension mapping calibrated directly to the official Wondersale brandlockup:
+  // Icon aspect ratio is 400x300 (4:3), and the font cap height aligns precisely with the icon top and bottom
   const dimensions = {
-    sm: { img: 26, title: "text-base tracking-tight", sub: "text-[9px]" },
-    md: { img: 34, title: "text-xl tracking-tight", sub: "text-[10px]" },
-    lg: { img: 42, title: "text-2xl tracking-tight", sub: "text-xs" },
+    sm: { imgW: 38, imgH: 28, title: "text-[22px]", gap: "gap-2" },
+    md: { imgW: 48, imgH: 36, title: "text-[28px]", gap: "gap-2.5" },
+    lg: { imgW: 60, imgH: 45, title: "text-[36px]", gap: "gap-3" },
   }[size];
 
   const content = (
-    <div className={`inline-flex items-center gap-2.5 group select-none ${className}`}>
+    <div className={`inline-flex items-center ${dimensions.gap} group select-none ${className}`}>
       {/* Brand Icon Badge with original Logo Graphic */}
       <div
-        className={`relative shrink-0 flex items-center justify-center transition-transform group-hover:scale-105 duration-200`}
-        style={{ width: dimensions.img, height: dimensions.img }}
+        className="relative shrink-0 flex items-center justify-center transition-transform group-hover:scale-105 duration-200"
+        style={{ width: dimensions.imgW, height: dimensions.imgH }}
       >
         <Image
           src="/logo.png"
           alt="Wondersale Brand Logo"
-          width={dimensions.img * 2}
-          height={dimensions.img * 2}
+          width={dimensions.imgW * 2}
+          height={dimensions.imgH * 2}
           priority
           className="w-full h-full object-contain"
         />
       </div>
 
-      {/* Brand Wordmark & Tagline */}
-      <div className="flex flex-col leading-none">
+      {/* Brand Wordmark */}
+      <div className="flex flex-col justify-center leading-none">
         <span
-          className={`font-sans font-black uppercase leading-none transition-colors ${
+          className={`font-sans font-black tracking-[-0.03em] uppercase leading-none transition-colors ${
             dimensions.title
           } ${
             isDark
               ? "text-[#FDF8EE] group-hover:text-amber-200"
-              : "text-[#7A0C16] group-hover:text-[#5A0A10]"
+              : "text-[#5A0A10] group-hover:text-[#7A0C16]"
           }`}
+          style={{ letterSpacing: "-0.02em" }}
         >
           WONDERSALE
         </span>
-        {showSubtitle && (
+        {showSubtitle && subtitle && (
           <span
-            className={`font-medium tracking-wide mt-1 leading-none ${dimensions.sub} ${
+            className={`font-medium tracking-wide mt-1 leading-none text-[10px] ${
               isDark ? "text-[#EADFC7]" : "text-[#735A4A]"
             }`}
           >
