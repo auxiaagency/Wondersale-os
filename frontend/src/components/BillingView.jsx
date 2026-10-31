@@ -240,6 +240,8 @@ export default function BillingView({
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
   const [editSplitCash, setEditSplitCash] = useState('');
   const [editSplitUpi, setEditSplitUpi] = useState('');
+  const [editPartialPaid, setEditPartialPaid] = useState('');
+  const [editPartialMethod, setEditPartialMethod] = useState('cash');
   const [editDiscountAmount, setEditDiscountAmount] = useState('0');
   const [editPaymentNotes, setEditPaymentNotes] = useState('');
   const [isSavingPaymentMethod, setIsSavingPaymentMethod] = useState(false);
@@ -1363,6 +1365,8 @@ export default function BillingView({
     setEditPaymentMethod(order.payment_method || 'cash');
     setEditSplitCash(order.split_cash_amount ? String(order.split_cash_amount) : '');
     setEditSplitUpi(order.split_upi_amount ? String(order.split_upi_amount) : '');
+    setEditPartialPaid(order.payment_method === 'partial' ? (order.amount_paid !== undefined && order.amount_paid !== null ? String(order.amount_paid) : '') : '');
+    setEditPartialMethod(order.initial_payment_method || 'cash');
     setEditDiscountAmount(order.discount_amount ? String(parseFloat(order.discount_amount) || 0) : '0');
     setEditPaymentNotes(order.notes || '');
     setPaymentUpdateError('');
@@ -1494,6 +1498,10 @@ export default function BillingView({
         }
         patchData.split_cash_amount = cashVal.toFixed(2);
         patchData.split_upi_amount = upiVal.toFixed(2);
+      } else if (editPaymentMethod === 'partial') {
+        const paidNow = Math.min(computedTotal, Math.max(0, parseFloat(editPartialPaid) || 0));
+        patchData.amount_paid = paidNow.toFixed(2);
+        patchData.initial_payment_method = editPartialMethod || 'cash';
       }
 
       // Step 1: Save items / payment method changes
@@ -5914,6 +5922,24 @@ export default function BillingView({
                               <Split size={12} /> Split (Cash ₹{parseFloat(order.split_cash_amount || 0).toFixed(0)} + UPI ₹{parseFloat(order.split_upi_amount || 0).toFixed(0)})
                             </span>
                           )}
+                          {payMethod === 'partial' && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: 'rgba(236, 72, 153, 0.12)',
+                                border: '1px solid rgba(236, 72, 153, 0.3)',
+                                color: '#EC4899',
+                                padding: '3px 8px',
+                                borderRadius: 'var(--radius-full)',
+                                fontSize: '0.73rem',
+                                fontWeight: 800,
+                              }}
+                            >
+                              <Receipt size={12} /> Khata / Due (Paid: ₹{parseFloat(order.amount_paid || 0).toFixed(0)} · Due: ₹{parseFloat(order.balance_due || 0).toFixed(0)})
+                            </span>
+                          )}
                           {payMethod === 'vip_card' && (
                             <span
                               style={{
@@ -10124,7 +10150,7 @@ export default function BillingView({
                   <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Select Payment Mode
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
                     {/* Cash */}
                     <button
                       type="button"
@@ -10226,6 +10252,35 @@ export default function BillingView({
                       <Split size={18} />
                       <span>Split</span>
                     </button>
+
+                    {/* Partial / Khata */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPaymentMethod('partial');
+                        if (!editPartialPaid && editingOrderForPayment?.amount_paid !== undefined) {
+                          setEditPartialPaid(String(editingOrderForPayment.amount_paid || 0));
+                        }
+                      }}
+                      style={{
+                        padding: '10px 8px',
+                        borderRadius: 'var(--radius-lg)',
+                        border: editPaymentMethod === 'partial' ? '2px solid #EC4899' : '1px solid var(--border-subtle)',
+                        background: editPaymentMethod === 'partial' ? 'rgba(236, 72, 153, 0.12)' : 'var(--bg-surface-hover)',
+                        color: editPaymentMethod === 'partial' ? '#EC4899' : 'var(--text-primary)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                        fontSize: '0.78rem',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Receipt size={18} />
+                      <span>Khata / Due</span>
+                    </button>
                   </div>
                 </div>
 
@@ -10326,6 +10381,80 @@ export default function BillingView({
                               Auto Split 50/50
                             </button>
                           )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* Partial / Khata Breakdown Inputs if 'partial' */}
+                {editPaymentMethod === 'partial' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius-lg)',
+                      background: 'rgba(236, 72, 153, 0.06)',
+                      border: '1px solid rgba(236, 72, 153, 0.3)',
+                    }}
+                  >
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                          Amount Paid Now (₹)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          max={editNewTotal}
+                          value={editPartialPaid}
+                          onChange={(e) => setEditPartialPaid(e.target.value)}
+                          placeholder="0.00 (or leave 0 for full udhar)"
+                          className="form-input"
+                          style={{ marginTop: '4px', width: '100%', fontWeight: 800, fontFamily: 'monospace' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                          Down-payment Method
+                        </label>
+                        <select
+                          value={editPartialMethod}
+                          onChange={(e) => setEditPartialMethod(e.target.value)}
+                          className="form-input"
+                          style={{ marginTop: '4px', width: '100%', fontWeight: 800 }}
+                        >
+                          <option value="cash">Cash</option>
+                          <option value="upi">UPI / QR</option>
+                          <option value="card">Card</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Remaining Khata Due Summary */}
+                    {(() => {
+                      const paidVal = Math.min(editNewTotal, Math.max(0, parseFloat(editPartialPaid) || 0));
+                      const dueVal = Math.max(0, editNewTotal - paidVal);
+                      return (
+                        <div
+                          style={{
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            color: '#EC4899',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: 'rgba(236, 72, 153, 0.1)',
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                          }}
+                        >
+                          <span>Down Payment: <strong>₹{paidVal.toFixed(2)}</strong></span>
+                          <span>Remaining Balance Due: <strong style={{ color: dueVal > 0 ? '#F59E0B' : '#10B981' }}>₹{dueVal.toFixed(2)}</strong></span>
                         </div>
                       );
                     })()}

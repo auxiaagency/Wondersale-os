@@ -54,6 +54,8 @@ import {
   rechargeVipCard,
   inspectCard,
   recordOrderDuePayment,
+  updateSaleOrder,
+  deleteSaleOrder,
 } from '../api';
 import CardLookupModal from './CardLookupModal';
 import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
@@ -179,6 +181,20 @@ export default function CustomersView({
   const [duePaymentNotes, setDuePaymentNotes] = useState('');
   const [duePaymentReference, setDuePaymentReference] = useState('');
   const [isSubmittingDuePayment, setIsSubmittingDuePayment] = useState(false);
+
+  // Edit / Delete Bill in Customer Profile
+  const [orderToDelete, setOrderToDelete] = useState(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
+  const [editPartialPaid, setEditPartialPaid] = useState('');
+  const [editPartialMethod, setEditPartialMethod] = useState('cash');
+  const [editSplitCash, setEditSplitCash] = useState('');
+  const [editSplitUpi, setEditSplitUpi] = useState('');
+  const [editDiscountAmount, setEditDiscountAmount] = useState('0');
+  const [editNotes, setEditNotes] = useState('');
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [orderEditError, setOrderEditError] = useState('');
 
   // USB RFID Reader Connection & Scan State
   const [rfidStatus, setRfidStatus] = useState(getRfidStatus());
@@ -732,6 +748,99 @@ export default function CustomersView({
       showNotification('error', err.message || 'Failed to record due payment');
     } finally {
       setIsSubmittingDuePayment(false);
+    }
+  };
+
+  const handleOpenEditOrderModal = (order) => {
+    if (order.is_editable === false) {
+      showNotification('warning', 'This bill belongs to a closed register shift and is permanently locked/immutable.');
+      return;
+    }
+    setEditingOrder(order);
+    setEditPaymentMethod(order.payment_method || 'cash');
+    setEditPartialPaid(order.payment_method === 'partial' ? (order.amount_paid !== undefined && order.amount_paid !== null ? String(order.amount_paid) : '') : '');
+    setEditPartialMethod(order.initial_payment_method || 'cash');
+    setEditSplitCash(order.split_cash_amount ? String(order.split_cash_amount) : '');
+    setEditSplitUpi(order.split_upi_amount ? String(order.split_upi_amount) : '');
+    setEditDiscountAmount(order.discount_amount ? String(parseFloat(order.discount_amount) || 0) : '0');
+    setEditNotes(order.notes || '');
+    setOrderEditError('');
+  };
+
+  const handleSaveEditOrder = async () => {
+    if (!editingOrder) return;
+    setIsSavingOrder(true);
+    setOrderEditError('');
+    try {
+      const orderTotal = parseFloat(editingOrder.total_amount || 0);
+      const patchData = {
+        payment_method: editPaymentMethod,
+        notes: editNotes,
+      };
+
+      if (editPaymentMethod === 'split') {
+        const c = parseFloat(editSplitCash) || 0;
+        const u = parseFloat(editSplitUpi) || 0;
+        if (Math.abs((c + u) - orderTotal) > 0.05) {
+          throw new Error(`Split sum (₹${(c + u).toFixed(2)}) must match bill total ₹${orderTotal.toFixed(2)}.`);
+        }
+        patchData.split_cash_amount = c.toFixed(2);
+        patchData.split_upi_amount = u.toFixed(2);
+      } else if (editPaymentMethod === 'partial') {
+        const paidNow = Math.min(orderTotal, Math.max(0, parseFloat(editPartialPaid) || 0));
+        patchData.amount_paid = paidNow.toFixed(2);
+        patchData.initial_payment_method = editPartialMethod || 'cash';
+      }
+
+      const updated = await updateSaleOrder(editingOrder.id, patchData);
+      showNotification('success', `Bill #${editingOrder.invoice_number} updated successfully!`);
+
+      // Update customer history orders in state
+      setCustomerHistoryOrders((prev) =>
+        prev.map((o) => (o.id === editingOrder.id ? { ...o, ...updated } : o))
+      );
+
+      // Re-fetch customer list to sync balances
+      getCustomers().then((data) => {
+        const list = Array.isArray(data) ? data : data.results || [];
+        setCustomers(list);
+        const fresh = list.find((c) => c.id === selectedCustomerForHistory?.id);
+        if (fresh) setSelectedCustomerForHistory(fresh);
+      }).catch(() => {});
+
+      setEditingOrder(null);
+    } catch (err) {
+      console.error('Failed to update bill:', err);
+      setOrderEditError(err.message || 'Failed to update bill.');
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!orderToDelete || isDeletingOrder) return;
+    setIsDeletingOrder(true);
+    try {
+      await deleteSaleOrder(orderToDelete.id);
+      showNotification('success', `Bill #${orderToDelete.invoice_number} voided! Inventory stocks & customer balances reversed.`);
+
+      // Remove from history
+      setCustomerHistoryOrders((prev) => prev.filter((o) => o.id !== orderToDelete.id));
+
+      // Re-fetch customer list to sync stats & dues
+      getCustomers().then((data) => {
+        const list = Array.isArray(data) ? data : data.results || [];
+        setCustomers(list);
+        const fresh = list.find((c) => c.id === selectedCustomerForHistory?.id);
+        if (fresh) setSelectedCustomerForHistory(fresh);
+      }).catch(() => {});
+
+      setOrderToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete sale order:', err);
+      showNotification('error', err.message || 'Failed to delete sale order.');
+    } finally {
+      setIsDeletingOrder(false);
     }
   };
 
@@ -2591,6 +2700,75 @@ export default function CustomersView({
                           {isReturn ? <RotateCcw size={14} /> : <Printer size={14} />}
                           <span>{isReturn ? 'Print Return Voucher' : 'Print Bill'}</span>
                         </button>
+
+                        {!isReturn && order.is_editable !== false ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditOrderModal(order)}
+                              className="btn btn-secondary btn-sm"
+                              style={{
+                                fontSize: '0.78rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '5px 11px',
+                                background: 'rgba(59, 130, 246, 0.12)',
+                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                color: '#3B82F6',
+                                fontWeight: 700,
+                                borderRadius: 'var(--radius-md)',
+                                cursor: 'pointer',
+                              }}
+                              title="Edit payment method or notes"
+                            >
+                              <Edit2 size={13} />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setOrderToDelete(order)}
+                              className="btn btn-secondary btn-sm"
+                              style={{
+                                fontSize: '0.78rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '5px 11px',
+                                background: 'rgba(239, 68, 68, 0.12)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                color: '#EF4444',
+                                fontWeight: 700,
+                                borderRadius: 'var(--radius-md)',
+                                cursor: 'pointer',
+                              }}
+                              title="Void and delete this bill, reversing stocks and balances"
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </button>
+                          </>
+                        ) : !isReturn ? (
+                          <span
+                            title="Shift closed: This bill is finalized and permanently locked/immutable."
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              color: 'var(--text-muted)',
+                              background: 'rgba(107, 114, 128, 0.12)',
+                              border: '1px solid rgba(107, 114, 128, 0.25)',
+                              padding: '4px 8px',
+                              borderRadius: 'var(--radius-md)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <Lock size={11} />
+                            <span>Locked</span>
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -2600,6 +2778,627 @@ export default function CustomersView({
                   No past purchase bills found for this customer.
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT BILL MODAL (PAYMENT METHOD & REMARKS) */}
+      {editingOrder && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10005,
+            padding: '16px',
+            animation: 'fadeIn 0.2s ease',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSavingOrder) {
+              setEditingOrder(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '560px',
+              borderRadius: 'var(--radius-xl)',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface-hover)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    color: '#3B82F6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                  }}
+                >
+                  <Edit2 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                    Edit Bill #{editingOrder.invoice_number}
+                  </h3>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    Total: <strong style={{ color: '#10B981' }}>₹{parseFloat(editingOrder.total_amount || 0).toFixed(2)}</strong> &bull; Customer: {selectedCustomerForHistory?.name || selectedCustomerForHistory?.phone}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => !isSavingOrder && setEditingOrder(null)}
+                disabled={isSavingOrder}
+                className="btn btn-secondary btn-sm"
+                style={{ width: '30px', height: '30px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', maxHeight: '75vh' }}>
+              {/* Payment Mode Selector */}
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                  Payment Method
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+                  {/* Cash */}
+                  <button
+                    type="button"
+                    onClick={() => setEditPaymentMethod('cash')}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: 'var(--radius-md)',
+                      border: editPaymentMethod === 'cash' ? '2px solid #10B981' : '1px solid var(--border-subtle)',
+                      background: editPaymentMethod === 'cash' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-surface-hover)',
+                      color: editPaymentMethod === 'cash' ? '#10B981' : 'var(--text-primary)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <Banknote size={16} />
+                    <span>Cash</span>
+                  </button>
+
+                  {/* UPI */}
+                  <button
+                    type="button"
+                    onClick={() => setEditPaymentMethod('upi')}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: 'var(--radius-md)',
+                      border: editPaymentMethod === 'upi' ? '2px solid #8B5CF6' : '1px solid var(--border-subtle)',
+                      background: editPaymentMethod === 'upi' ? 'rgba(139, 92, 246, 0.12)' : 'var(--bg-surface-hover)',
+                      color: editPaymentMethod === 'upi' ? '#8B5CF6' : 'var(--text-primary)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <QrCode size={16} />
+                    <span>UPI / QR</span>
+                  </button>
+
+                  {/* Card */}
+                  <button
+                    type="button"
+                    onClick={() => setEditPaymentMethod('card')}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: 'var(--radius-md)',
+                      border: editPaymentMethod === 'card' ? '2px solid #3B82F6' : '1px solid var(--border-subtle)',
+                      background: editPaymentMethod === 'card' ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-surface-hover)',
+                      color: editPaymentMethod === 'card' ? '#3B82F6' : 'var(--text-primary)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <CreditCard size={16} />
+                    <span>Card</span>
+                  </button>
+
+                  {/* Split */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditPaymentMethod('split');
+                      const tot = parseFloat(editingOrder.total_amount || 0);
+                      if (!editSplitCash && !editSplitUpi) {
+                        setEditSplitCash((tot / 2).toFixed(2));
+                        setEditSplitUpi((tot - (tot / 2)).toFixed(2));
+                      }
+                    }}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: 'var(--radius-md)',
+                      border: editPaymentMethod === 'split' ? '2px solid #F59E0B' : '1px solid var(--border-subtle)',
+                      background: editPaymentMethod === 'split' ? 'rgba(245, 158, 11, 0.12)' : 'var(--bg-surface-hover)',
+                      color: editPaymentMethod === 'split' ? '#F59E0B' : 'var(--text-primary)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <ArrowUpDown size={16} />
+                    <span>Split</span>
+                  </button>
+
+                  {/* Partial / Khata */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditPaymentMethod('partial');
+                      if (!editPartialPaid && editingOrder.amount_paid !== undefined) {
+                        setEditPartialPaid(String(editingOrder.amount_paid || 0));
+                      }
+                    }}
+                    style={{
+                      padding: '10px 6px',
+                      borderRadius: 'var(--radius-md)',
+                      border: editPaymentMethod === 'partial' ? '2px solid #EC4899' : '1px solid var(--border-subtle)',
+                      background: editPaymentMethod === 'partial' ? 'rgba(236, 72, 153, 0.12)' : 'var(--bg-surface-hover)',
+                      color: editPaymentMethod === 'partial' ? '#EC4899' : 'var(--text-primary)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '5px',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                      fontSize: '0.75rem',
+                    }}
+                  >
+                    <Receipt size={16} />
+                    <span>Khata</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Split Breakdown Inputs */}
+              {editPaymentMethod === 'split' && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    padding: '12px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(245, 158, 11, 0.06)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                  }}
+                >
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                        Cash Portion (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editSplitCash}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditSplitCash(val);
+                          const tot = parseFloat(editingOrder.total_amount || 0);
+                          setEditSplitUpi(Math.max(0, tot - (parseFloat(val) || 0)).toFixed(2));
+                        }}
+                        className="form-input"
+                        style={{ marginTop: '4px', width: '100%', fontWeight: 800 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                        UPI Portion (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editSplitUpi}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditSplitUpi(val);
+                          const tot = parseFloat(editingOrder.total_amount || 0);
+                          setEditSplitCash(Math.max(0, tot - (parseFloat(val) || 0)).toFixed(2));
+                        }}
+                        className="form-input"
+                        style={{ marginTop: '4px', width: '100%', fontWeight: 800 }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Partial / Khata Inputs */}
+              {editPaymentMethod === 'partial' && (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    padding: '12px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(236, 72, 153, 0.06)',
+                    border: '1px solid rgba(236, 72, 153, 0.3)',
+                  }}
+                >
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                        Amount Paid Now (₹)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={parseFloat(editingOrder.total_amount || 0)}
+                        value={editPartialPaid}
+                        onChange={(e) => setEditPartialPaid(e.target.value)}
+                        placeholder="0.00 (or leave 0 for full udhar)"
+                        className="form-input"
+                        style={{ marginTop: '4px', width: '100%', fontWeight: 800, fontFamily: 'monospace' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                        Down-payment Method
+                      </label>
+                      <select
+                        value={editPartialMethod}
+                        onChange={(e) => setEditPartialMethod(e.target.value)}
+                        className="form-input"
+                        style={{ marginTop: '4px', width: '100%', fontWeight: 800 }}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="upi">UPI / QR</option>
+                        <option value="card">Card</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const tot = parseFloat(editingOrder.total_amount || 0);
+                    const paid = Math.min(tot, Math.max(0, parseFloat(editPartialPaid) || 0));
+                    const due = Math.max(0, tot - paid);
+                    return (
+                      <div
+                        style={{
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          color: '#EC4899',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: 'rgba(236, 72, 153, 0.1)',
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        <span>Down Payment: <strong>₹{paid.toFixed(2)}</strong></span>
+                        <span>Remaining Balance Due: <strong style={{ color: due > 0 ? '#F59E0B' : '#10B981' }}>₹{due.toFixed(2)}</strong></span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Remarks / Notes */}
+              <div>
+                <label style={{ fontSize: '0.74rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                  Internal Remark / Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="e.g. Corrected payment mode from cash to khata..."
+                  className="form-input"
+                  style={{ marginTop: '4px', width: '100%' }}
+                />
+              </div>
+
+              {orderEditError && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#EF4444',
+                    fontSize: '0.78rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <AlertCircle size={14} />
+                  <span>{orderEditError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                padding: '14px 20px',
+                background: 'var(--bg-surface-solid)',
+                borderTop: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '10px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                disabled={isSavingOrder}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontWeight: 700 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEditOrder}
+                disabled={isSavingOrder}
+                className="btn btn-primary"
+                style={{
+                  padding: '8px 20px',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #10B981, #059669)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isSavingOrder ? (
+                  <>
+                    <RefreshCw size={14} className="spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 size={15} />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE BILL CONFIRMATION MODAL */}
+      {orderToDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10006,
+            padding: '16px',
+            animation: 'fadeIn 0.15s ease',
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingOrder) {
+              setOrderToDelete(null);
+            }
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '460px',
+              borderRadius: '16px',
+              background: 'linear-gradient(180deg, #181926 0%, #11121d 100%)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              boxShadow: '0 25px 60px -15px rgba(239, 68, 68, 0.3)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(239, 68, 68, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    color: '#EF4444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                  }}
+                >
+                  <Trash2 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#F87171' }}>
+                    Void & Delete Bill #{orderToDelete.invoice_number}
+                  </h3>
+                  <div style={{ fontSize: '0.74rem', color: '#9CA3AF' }}>
+                    Inventory stocks & customer balances will be reversed
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isDeletingOrder && setOrderToDelete(null)}
+                disabled={isDeletingOrder}
+                style={{ background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  fontSize: '0.82rem',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9CA3AF' }}>Bill Total</span>
+                  <span style={{ fontWeight: 800, color: '#34D399' }}>
+                    ₹{parseFloat(orderToDelete.total_amount || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#9CA3AF' }}>Payment Mode</span>
+                  <span style={{ fontWeight: 700, color: '#FCD34D', textTransform: 'uppercase' }}>
+                    {orderToDelete.payment_method}
+                  </span>
+                </div>
+                {parseFloat(orderToDelete.balance_due || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#9CA3AF' }}>Dues to Cancel</span>
+                    <span style={{ fontWeight: 800, color: '#F87171' }}>
+                      ₹{parseFloat(orderToDelete.balance_due).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                {orderToDelete.items && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#9CA3AF' }}>Items to Restock</span>
+                    <span style={{ fontWeight: 600, color: '#E5E7EB' }}>
+                      {orderToDelete.items.length} {orderToDelete.items.length === 1 ? 'item' : 'items'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ fontSize: '0.78rem', color: '#EF4444', background: 'rgba(239, 68, 68, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                ⚠️ This action cannot be undone. All quantities will be returned to inventory stock.
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                padding: '14px 20px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(0, 0, 0, 0.2)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                disabled={isDeletingOrder}
+                className="btn btn-secondary btn-sm"
+                style={{ padding: '7px 14px', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOrder}
+                disabled={isDeletingOrder}
+                className="btn btn-sm"
+                style={{
+                  padding: '7px 18px',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: isDeletingOrder ? 'not-allowed' : 'pointer',
+                  opacity: isDeletingOrder ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <RefreshCw size={13} className="spin" />
+                    <span>Voiding Bill...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Void Bill</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

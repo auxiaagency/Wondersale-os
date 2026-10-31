@@ -8,6 +8,7 @@ from inventory.models import Store, Category, SubCategory, Item, StockMovement, 
 from inventory.services import adjust_stock
 from django.utils import timezone
 import datetime
+from datetime import timedelta
 
 
 class BillingAndCustomerTests(TestCase):
@@ -1080,6 +1081,114 @@ class BillingAndCustomerTests(TestCase):
         customer.refresh_from_db()
         self.assertEqual(customer.total_purchases_count, 0)
         self.assertEqual(customer.total_spent, Decimal("0.00"))
+
+    def test_partial_khata_bill_update(self):
+        """Verify editing a partial khata bill updates dues and payment breakdown safely."""
+        DailyRegisterShift.objects.create(
+            store=self.store,
+            status=DailyRegisterShift.STATUS_OPEN,
+            opened_at=timezone.now() - timedelta(hours=1),
+            opening_cash=Decimal('1000.00')
+        )
+
+        checkout_url = reverse('sale-order-checkout')
+        payload = {
+            "store_id": self.store.id,
+            "customer_phone": "9876543210",
+            "customer_name": "Test Khata Customer",
+            "payment_method": "partial",
+            "initial_payment_method": "cash",
+            "amount_paid": "200.00",
+            "items": [
+                {"item_id": self.item_in_stock.id, "quantity": 2} # 2 * 250 = 500
+            ]
+        }
+        res = self.client.post(checkout_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        order_id = res.data['id']
+        self.assertEqual(Decimal(str(res.data['total_amount'])), Decimal('500.00'))
+        self.assertEqual(Decimal(str(res.data['amount_paid'])), Decimal('200.00'))
+        self.assertEqual(Decimal(str(res.data['balance_due'])), Decimal('300.00'))
+        self.assertFalse(res.data['is_fully_paid'])
+
+        # Customer total_outstanding_dues should reflect 300
+        customer = Customer.objects.get(phone="9876543210")
+        cust_res = self.client.get(reverse('customer-detail', args=[customer.id]))
+        self.assertEqual(cust_res.data['total_outstanding_dues'], 300.0)
+
+        # Edit: Change amount_paid to 400.00 (Due drops to 100.00)
+        detail_url = reverse('sale-order-detail', kwargs={'pk': order_id})
+        patch_payload = {
+            "payment_method": "partial",
+            "amount_paid": "400.00",
+            "initial_payment_method": "upi",
+            "notes": "Customer paid 400 now instead of 200 via UPI"
+        }
+        patch_res = self.client.patch(detail_url, patch_payload, format='json')
+        self.assertEqual(patch_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(Decimal(str(patch_res.data['amount_paid'])), Decimal('400.00'))
+        self.assertEqual(Decimal(str(patch_res.data['balance_due'])), Decimal('100.00'))
+        self.assertEqual(patch_res.data['initial_payment_method'], 'upi')
+
+        cust_res = self.client.get(reverse('customer-detail', args=[customer.id]))
+        self.assertEqual(cust_res.data['total_outstanding_dues'], 100.0)
+
+        # Switch payment method to full "cash": Balance due should reset to 0.00 and is_fully_paid True
+        switch_res = self.client.patch(detail_url, {"payment_method": "cash"}, format='json')
+        self.assertEqual(switch_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(Decimal(str(switch_res.data['balance_due'])), Decimal('0.00'))
+        self.assertTrue(switch_res.data['is_fully_paid'])
+
+        cust_res = self.client.get(reverse('customer-detail', args=[customer.id]))
+        self.assertEqual(cust_res.data['total_outstanding_dues'], 0.0)
+
+    def test_partial_khata_bill_deletion(self):
+        """Verify deleting a partial khata bill safely clears dues and restores stock."""
+        DailyRegisterShift.objects.create(
+            store=self.store,
+            status=DailyRegisterShift.STATUS_OPEN,
+            opened_at=timezone.now() - timedelta(hours=1),
+            opening_cash=Decimal('1000.00')
+        )
+
+        initial_stock = self.item_in_stock.quantity # 10
+        checkout_url = reverse('sale-order-checkout')
+        payload = {
+            "store_id": self.store.id,
+            "customer_phone": "9812345678",
+            "customer_name": "Delete Khata Customer",
+            "payment_method": "partial",
+            "initial_payment_method": "cash",
+            "amount_paid": "100.00",
+            "items": [
+                {"item_id": self.item_in_stock.id, "quantity": 2} # 500 total, 400 due
+            ]
+        }
+        res = self.client.post(checkout_url, payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        order_id = res.data['id']
+
+        # Verify stock and dues
+        self.item_in_stock.refresh_from_db()
+        self.assertEqual(self.item_in_stock.quantity, initial_stock - 2)
+
+        customer = Customer.objects.get(phone="9812345678")
+        cust_res = self.client.get(reverse('customer-detail', args=[customer.id]))
+        self.assertEqual(cust_res.data['total_outstanding_dues'], 400.0)
+
+        # Delete the order
+        detail_url = reverse('sale-order-detail', kwargs={'pk': order_id})
+        del_res = self.client.delete(detail_url)
+        self.assertEqual(del_res.status_code, status.HTTP_200_OK)
+
+        # Verify stock restored
+        self.item_in_stock.refresh_from_db()
+        self.assertEqual(self.item_in_stock.quantity, initial_stock)
+
+        # Verify customer dues eliminated
+        cust_res = self.client.get(reverse('customer-detail', args=[customer.id]))
+        self.assertEqual(cust_res.data['total_outstanding_dues'], 0.0)
+
 
 
 

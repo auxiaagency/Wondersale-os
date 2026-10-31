@@ -1902,6 +1902,7 @@ class SaleOrderSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         from django.db import transaction
+        from django.db.models import Sum
         from .models import Item, SaleOrderItem, StockMovement, Customer, VIPCardTransaction
         from .services import adjust_stock
 
@@ -2131,9 +2132,43 @@ class SaleOrderSerializer(serializers.ModelSerializer):
                 instance.split_upi_amount = split_upi
                 instance.amount_paid = split_cash
                 instance.change_returned = Decimal('0.00')
+                instance.balance_due = Decimal('0.00')
+                instance.is_fully_paid = True
+            elif new_payment_method == SaleOrder.PAYMENT_PARTIAL:
+                instance.split_cash_amount = Decimal('0.00')
+                instance.split_upi_amount = Decimal('0.00')
+                instance.change_returned = Decimal('0.00')
+                # Read amount_paid or initial_amount_paid if provided
+                raw_paid = validated_data.get('amount_paid', self.initial_data.get('amount_paid'))
+                if raw_paid is None:
+                    raw_paid = self.initial_data.get('partial_amount_paid')
+                
+                # Check initial payment method for partial sale (e.g. cash, upi, card)
+                init_pm = self.initial_data.get('initial_payment_method')
+                if init_pm and init_pm in dict(SaleOrder.PAYMENT_CHOICES):
+                    instance.initial_payment_method = init_pm
+
+                # Calculate paid vs due
+                total_payments_sum = instance.payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                if raw_paid is not None:
+                    paid_val = max(Decimal('0.00'), Decimal(str(raw_paid))).quantize(Decimal('0.01'))
+                    # Effective paid is at least the sum of recorded installments
+                    effective_paid = max(paid_val, total_payments_sum)
+                else:
+                    effective_paid = max(instance.amount_paid or Decimal('0.00'), total_payments_sum)
+
+                effective_paid = min(instance.total_amount, effective_paid)
+                instance.amount_paid = effective_paid
+                new_bal = max(Decimal('0.00'), instance.total_amount - effective_paid).quantize(Decimal('0.01'))
+                instance.balance_due = new_bal
+                instance.is_fully_paid = (new_bal <= Decimal('0.00'))
+                if instance.is_fully_paid:
+                    instance.status = SaleOrder.STATUS_COMPLETED
             elif new_payment_method in [SaleOrder.PAYMENT_CASH, SaleOrder.PAYMENT_UPI, SaleOrder.PAYMENT_CARD, SaleOrder.PAYMENT_OTHER]:
                 instance.split_cash_amount = Decimal('0.00')
                 instance.split_upi_amount = Decimal('0.00')
+                instance.balance_due = Decimal('0.00')
+                instance.is_fully_paid = True
                 if new_payment_method == SaleOrder.PAYMENT_CASH:
                     raw_paid = validated_data.get('amount_paid', self.initial_data.get('amount_paid'))
                     if raw_paid is not None and Decimal(str(raw_paid)) >= instance.total_amount:
