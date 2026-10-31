@@ -66,8 +66,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       <header className="sticky top-0 z-40 bg-[#FDF8EE] border-b border-[#EADFC7]/80 shadow-xs">
         {/* ======================================================== */}
         {/* DESKTOP VIEWPORT NAVBAR (md:flex, lg, xl - Enhanced)   */}
-        {/* ======================================================== */}
-        <div className="hidden md:block max-w-7xl mx-auto px-4 lg:px-8">
+        <div className="hidden md:block w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12">
           <div className="h-20 flex items-center justify-between gap-8">
             {/* 1. Brand Logo */}
             <WondersaleLogo size="md" />

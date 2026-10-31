@@ -21,7 +21,7 @@ export const BottomTabBar: React.FC = () => {
   return (
     <nav
       aria-label="Mobile Bottom Navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 w-full z-50 pb-[env(safe-area-inset-bottom,0px)] bg-[#FDF8EE]/95 backdrop-blur-xl shadow-[0_-2px_12px_rgba(90,10,16,0.08)] border-t border-[#EADFC7]"
+      className="md:hidden fixed bottom-0 left-0 right-0 w-full z-50 pb-[env(safe-area-inset-bottom,0px)] bg-[#5A0A10] shadow-[0_-4px_24px_rgba(0,0,0,0.35)] border-t border-[#7A0C16]"
     >
       <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
@@ -32,22 +32,34 @@ export const BottomTabBar: React.FC = () => {
             <Link
               key={item.label}
               href={item.href}
-              className={`flex flex-col items-center justify-center flex-1 h-full transition-colors relative min-w-[44px] ${
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-all relative min-w-[44px] ${
                 isActive
-                  ? "text-[#7A0C16] font-bold text-xs"
-                  : "text-[#735A4A] hover:text-[#2C1810] font-medium text-xs"
+                  ? "text-[#FDF8EE] font-extrabold"
+                  : "text-[#EADFC7]/85 hover:text-[#FDF8EE] font-bold"
               }`}
             >
               <div className="relative flex items-center justify-center">
-                <Icon className={`w-5 h-5 ${isActive ? "stroke-[2.5]" : "stroke-2"}`} />
+                <Icon
+                  className={`w-5 h-5 transition-transform ${
+                    isActive ? "stroke-[2.8] scale-110 text-[#FDF8EE]" : "stroke-[2.4] text-[#EADFC7]"
+                  }`}
+                />
                 {item.count !== undefined && item.count > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-[#7A0C16] text-[#FDF8EE] text-[9px] font-bold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-0.5">
+                  <span className="absolute -top-1.5 -right-2 bg-[#FEC501] text-[#5A0A10] text-[10px] font-black min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1 shadow-sm border border-[#5A0A10]">
                     {item.count}
                   </span>
                 )}
               </div>
-              <span className="text-[10px] mt-0.5 leading-tight">{item.label}</span>
-              {isActive && <span className="w-1 h-1 bg-[#7A0C16] rounded-full mt-0.5" />}
+              <span
+                className={`text-[10px] mt-1 leading-tight tracking-wide ${
+                  isActive ? "text-[#FDF8EE] font-extrabold" : "text-[#EADFC7] font-bold"
+                }`}
+              >
+                {item.label}
+              </span>
+              {isActive && (
+                <span className="w-1.5 h-1.5 bg-[#FEC501] rounded-full mt-0.5 shadow-xs" />
+              )}
             </Link>
           );
         })}
@@ -55,4 +67,3 @@ export const BottomTabBar: React.FC = () => {
     </nav>
   );
 };
-

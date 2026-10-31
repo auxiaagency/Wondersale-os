@@ -325,7 +325,7 @@ export default function CartPage() {
 
         {/* Desktop Breadcrumbs */}
         <div className="bg-[#FAF3E0] border-b border-[#EADFC7]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-3">
             <nav className="flex items-center text-xs font-medium text-[#735A4A] space-x-2">
               <Link href="/" className="hover:text-[#7A0C16] transition-colors">
                 Home
@@ -337,7 +337,7 @@ export default function CartPage() {
         </div>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-1">
+        <main className="max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-8 w-full flex-1">
           {items.length > 0 ? (
             <div className="grid grid-cols-12 gap-8 items-start">
               {/* Left Column: Cart Items, Free Delivery Milestone, Delivery Slots */}

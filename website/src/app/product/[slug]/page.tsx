@@ -328,7 +328,7 @@ function ProductDetailContent() {
         {/* Global Proportional Desktop Navigation */}
         <GlobalHeader />
 
-        <main className="flex-1 max-w-7xl mx-auto w-full px-4 lg:px-8 py-5">
+        <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-5">
           {/* 1. Breadcrumbs */}
           <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-[#735A4A] mb-5 py-1">
             <Link href="/" className="hover:text-[#7A0C16] transition-colors">Home</Link>
@@ -448,7 +448,7 @@ function ProductDetailContent() {
                   </span>
                   <span className="text-xs text-[#735A4A] font-medium">Bhopal Stock Verified</span>
                 </div>
-                <h1 className="font-bold text-xl lg:text-2xl text-[#2C1810] leading-snug">
+                <h1 className="font-serif font-bold text-2xl lg:text-3xl text-[#2C1810] leading-snug">
                   {product.title}
                 </h1>
 

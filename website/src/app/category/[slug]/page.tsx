@@ -212,7 +212,7 @@ function CategoryContent() {
 
       {/* Category Sub-header Banner */}
       <div className="w-full bg-[#FAF3E0] border-b border-[#EADFC7] px-4 sm:px-6 lg:px-8 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Link
               href="/"
@@ -222,10 +222,10 @@ function CategoryContent() {
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <h1 className="font-bold text-base md:text-lg text-[#2C1810] leading-tight">
+              <h1 className="font-serif font-bold text-lg md:text-2xl text-[#2C1810] leading-tight">
                 {title}
               </h1>
-              <span className="text-[11px] text-[#735A4A] font-medium">
+              <span className="text-[11px] text-[#735A4A] font-sans font-medium">
                 {products.length} {products.length === 1 ? "item" : "items"} available in Bhopal Superstore
               </span>
             </div>
@@ -235,7 +235,7 @@ function CategoryContent() {
 
         {/* 2. Sticky Quick Bar */}
         <div className="w-full bg-[#FAF3E0] border-b border-[#EADFC7] px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between text-xs">
-          <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
+          <div className="max-w-[1600px] mx-auto w-full flex items-center justify-between">
             <div className="flex items-center gap-2">
               {/* Sort Dropdown Trigger */}
               <button
@@ -274,7 +274,7 @@ function CategoryContent() {
 
       {/* Active Filter Pills Bar */}
       {(selectedBrands.length > 0 || maxPrice < 10000 || expressOnly) && (
-        <div className="max-w-7xl mx-auto px-4 pt-3 flex flex-wrap items-center gap-2">
+        <div className="max-w-[1600px] mx-auto px-4 pt-3 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-medium text-slate-500">Active Filters:</span>
           {selectedBrands.map((brand) => (
             <span
@@ -316,7 +316,7 @@ function CategoryContent() {
       )}
 
       {/* 3. Product Listing Grid */}
-      <main className="max-w-7xl mx-auto px-4 py-4">
+      <main className="max-w-[1600px] mx-auto px-4 py-4">
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center text-center">
             <div className="w-8 h-8 border-3 border-[#D91E2A] border-t-transparent rounded-full animate-spin mb-3" />

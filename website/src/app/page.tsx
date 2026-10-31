@@ -204,7 +204,7 @@ export default function HomePage() {
       <GlobalHeader />
 
       <main className="flex-1 w-full bg-[#FDF8EE]">
-        <div className="max-w-[1280px] mx-auto px-4 md:px-8 py-6 flex flex-col gap-7">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 flex flex-col gap-7">
 
           {/* 2. HERO CAMPAIGN BANNER (Rich Burgundy with Circular Image Portal matching screenshot) */}
           <section className="w-full">
@@ -279,9 +279,14 @@ export default function HomePage() {
           {/* 3. EXPLORE DEPARTMENTS / CATEGORY ICON ROW (Warm Cream Minimalist Icons) */}
           <section className="w-full">
             <div className="flex items-center justify-between mb-4 px-1">
-              <span className="text-xs text-[#735A4A] uppercase tracking-wider font-extrabold font-sans">
-                EXPLORE DEPARTMENTS
-              </span>
+              <div>
+                <h2 className="text-xl md:text-2xl text-[#2C1810] font-serif font-bold tracking-tight">
+                  Explore Departments
+                </h2>
+                <p className="text-xs text-[#735A4A] font-sans font-medium mt-0.5 hidden sm:block">
+                  Handcrafted cookware, electronics, toys & daily essentials
+                </p>
+              </div>
               <Link
                 href="/categories"
                 className="text-xs text-[#7A0C16] font-bold flex items-center gap-0.5 hover:underline"
@@ -373,7 +378,7 @@ export default function HomePage() {
           {/* 5. SHOP BY CATEGORY */}
           <section className="w-full">
             <div className="flex items-center justify-between mb-4 px-1">
-              <h2 className="text-lg md:text-xl text-[#2C1810] font-bold">Shop By Category</h2>
+              <h2 className="text-xl md:text-2xl text-[#2C1810] font-serif font-bold tracking-tight">Shop By Category</h2>
               <Link
                 href="/categories"
                 className="text-xs text-[#7A0C16] font-bold flex items-center hover:underline"
@@ -399,8 +404,8 @@ export default function HomePage() {
                   </span>
                 </div>
                 <div className="p-3">
-                  <h3 className="text-sm text-[#2C1810] font-bold">Cookware &amp; Dining</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5">Non-stick, Pots &amp; Bowls</p>
+                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Cookware &amp; Dining</h3>
+                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">Non-stick, Pots &amp; Bowls</p>
                 </div>
               </Link>
 
@@ -420,8 +425,8 @@ export default function HomePage() {
                   </span>
                 </div>
                 <div className="p-3">
-                  <h3 className="text-sm text-[#2C1810] font-bold">Smart Gadgets</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5">Wearables &amp; Audio</p>
+                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Smart Gadgets</h3>
+                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">Wearables &amp; Audio</p>
                 </div>
               </Link>
 
@@ -441,8 +446,8 @@ export default function HomePage() {
                   </span>
                 </div>
                 <div className="p-3">
-                  <h3 className="text-sm text-[#2C1810] font-bold">Kids &amp; Toys</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5">STEM &amp; Board Games</p>
+                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Kids &amp; Toys</h3>
+                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">STEM &amp; Board Games</p>
                 </div>
               </Link>
 
@@ -462,8 +467,8 @@ export default function HomePage() {
                   </span>
                 </div>
                 <div className="p-3">
-                  <h3 className="text-sm text-[#2C1810] font-bold">Eyewear &amp; Style</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5">UV400 Polarized</p>
+                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Eyewear &amp; Style</h3>
+                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">UV400 Polarized</p>
                 </div>
               </Link>
             </div>
@@ -476,11 +481,11 @@ export default function HomePage() {
               <div className="z-10 max-w-2xl space-y-1.5">
                 <div className="flex items-center gap-1.5">
                   <ShieldCheck className="w-5 h-5 text-[#EADFC7]" />
-                  <span className="text-xs uppercase tracking-wider text-[#EADFC7] font-bold">
+                  <span className="text-xs uppercase tracking-wider text-[#EADFC7] font-bold font-sans">
                     Partner Bank Offer
                   </span>
                 </div>
-                <h3 className="text-xl md:text-2xl text-[#FDF8EE] leading-tight font-extrabold">
+                <h3 className="text-xl md:text-2xl text-[#FDF8EE] leading-tight font-serif font-bold">
                   Instant 10% Off on HDFC &amp; ICICI Cards
                 </h3>
                 <p className="text-sm text-[#EADFC7]/90">

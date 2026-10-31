@@ -87,7 +87,7 @@ export default function OffersPage() {
     <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] flex flex-col justify-between font-sans">
       <GlobalHeader />
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 space-y-6">
         {/* Banner Section */}
         <div className="relative overflow-hidden rounded-3xl bg-[#5A0A10] border border-[#7A0C16] text-[#FDF8EE] p-6 sm:p-8 shadow-md">
           <div className="relative z-10 max-w-2xl space-y-2">

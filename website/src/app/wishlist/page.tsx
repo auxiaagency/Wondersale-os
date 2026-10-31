@@ -49,7 +49,7 @@ export default function WishlistPage() {
 
       {/* 2. Desktop Breadcrumb Navigation */}
       <div className="hidden md:block bg-[#FAF3E0] border-b border-[#EADFC7]">
-        <div className="max-w-[1280px] mx-auto px-4 md:px-8 py-3">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-3">
           <nav className="flex items-center text-xs font-medium text-[#735A4A] space-x-2">
             <Link href="/" className="hover:text-[#7A0C16] transition-colors">
               Home
@@ -92,7 +92,7 @@ export default function WishlistPage() {
       </header>
 
       {/* 4. Main Body Content (Responsive Container: Grid on Desktop, Card Stack on Mobile) */}
-      <main className="flex-1 w-full max-w-[1280px] mx-auto px-4 md:px-8 py-6 pb-24 space-y-6">
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 pb-24 space-y-6">
         {/* Section Header (Desktop only) */}
         <div className="hidden md:flex items-center justify-between pb-2 border-b border-[#EADFC7]">
           <div>

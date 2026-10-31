@@ -625,8 +625,8 @@ export default function AllCategoriesPage() {
       <GlobalHeader />
 
       {/* Main Content Wrapper */}
-      <main className="flex-1 w-full pb-20 px-4 sm:px-8 py-5">
-        <div className="max-w-[1280px] mx-auto space-y-6">
+      <main className="flex-1 w-full pb-20 px-4 sm:px-6 md:px-8 xl:px-12 py-5">
+        <div className="w-full max-w-[1600px] mx-auto space-y-6">
           {/* Breadcrumbs & Section Title */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
