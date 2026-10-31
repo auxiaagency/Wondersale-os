@@ -1,0 +1,745 @@
+<!doctype html>
+
+<html class="light" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Wondersale - My Account</title>
+    <!-- Material Symbols Outlined font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Inter font -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <!-- Tailwind Play CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <!-- Theme Configuration -->
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-high": "#e8e8e8",
+              "primary-fixed-dim": "#ffb3ad",
+              "secondary-fixed": "#ffdad7",
+              "on-secondary-fixed": "#410004",
+              background: "#f9f9f9",
+              tertiary: "#5f5456",
+              "on-primary-container": "#fff0ee",
+              "primary-container": "#d91e2a",
+              outline: "#916f6c",
+              "on-tertiary-fixed-variant": "#4f4446",
+              "on-error-container": "#93000a",
+              "on-primary-fixed-variant": "#930013",
+              "tertiary-fixed": "#efdfe1",
+              "inverse-on-surface": "#f0f1f1",
+              "surface-variant": "#e2e2e2",
+              "on-tertiary": "#ffffff",
+              "error-container": "#ffdad6",
+              "secondary-fixed-dim": "#ffb3ad",
+              "surface-container-highest": "#e2e2e2",
+              "surface-tint": "#c0001c",
+              "on-tertiary-container": "#fff0f1",
+              "on-secondary-fixed-variant": "#930013",
+              surface: "#f9f9f9",
+              "surface-container-lowest": "#ffffff",
+              "primary-fixed": "#ffdad7",
+              "secondary-container": "#d93537",
+              "on-surface": "#1a1c1c",
+              "inverse-primary": "#ffb3ad",
+              "surface-bright": "#f9f9f9",
+              "on-secondary-container": "#fffbff",
+              "on-primary": "#ffffff",
+              "tertiary-container": "#786c6e",
+              "on-surface-variant": "#5c3f3d",
+              "inverse-surface": "#2f3131",
+              "outline-variant": "#e6bdb9",
+              "surface-container-low": "#f3f3f4",
+              "on-secondary": "#ffffff",
+              "on-primary-fixed": "#410004",
+              error: "#ba1a1a",
+              "surface-dim": "#dadada",
+              secondary: "#b61822",
+              "on-background": "#1a1c1c",
+              "on-tertiary-fixed": "#22191b",
+              "tertiary-fixed-dim": "#d2c3c5",
+              "surface-container": "#eeeeee",
+              primary: "#b10019",
+              "on-error": "#ffffff",
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+            fontFamily: {
+              headline: ["Inter", "sans-serif"],
+              display: ["Inter", "sans-serif"],
+              body: ["Inter", "sans-serif"],
+              label: ["Inter", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings:
+          "FILL" 0,
+          "wght" 400,
+          "GRAD" 0,
+          "opsz" 24;
+        font-size: 22px;
+        line-height: 1;
+        display: inline-block;
+        vertical-align: middle;
+      }
+      .material-symbols-fill {
+        font-variation-settings:
+          "FILL" 1,
+          "wght" 500,
+          "GRAD" 0,
+          "opsz" 24;
+      }
+      body {
+        -webkit-tap-highlight-color: transparent;
+        font-family: "Inter", sans-serif;
+      }
+    </style>
+    <style>
+      body {
+        min-height: max(884px, 100dvh);
+      }
+    </style>
+  </head>
+  <body
+    class="bg-[#f0f1f3] text-on-surface antialiased min-h-screen flex justify-center selection:bg-primary selection:text-white"
+  >
+    <!-- Mobile Viewport Container: Max 390px -->
+    <div
+      class="w-full max-w-[390px] min-h-screen bg-background relative flex flex-col pb-24 shadow-2xl"
+    >
+      <!-- 1. Top Bar Header (Matches Shared TopAppBar Component Guidance) -->
+      <header class="flex flex-col w-full px-4 pt-3 pb-2 sticky top-0 z-40 bg-surface shadow-sm">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary text-2xl" data-icon="storefront"
+              >storefront</span
+            >
+            <span class="font-display font-black tracking-tight text-xl text-primary"
+              >Wondersale</span
+            >
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- Notification Bell with Unread Badge '2' -->
+            <button
+              aria-label="Notifications"
+              class="relative p-2 rounded-full hover:bg-surface-container active:scale-95 transition-transform duration-150 text-on-surface-variant"
+            >
+              <span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+              <span
+                class="absolute top-1.5 right-1.5 flex h-4 min-w-[1rem] px-1 items-center justify-center rounded-full bg-primary-container text-[10px] font-bold text-on-primary-container leading-none"
+                >2</span
+              >
+            </button>
+            <!-- Settings Icon -->
+            <button
+              aria-label="Settings"
+              class="p-2 rounded-full hover:bg-surface-container active:scale-95 transition-transform duration-150 text-on-surface-variant"
+            >
+              <span class="material-symbols-outlined" data-icon="settings">settings</span>
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <h1 class="font-headline font-bold text-lg text-on-surface tracking-tight">My Account</h1>
+          <div
+            class="flex items-center gap-1 text-[11px] font-medium text-tertiary bg-surface-container px-2 py-0.5 rounded-full"
+          >
+            <span class="material-symbols-outlined text-xs text-primary" data-icon="location_on"
+              >location_on</span
+            >
+            <span>Bhopal, MP</span>
+          </div>
+        </div>
+      </header>
+      <!-- Main Content Stream -->
+      <main class="flex-1 px-3.5 pt-3 space-y-3.5">
+        <!-- 2. User Profile Summary Card -->
+        <section
+          class="bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-container relative overflow-hidden"
+        >
+          <div
+            class="absolute -right-10 -top-10 w-32 h-32 bg-primary/5 rounded-full blur-xl pointer-events-none"
+          ></div>
+          <div class="flex items-start gap-3.5">
+            <!-- User Avatar with Green Verified Badge -->
+            <div class="relative shrink-0">
+              <img
+                class="w-16 h-16 rounded-full object-cover ring-2 ring-primary/20 shadow-sm"
+                data-alt="Close up professional portrait of a confident modern young Indian man in Bhopal wearing a stylish smart-casual collar shirt, warm natural ambient lighting with clean minimalist studio backdrop, high realism photographic quality, rich contrast with subtle warm undertones."
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsZi4PZS1HSkGmE41wdpZtMHsVJdg2n1lycSBmy9QM0EopCfu-H66I1orXa-qSH_KnHrIOEumLRYR6SOWBputXccrCGlUrcf_XvoS-dU-4hzTUHq1HR_KW2i05QPqD01VhiQu7yOUTCdi8Dim9_mc_V9HZlN00vCG6mMmqpZywWNMn57FHWRTplUxI707aVIVsdV_Lj1Sk_FbsBzUCOOiuPC5lK4tVqQejmgKD1jK5jR2pxE9C3rwJQdWY5RzQ3iin9f-4XcUC0Q"
+              />
+              <div
+                class="absolute bottom-0 right-0 bg-[#16a34a] text-white p-0.5 rounded-full ring-2 ring-white flex items-center justify-center"
+              >
+                <span class="material-symbols-outlined text-[13px] leading-none" data-icon="check"
+                  >check</span
+                >
+              </div>
+            </div>
+            <!-- Name & Details -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <h2 class="font-headline font-bold text-base text-on-surface truncate">
+                  Rohit Verma
+                </h2>
+                <button
+                  class="text-xs font-semibold text-primary hover:underline flex items-center gap-0.5"
+                >
+                  Edit
+                  <span class="material-symbols-outlined text-sm" data-icon="edit">edit</span>
+                </button>
+              </div>
+              <div
+                class="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 bg-sky-50 text-sky-800 rounded-md text-[11px] font-semibold"
+              >
+                <span
+                  class="material-symbols-outlined text-[13px] text-sky-600 material-symbols-fill"
+                  data-icon="verified"
+                  >verified</span
+                >
+                <span>Verified Bhopal Member</span>
+              </div>
+              <div class="mt-2 text-xs text-tertiary space-y-0.5 font-normal">
+                <div class="flex items-center gap-1.5 truncate">
+                  <span class="material-symbols-outlined text-sm text-outline" data-icon="call"
+                    >call</span
+                  >
+                  <span>+91 98260 12345</span>
+                </div>
+                <div class="flex items-center gap-1.5 truncate">
+                  <span class="material-symbols-outlined text-sm text-outline" data-icon="mail"
+                    >mail</span
+                  >
+                  <span class="truncate">rohit.verma@example.com</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Loyalty / Club Tier Progress -->
+          <div
+            class="mt-4 pt-3 border-t border-surface-container-high bg-gradient-to-r from-amber-50/60 via-surface-container-lowest to-surface-container-low rounded-lg p-3"
+          >
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center gap-1.5">
+                <span class="text-amber-500 font-bold text-sm">⭐</span>
+                <span class="text-xs font-bold text-on-surface tracking-tight"
+                  >Wondersale Club Gold</span
+                >
+              </div>
+              <span
+                class="text-[11px] font-semibold text-primary bg-primary-fixed/40 px-2 py-0.5 rounded-full"
+                >Saved ₹4,290</span
+              >
+            </div>
+            <div class="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+              <div
+                class="bg-gradient-to-r from-amber-500 to-primary-container h-full rounded-full"
+                style="width: 72%"
+              ></div>
+            </div>
+            <div class="flex justify-between items-center mt-1.5 text-[10px] text-tertiary">
+              <span>₹5,710 spent in 2024</span>
+              <span class="font-medium text-on-surface"
+                >₹2,290 away from <strong>Platinum Tier</strong></span
+              >
+            </div>
+          </div>
+        </section>
+        <!-- 3. Quick Action Hub (2x2 Glass / Bento Grid) -->
+        <section class="grid grid-cols-2 gap-2.5">
+          <!-- Orders Card -->
+          <div
+            class="bg-surface-container-lowest p-3 rounded-lg border border-surface-container shadow-sm flex flex-col justify-between active:scale-98 transition-transform cursor-pointer"
+          >
+            <div class="flex items-center justify-between">
+              <div
+                class="w-8 h-8 rounded-lg bg-primary-fixed/50 flex items-center justify-center text-primary"
+              >
+                <span class="material-symbols-outlined text-lg" data-icon="shopping_bag"
+                  >shopping_bag</span
+                >
+              </div>
+              <span
+                class="bg-primary-container text-on-primary-container text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse"
+              >
+                1 In Transit
+              </span>
+            </div>
+            <div class="mt-2.5">
+              <div class="font-bold text-xs text-on-surface">My Orders</div>
+              <div class="text-[11px] text-tertiary">Track shipments &amp; history</div>
+            </div>
+          </div>
+          <!-- Wishlist Card -->
+          <div
+            class="bg-surface-container-lowest p-3 rounded-lg border border-surface-container shadow-sm flex flex-col justify-between active:scale-98 transition-transform cursor-pointer"
+          >
+            <div class="flex items-center justify-between">
+              <div
+                class="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center text-rose-600"
+              >
+                <span class="material-symbols-outlined text-lg" data-icon="favorite">favorite</span>
+              </div>
+              <span
+                class="text-xs font-bold text-tertiary bg-surface-container px-2 py-0.5 rounded-full"
+              >
+                4 items
+              </span>
+            </div>
+            <div class="mt-2.5">
+              <div class="font-bold text-xs text-on-surface">Wishlist</div>
+              <div class="text-[11px] text-tertiary">Saved for later</div>
+            </div>
+          </div>
+          <!-- Addresses Card -->
+          <div
+            class="bg-surface-container-lowest p-3 rounded-lg border border-surface-container shadow-sm flex flex-col justify-between active:scale-98 transition-transform cursor-pointer"
+          >
+            <div class="flex items-center justify-between">
+              <div
+                class="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600"
+              >
+                <span class="material-symbols-outlined text-lg" data-icon="pin_drop">pin_drop</span>
+              </div>
+              <span
+                class="text-[10px] font-semibold text-tertiary bg-surface-container px-1.5 py-0.5 rounded"
+              >
+                Default
+              </span>
+            </div>
+            <div class="mt-2.5">
+              <div class="font-bold text-xs text-on-surface truncate">E-7 Arera Colony</div>
+              <div class="text-[11px] text-tertiary">Home &amp; 1 other address</div>
+            </div>
+          </div>
+          <!-- Wallet / Coupons Card -->
+          <div
+            class="bg-surface-container-lowest p-3 rounded-lg border border-surface-container shadow-sm flex flex-col justify-between active:scale-98 transition-transform cursor-pointer"
+          >
+            <div class="flex items-center justify-between">
+              <div
+                class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700"
+              >
+                <span class="material-symbols-outlined text-lg" data-icon="account_balance_wallet"
+                  >account_balance_wallet</span
+                >
+              </div>
+              <span
+                class="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.5 rounded"
+              >
+                3 Coupons
+              </span>
+            </div>
+            <div class="mt-2.5">
+              <div class="font-bold text-xs text-on-surface">₹350 Credits</div>
+              <div class="text-[11px] text-tertiary">Wondersale Pay Balance</div>
+            </div>
+          </div>
+        </section>
+        <!-- 4. Active In-Transit Order Card (Highlighted Priority Card) -->
+        <section
+          class="bg-gradient-to-br from-surface-container-lowest to-surface-container-low rounded-xl p-3.5 border-2 border-primary/20 shadow-sm relative"
+        >
+          <div
+            class="flex items-center justify-between pb-2 border-b border-surface-container-high"
+          >
+            <div class="flex items-center gap-1.5">
+              <span class="flex h-2.5 w-2.5 relative">
+                <span
+                  class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"
+                ></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+              </span>
+              <span class="font-bold text-xs text-on-surface tracking-tight">Active Delivery</span>
+              <span class="text-[11px] font-medium text-tertiary">#WS-BHP-8921</span>
+            </div>
+            <span
+              class="text-[10px] font-bold text-primary bg-primary-fixed/40 px-2 py-0.5 rounded-full flex items-center gap-0.5"
+            >
+              <span class="material-symbols-outlined text-xs" data-icon="bolt">bolt</span> 2-Hr
+              Express
+            </span>
+          </div>
+          <!-- Thumbnails and items description -->
+          <div class="flex items-center gap-3 py-3">
+            <div class="flex -space-x-2 shrink-0">
+              <img
+                class="w-12 h-12 rounded-lg object-cover border-2 border-surface-container-lowest shadow-sm bg-white"
+                data-alt="Polished stainless steel pressure cooker appliance 5 litre capacity photographed on modern clean marble surface with bright clean studio lighting and soft reflections, high-end consumer kitchenware product photography."
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLyAIT7s0Rps5bKYaEt2IZ6FQHIdXduuWzuOz1Sd9SEohWLkCHFTTJUPCt9e2nEMp_QEbZ4nIHRNzwrL6n_XWUJ-clncnHpikxDpDptcL0wVEZQv8QRZJlaIpVq-76F-_lST6dCtaZmQWDRl6GtWparav8zLW0Hx3LN9bLH1ARRFk6YEWMMTn1SZj-J6iK5XVutSULjh83LT5CUIdLju4qv6whuZmNzy4NG8uYIhtGoSZHo91fLDygwF2lmYS9awpqMveVpI3W-g"
+              />
+              <img
+                class="w-12 h-12 rounded-lg object-cover border-2 border-surface-container-lowest shadow-sm bg-white"
+                data-alt="Modern cordless electric water kettle brushed steel finish placed in bright minimalist home kitchen setting with subtle clean light reflections, ultra sharp commercial product photography."
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsHPSvYYG-_ZmT85jpnWSsfTeHWtKacoNBe8637qifYhBVU0ua_FT-HVsV2G4hln_GKpaqcT9O2gh0Bt-Fw1UiRRYt8N2eDMwpXmawnXADXMqog9GBfWB96ndRfzj2r8bMXa1kB88HAwCzsdr5TuOHCFdbNLhY-6WAXQozBfVb7nUrsi8EjpDzIyt3DyuFwRzc31HME_aqCGj6WGHEKOld7u17PO_PH0p76VM9O57y8B29FCJSXKJIpynKnZiAmuaFkre7veoppw"
+              />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-semibold text-on-surface truncate">
+                Prestige 5L Cooker + Bajaj Electric Kettle
+              </p>
+              <p class="text-[11px] text-primary font-bold flex items-center gap-1 mt-0.5">
+                <span>Expected Today by 4:30 PM</span>
+              </p>
+              <p class="text-[10px] text-tertiary truncate">
+                Packed at Bhopal Warehouse Hub (Govindpura)
+              </p>
+            </div>
+          </div>
+          <!-- Delivery Steps Progress Bar -->
+          <div class="py-1">
+            <div class="relative flex items-center justify-between text-center">
+              <!-- connecting bar -->
+              <div
+                class="absolute left-3 right-3 top-2.5 -translate-y-1/2 h-1 bg-surface-container z-0"
+              >
+                <div class="h-full bg-primary rounded-full" style="width: 50%"></div>
+              </div>
+              <!-- Step 1: Confirmed -->
+              <div class="relative z-10 flex flex-col items-center">
+                <div
+                  class="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-bold shadow-xs"
+                >
+                  <span class="material-symbols-outlined text-xs" data-icon="check">check</span>
+                </div>
+                <span class="text-[9px] font-semibold text-on-surface mt-1">Confirmed</span>
+              </div>
+              <!-- Step 2: Packed -->
+              <div class="relative z-10 flex flex-col items-center">
+                <div
+                  class="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-[10px] font-bold ring-2 ring-primary-fixed ring-offset-1"
+                >
+                  <span class="material-symbols-outlined text-xs" data-icon="inventory_2"
+                    >inventory_2</span
+                  >
+                </div>
+                <span class="text-[9px] font-bold text-primary mt-1">Packed</span>
+              </div>
+              <!-- Step 3: Out for Delivery -->
+              <div class="relative z-10 flex flex-col items-center">
+                <div
+                  class="w-5 h-5 rounded-full bg-surface-container-high text-tertiary flex items-center justify-center text-[10px] font-medium"
+                >
+                  <span class="material-symbols-outlined text-xs" data-icon="local_shipping"
+                    >local_shipping</span
+                  >
+                </div>
+                <span class="text-[9px] font-medium text-tertiary mt-1">On the way</span>
+              </div>
+              <!-- Step 4: Delivered -->
+              <div class="relative z-10 flex flex-col items-center">
+                <div
+                  class="w-5 h-5 rounded-full bg-surface-container-high text-tertiary flex items-center justify-center text-[10px] font-medium"
+                >
+                  <span class="material-symbols-outlined text-xs" data-icon="home">home</span>
+                </div>
+                <span class="text-[9px] font-medium text-tertiary mt-1">Delivered</span>
+              </div>
+            </div>
+          </div>
+          <!-- Tracking CTA Buttons -->
+          <div class="flex items-center gap-2 mt-3 pt-2.5 border-t border-surface-container">
+            <button
+              class="flex-1 bg-primary text-on-primary py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all"
+            >
+              <span>Track Live Delivery</span>
+              <span class="material-symbols-outlined text-sm" data-icon="arrow_forward"
+                >arrow_forward</span
+              >
+            </button>
+            <button
+              class="px-3 py-2 border border-surface-container-high text-on-surface font-semibold text-xs rounded-lg hover:bg-surface-container active:scale-95 transition-all"
+            >
+              View Details
+            </button>
+          </div>
+        </section>
+        <!-- 5. Bhopal Store & Member Perks (Local City Specific Card) -->
+        <section
+          class="bg-surface-container-lowest rounded-xl p-3.5 border border-surface-container shadow-sm"
+        >
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-2">
+              <div
+                class="w-7 h-7 rounded-md bg-red-50 flex items-center justify-center text-primary"
+              >
+                <span class="material-symbols-outlined text-base" data-icon="apartment"
+                  >apartment</span
+                >
+              </div>
+              <div>
+                <h3 class="font-bold text-xs text-on-surface">Bhopal Retail Member Desk</h3>
+                <p class="text-[10px] text-tertiary">Zone MP-462001 Exclusive Privileges</p>
+              </div>
+            </div>
+            <span
+              class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded"
+              >Store Open</span
+            >
+          </div>
+          <div
+            class="mt-3 bg-surface-container-low rounded-lg p-2.5 text-xs text-on-surface space-y-2"
+          >
+            <div class="flex items-center gap-2 text-[11px]">
+              <span
+                class="material-symbols-outlined text-primary text-sm shrink-0"
+                data-icon="electric_moped"
+                >electric_moped</span
+              >
+              <span
+                >Free <strong>2-Hour Express Delivery</strong> across Arera Colony &amp; MP
+                Nagar</span
+              >
+            </div>
+            <div class="flex items-center gap-2 text-[11px]">
+              <span
+                class="material-symbols-outlined text-primary text-sm shrink-0"
+                data-icon="redeem"
+                >redeem</span
+              >
+              <span
+                >Show this profile at <strong>Chetak Bridge Superstore</strong> for 5% in-store
+                credit</span
+              >
+            </div>
+          </div>
+        </section>
+        <!-- 6. Account Settings & Preferences List -->
+        <section
+          class="bg-surface-container-lowest rounded-xl border border-surface-container shadow-sm overflow-hidden divide-y divide-surface-container"
+        >
+          <!-- Saved Addresses -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="#addresses"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline" data-icon="home_pin"
+                >home_pin</span
+              >
+              <div>
+                <div class="text-xs font-semibold text-on-surface">Saved Addresses</div>
+                <div class="text-[10px] text-tertiary">
+                  2 Addresses: E-7 Arera Colony &amp; MP Nagar Office
+                </div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+          <!-- Payment Methods & Saved UPI -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="#payments"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline" data-icon="credit_card"
+                >credit_card</span
+              >
+              <div>
+                <div class="text-xs font-semibold text-on-surface">Payment Methods &amp; UPI</div>
+                <div class="text-[10px] text-tertiary">
+                  PhonePe, Google Pay &amp; 1 HDFC Card saved
+                </div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+          <!-- Superstore Rewards Pass -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="#rewards"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary" data-icon="loyalty"
+                >loyalty</span
+              >
+              <div>
+                <div class="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+                  <span>Wondersale Pass &amp; Rewards</span>
+                  <span
+                    class="bg-primary-fixed text-primary text-[9px] font-bold px-1.5 py-0.2 rounded"
+                    >Gold</span
+                  >
+                </div>
+                <div class="text-[10px] text-tertiary">Tier benefits &amp; cashbacks</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+          <!-- App Language -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="#language"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline" data-icon="translate"
+                >translate</span
+              >
+              <div>
+                <div class="text-xs font-semibold text-on-surface">App Language</div>
+                <div class="text-[10px] text-tertiary">English (हिंदी / Hindi available)</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+          <!-- Bhopal Store Timings -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="#store-info"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline" data-icon="schedule"
+                >schedule</span
+              >
+              <div>
+                <div class="text-xs font-semibold text-on-surface">Bhopal Superstore Timings</div>
+                <div class="text-[10px] text-tertiary">MP Nagar Branch: 9:00 AM - 10:00 PM</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+          <!-- Help & Support -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="tel:07554209999"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline" data-icon="support_agent"
+                >support_agent</span
+              >
+              <div>
+                <div class="text-xs font-semibold text-on-surface">Help &amp; 24/7 Support</div>
+                <div class="text-[10px] text-tertiary">Call Bhopal Helpdesk: 0755-4209999</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+          <!-- Terms & Privacy -->
+          <a
+            class="flex items-center justify-between p-3.5 hover:bg-surface-container active:bg-surface-container-high transition-colors"
+            href="#legal"
+          >
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-outline" data-icon="policy">policy</span>
+              <div>
+                <div class="text-xs font-semibold text-on-surface">
+                  Terms of Service &amp; Privacy
+                </div>
+                <div class="text-[10px] text-tertiary">Policies and legal compliance</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-tertiary text-sm" data-icon="chevron_right"
+              >chevron_right</span
+            >
+          </a>
+        </section>
+        <!-- Log Out Action Button -->
+        <div class="pt-1 pb-4">
+          <button
+            class="w-full py-2.5 px-4 rounded-lg border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 active:scale-98 transition-all font-semibold text-xs flex items-center justify-center gap-2"
+          >
+            <span class="material-symbols-outlined text-base" data-icon="logout">logout</span>
+            <span>Log Out from Account</span>
+          </button>
+          <p class="text-center text-[10px] text-tertiary mt-2">
+            Wondersale Bhopal v4.8.2 • Built with ❤️ for Madhya Pradesh
+          </p>
+        </div>
+      </main>
+      <!-- 7. Bottom Navigation Bar (Directly executed from Shared Components JSON) -->
+      <!-- Shell rule: Destination count 5: Home, Categories, Offers, Cart, Account (Active) -->
+      <nav
+        aria-label="Bottom Navigation"
+        class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-2 max-w-[390px] mx-auto inset-x-0 bg-surface-container-lowest shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+      >
+        <!-- Tab 1: Home (Inactive) -->
+        <button
+          aria-label="Home"
+          class="flex flex-col items-center justify-center text-on-surface-variant font-medium hover:text-primary active:scale-90 transition-all duration-150 py-1 px-2"
+        >
+          <span class="material-symbols-outlined" data-icon="home">home</span>
+          <span class="font-label text-[11px] font-medium mt-0.5">Home</span>
+        </button>
+        <!-- Tab 2: Categories (Inactive) -->
+        <button
+          aria-label="Categories"
+          class="flex flex-col items-center justify-center text-on-surface-variant font-medium hover:text-primary active:scale-90 transition-all duration-150 py-1 px-2"
+        >
+          <span class="material-symbols-outlined" data-icon="grid_view">grid_view</span>
+          <span class="font-label text-[11px] font-medium mt-0.5">Categories</span>
+        </button>
+        <!-- Tab 3: Offers (Inactive) -->
+        <button
+          aria-label="Offers"
+          class="flex flex-col items-center justify-center text-on-surface-variant font-medium hover:text-primary active:scale-90 transition-all duration-150 py-1 px-2"
+        >
+          <span class="material-symbols-outlined" data-icon="local_offer">local_offer</span>
+          <span class="font-label text-[11px] font-medium mt-0.5">Offers</span>
+        </button>
+        <!-- Tab 4: Cart (Inactive with Badge) -->
+        <button
+          aria-label="Cart"
+          class="relative flex flex-col items-center justify-center text-on-surface-variant font-medium hover:text-primary active:scale-90 transition-all duration-150 py-1 px-2"
+        >
+          <div class="relative">
+            <span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+            <span
+              class="absolute -top-1.5 -right-2 bg-primary text-white text-[9px] font-bold rounded-full h-4 w-4 flex items-center justify-center ring-1 ring-white"
+              >3</span
+            >
+          </div>
+          <span class="font-label text-[11px] font-medium mt-0.5">Cart</span>
+        </button>
+        <!-- Tab 5: Account (ACTIVE MATCH - Exactly style_active_navigation) -->
+        <button
+          aria-current="page"
+          aria-label="Account"
+          class="flex flex-col items-center justify-center text-primary font-bold active:scale-90 transition-all duration-150 py-1 px-2"
+        >
+          <span
+            class="material-symbols-outlined material-symbols-fill text-primary"
+            data-icon="person"
+            >person</span
+          >
+          <span class="font-label text-[11px] font-bold mt-0.5 text-primary">Account</span>
+        </button>
+      </nav>
+    </div>
+  </body>
+</html>

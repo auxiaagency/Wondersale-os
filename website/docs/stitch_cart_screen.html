@@ -1,0 +1,742 @@
+<!doctype html>
+
+<html class="light" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Shopping Cart - Wondersale Bhopal</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-tertiary": "#ffffff",
+              tertiary: "#5f5456",
+              "on-secondary-fixed": "#410004",
+              "on-error-container": "#93000a",
+              background: "#f9f9f9",
+              "tertiary-container": "#786c6e",
+              "secondary-fixed": "#ffdad7",
+              "secondary-container": "#d93537",
+              "on-tertiary-fixed-variant": "#4f4446",
+              "surface-variant": "#e2e2e2",
+              "inverse-surface": "#2f3131",
+              outline: "#916f6c",
+              "on-primary": "#ffffff",
+              "on-primary-container": "#fff0ee",
+              "on-background": "#1a1c1c",
+              "primary-fixed": "#ffdad7",
+              "outline-variant": "#e6bdb9",
+              "secondary-fixed-dim": "#ffb3ad",
+              "on-error": "#ffffff",
+              "tertiary-fixed": "#efdfe1",
+              "primary-fixed-dim": "#ffb3ad",
+              "on-tertiary-container": "#fff0f1",
+              "surface-container-low": "#f3f3f4",
+              "on-secondary-container": "#fffbff",
+              "on-secondary": "#ffffff",
+              error: "#ba1a1a",
+              "surface-container-highest": "#e2e2e2",
+              "surface-container-high": "#e8e8e8",
+              "surface-container-lowest": "#ffffff",
+              "surface-bright": "#f9f9f9",
+              "on-primary-fixed": "#410004",
+              secondary: "#b61822",
+              "inverse-primary": "#ffb3ad",
+              "tertiary-fixed-dim": "#d2c3c5",
+              "surface-tint": "#c0001c",
+              primary: "#b10019",
+              "surface-container": "#eeeeee",
+              surface: "#f9f9f9",
+              "on-surface-variant": "#5c3f3d",
+              "on-secondary-fixed-variant": "#930013",
+              "on-primary-fixed-variant": "#930013",
+              "surface-dim": "#dadada",
+              "error-container": "#ffdad6",
+              "on-surface": "#1a1c1c",
+              "primary-container": "#d91e2a",
+              "inverse-on-surface": "#f0f1f1",
+              "on-tertiary-fixed": "#22191b",
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
+            },
+            fontFamily: {
+              headline: ["Inter"],
+              display: ["Inter"],
+              body: ["Inter"],
+              label: ["Inter"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings:
+          "FILL" 0,
+          "wght" 400,
+          "GRAD" 0,
+          "opsz" 24;
+        line-height: 1;
+      }
+      .material-symbols-outlined.fill {
+        font-variation-settings:
+          "FILL" 1,
+          "wght" 400,
+          "GRAD" 0,
+          "opsz" 24;
+      }
+    </style>
+    <style>
+      body {
+        min-height: max(884px, 100dvh);
+      }
+    </style>
+  </head>
+  <body class="bg-surface font-body text-on-surface antialiased min-h-screen pb-36">
+    <!-- Main Mobile App Shell Canvas (Target 390px, responsive centered) -->
+    <main class="w-full max-w-md mx-auto bg-surface min-h-screen relative shadow-2xl">
+      <!-- 1. Top Bar Header & Bhopal Location Header -->
+      <header class="sticky top-0 z-40 bg-surface-container-lowest shadow-sm">
+        <div class="px-4 py-3 flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <button
+              aria-label="Go back"
+              class="p-1 rounded-full hover:bg-surface-container transition-transform active:scale-95 text-on-surface"
+              type="button"
+            >
+              <span class="material-symbols-outlined text-2xl">arrow_back</span>
+            </button>
+            <div>
+              <h1 class="font-headline font-bold text-base text-on-surface leading-tight">
+                Shopping Cart (2 items)
+              </h1>
+              <p class="font-label text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+                <span>Wondersale Retail Bhopal</span>
+                <span class="inline-block w-1 h-1 rounded-full bg-primary-container"></span>
+                <span class="text-primary font-semibold">Express Hub</span>
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button
+              aria-label="Saved wishlist"
+              class="p-2 rounded-full hover:bg-surface-container transition-transform active:scale-90 text-on-surface-variant"
+              type="button"
+            >
+              <span class="material-symbols-outlined">favorite</span>
+            </button>
+            <button
+              aria-label="Store details"
+              class="p-2 rounded-full hover:bg-surface-container transition-transform active:scale-90 text-on-surface-variant"
+              type="button"
+            >
+              <span class="material-symbols-outlined">storefront</span>
+            </button>
+          </div>
+        </div>
+        <!-- Delivery Location Banner Chip -->
+        <div class="px-4 pb-2.5 pt-0.5">
+          <div
+            class="bg-surface-container-low rounded-lg px-3 py-1.5 flex items-center justify-between"
+          >
+            <div class="flex items-center space-x-2 overflow-hidden">
+              <span class="material-symbols-outlined text-primary text-[18px]">location_on</span>
+              <div class="truncate text-xs">
+                <span class="text-on-surface-variant">Deliver to: </span>
+                <strong class="font-semibold text-on-surface">Bhopal 462001 (Arera Colony)</strong>
+              </div>
+            </div>
+            <button
+              class="text-xs text-primary font-semibold flex items-center gap-0.5 ml-2 shrink-0 active:scale-95"
+              type="button"
+            >
+              Change
+              <span class="material-symbols-outlined text-[14px]">chevron_right</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <!-- Scrollable Content Stack -->
+      <div class="px-3.5 pt-3 space-y-3.5">
+        <!-- 2. Free Delivery Milestone Progress Banner -->
+        <section
+          class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container-high relative overflow-hidden"
+        >
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <div class="flex items-center space-x-2">
+              <div
+                class="w-8 h-8 rounded-lg bg-primary-fixed flex items-center justify-center shrink-0"
+              >
+                <span class="material-symbols-outlined text-primary text-xl">bolt</span>
+              </div>
+              <div>
+                <p class="font-headline text-xs font-bold text-on-surface">
+                  Add <span class="text-primary font-extrabold">₹301</span> more for
+                  <span class="text-primary">FREE Express 2-Hr Delivery</span>
+                </p>
+                <p class="font-label text-[11px] text-on-surface-variant">
+                  Instant delivery straight to Arera Colony &amp; MP Nagar
+                </p>
+              </div>
+            </div>
+            <span
+              class="text-[11px] font-bold text-primary bg-primary-fixed px-2 py-0.5 rounded-full shrink-0"
+            >
+              85% Reached
+            </span>
+          </div>
+          <!-- Visual Milestone Progress Bar -->
+          <div class="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+            <div
+              class="bg-primary-container h-full rounded-full transition-all duration-500 ease-out"
+              style="width: 85%"
+            ></div>
+          </div>
+          <div
+            class="flex justify-between items-center text-[10px] text-tertiary mt-1.5 font-medium"
+          >
+            <span>Current: ₹2,898</span>
+            <span class="flex items-center gap-0.5">Target: ₹3,200 for 0-fee priority</span>
+          </div>
+        </section>
+        <!-- 3. Cart Items Section -->
+        <section aria-label="Shopping Cart Products" class="space-y-3">
+          <!-- Cart Item Card 1: Prestige Cooker -->
+          <article
+            class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container-high"
+          >
+            <div class="flex gap-3">
+              <!-- Product Thumbnail Image -->
+              <div
+                class="relative w-24 h-24 rounded-lg bg-surface-container-low shrink-0 overflow-hidden flex items-center justify-center p-1"
+              >
+                <img
+                  class="w-full h-full object-cover rounded-lg"
+                  data-alt="A modern stainless steel 5 liter pressure cooker product studio photograph with polished metallic sheen, clean reflection, resting on an immaculate warm white kitchen pedestal with subtle red accent lighting conforming to contemporary e-commerce retail aesthetics."
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwD9TPlEtuCmhz0cV6XwCoydv46QKplJ3rYrlOAHZjnEPJCL56XR7xRcRHKeAUIYqbIyOnWXh6ECTTd_wJJ_UarOzAR1mK0z50bkbDbLIkzEAoDXQZc-hV4QwuA5NCvr1Ob5a3IH_zY4uEAQ4hnK527Ydz5sDb_91kIA6Aj5ywjpN43zgArNRJs8C_UgGJxzToPz9FqYxomTOG35fu5bblv6wgnRbCqlffJI6u4AKAW01tusb4f5g_ld16V-trax0R9UJo3gyXlw"
+                />
+                <span
+                  class="absolute top-1 left-1 bg-surface-container-lowest/90 backdrop-blur-sm text-[9px] font-bold px-1.5 py-0.5 rounded text-primary"
+                >
+                  36% OFF
+                </span>
+              </div>
+              <!-- Product Specs & Title -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-1">
+                  <h2
+                    class="font-headline text-xs font-semibold text-on-surface leading-snug line-clamp-2"
+                  >
+                    Prestige Svachh Deluxe Alpha Stainless Steel 5L Pressure Cooker
+                  </h2>
+                  <button
+                    aria-label="Remove item"
+                    class="text-on-surface-variant hover:text-error active:scale-90 transition-transform p-1 -mr-1"
+                    type="button"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
+                </div>
+                <!-- Variant Chip -->
+                <div class="mt-1 flex items-center gap-2">
+                  <span
+                    class="inline-flex text-[10px] font-medium bg-surface-container px-2 py-0.5 rounded text-on-surface-variant"
+                  >
+                    Capacity: 5 Litre
+                  </span>
+                  <span class="text-[10px] text-tertiary">Alpha SS Base</span>
+                </div>
+                <!-- Price Row -->
+                <div class="mt-1.5 flex items-baseline gap-1.5">
+                  <span class="font-headline text-sm font-bold text-on-surface">₹2,199</span>
+                  <span class="text-[11px] text-outline line-through">₹3,450</span>
+                  <span class="text-[10px] font-bold text-primary">Save ₹1,251</span>
+                </div>
+                <!-- Local Badge -->
+                <div class="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-primary">
+                  <span class="material-symbols-outlined text-[13px] fill">bolt</span>
+                  <span>Bhopal 2-Hr Express Delivery Ready</span>
+                </div>
+              </div>
+            </div>
+            <!-- Bottom Action Row (Stepper & Wishlist) -->
+            <div
+              class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between"
+            >
+              <button
+                class="inline-flex items-center text-xs font-medium text-on-surface-variant hover:text-primary transition-colors active:scale-95"
+                type="button"
+              >
+                <span class="material-symbols-outlined text-[16px] mr-1">bookmark_add</span>
+                Move to Wishlist
+              </button>
+              <!-- Quantity Stepper -->
+              <div
+                class="flex items-center border border-surface-container-high rounded-lg bg-surface-container-lowest shadow-sm"
+              >
+                <button
+                  aria-label="Decrease quantity"
+                  class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container active:scale-90 rounded-l-lg transition-transform"
+                  type="button"
+                >
+                  <span class="material-symbols-outlined text-[16px]">remove</span>
+                </button>
+                <span class="w-8 text-center text-xs font-bold text-on-surface">1</span>
+                <button
+                  aria-label="Increase quantity"
+                  class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container active:scale-90 rounded-r-lg transition-transform"
+                  type="button"
+                >
+                  <span class="material-symbols-outlined text-[16px]">add</span>
+                </button>
+              </div>
+            </div>
+          </article>
+          <!-- Cart Item Card 2: Electric Kettle -->
+          <article
+            class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container-high"
+          >
+            <div class="flex gap-3">
+              <!-- Product Thumbnail Image -->
+              <div
+                class="relative w-24 h-24 rounded-lg bg-surface-container-low shrink-0 overflow-hidden flex items-center justify-center p-1"
+              >
+                <img
+                  class="w-full h-full object-cover rounded-lg"
+                  data-alt="Modern cordless stainless steel electric kettle with cool-touch handle standing in a bright minimalist setting, high quality product studio rendering highlighting brushed metal surface, pristine studio lighting with subtle warm tones in a clean e-commerce catalog style."
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUnC2gPMknviGbefVtlS-qfPN-Y-OhJjRVPmV6qirbZv7yCo83QljbyuKBsKnVqUys0guhWVKqyRgV3RkEVbR-UtEL8s4w6NvFYNT0i77Mf-vm05ovapZFdf25a2eQwlKW47bxipUyxT-fURExPAhJnIKxGVtZxbkSurhDFS3WIxJrZiW43hdyK4N7DFs0Cw3laQfDJPCG1acfxWS35Bf9yN4nUNkTdDWaC_spQDvIBwzWxKTbZ4DJJLEyCGo7Vxev03N7EDGowg"
+                />
+                <span
+                  class="absolute top-1 left-1 bg-surface-container-lowest/90 backdrop-blur-sm text-[9px] font-bold px-1.5 py-0.5 rounded text-primary"
+                >
+                  35% OFF
+                </span>
+              </div>
+              <!-- Product Specs & Title -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-1">
+                  <h2
+                    class="font-headline text-xs font-semibold text-on-surface leading-snug line-clamp-2"
+                  >
+                    Bajaj Majesty KKN 1.5L Cordless Electric Kettle (SS Body)
+                  </h2>
+                  <button
+                    aria-label="Remove item"
+                    class="text-on-surface-variant hover:text-error active:scale-90 transition-transform p-1 -mr-1"
+                    type="button"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">delete</span>
+                  </button>
+                </div>
+                <!-- Variant Chip -->
+                <div class="mt-1 flex items-center gap-2">
+                  <span
+                    class="inline-flex text-[10px] font-medium bg-surface-container px-2 py-0.5 rounded text-on-surface-variant"
+                  >
+                    Volume: 1.5 Litre
+                  </span>
+                  <span class="text-[10px] text-tertiary">Auto Cut-off</span>
+                </div>
+                <!-- Price Row -->
+                <div class="mt-1.5 flex items-baseline gap-1.5">
+                  <span class="font-headline text-sm font-bold text-on-surface">₹849</span>
+                  <span class="text-[11px] text-outline line-through">₹1,299</span>
+                  <span class="text-[10px] font-bold text-primary">Save ₹450</span>
+                </div>
+                <!-- Local Badge -->
+                <div
+                  class="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-secondary-container"
+                >
+                  <span class="material-symbols-outlined text-[13px] fill">location_on</span>
+                  <span>In Stock at MP Nagar Hub</span>
+                </div>
+              </div>
+            </div>
+            <!-- Bottom Action Row -->
+            <div
+              class="mt-3 pt-2.5 border-t border-surface-container flex items-center justify-between"
+            >
+              <button
+                class="inline-flex items-center text-xs font-medium text-on-surface-variant hover:text-primary transition-colors active:scale-95"
+                type="button"
+              >
+                <span class="material-symbols-outlined text-[16px] mr-1">bookmark_add</span>
+                Move to Wishlist
+              </button>
+              <!-- Quantity Stepper -->
+              <div
+                class="flex items-center border border-surface-container-high rounded-lg bg-surface-container-lowest shadow-sm"
+              >
+                <button
+                  aria-label="Decrease quantity"
+                  class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container active:scale-90 rounded-l-lg transition-transform"
+                  type="button"
+                >
+                  <span class="material-symbols-outlined text-[16px]">remove</span>
+                </button>
+                <span class="w-8 text-center text-xs font-bold text-on-surface">1</span>
+                <button
+                  aria-label="Increase quantity"
+                  class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container active:scale-90 rounded-r-lg transition-transform"
+                  type="button"
+                >
+                  <span class="material-symbols-outlined text-[16px]">add</span>
+                </button>
+              </div>
+            </div>
+          </article>
+        </section>
+        <!-- 4. Coupon & Promo Code Module -->
+        <section
+          class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container-high space-y-3"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-1.5">
+              <span class="material-symbols-outlined text-primary text-xl">loyalty</span>
+              <h3 class="font-headline text-xs font-bold text-on-surface uppercase tracking-wide">
+                Offers &amp; Coupons
+              </h3>
+            </div>
+            <span class="text-[11px] text-primary font-semibold">1 Applied</span>
+          </div>
+          <!-- Input Box & Apply Button -->
+          <div class="flex gap-2">
+            <div class="relative flex-1">
+              <span
+                class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-outline"
+              >
+                <span class="material-symbols-outlined text-lg">confirmation_number</span>
+              </span>
+              <input
+                class="w-full pl-9 pr-3 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg border border-surface-container-highest bg-surface-container-low text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:bg-surface-container-lowest"
+                placeholder="Enter coupon code"
+                type="text"
+                value="WONDER150"
+              />
+            </div>
+            <button
+              class="px-4 py-2 bg-secondary text-on-secondary text-xs font-bold rounded-lg shadow-sm active:scale-95 transition-transform hover:bg-primary"
+              type="button"
+            >
+              Apply
+            </button>
+          </div>
+          <!-- Active Applied Coupon Pill -->
+          <div
+            class="flex items-center justify-between bg-primary-fixed/40 border border-primary-fixed rounded-lg p-2.5"
+          >
+            <div class="flex items-center space-x-2">
+              <span class="material-symbols-outlined text-primary text-base fill"
+                >check_circle</span
+              >
+              <div>
+                <p class="text-xs font-bold text-on-primary-fixed leading-none">
+                  WONDER150 applied
+                </p>
+                <p class="text-[10px] text-on-surface-variant mt-0.5">
+                  ₹150 instant discount unlocked on this order
+                </p>
+              </div>
+            </div>
+            <button
+              class="text-xs font-bold text-primary hover:underline px-1 py-0.5"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <!-- Expandable More Coupons Link -->
+          <button
+            class="w-full flex items-center justify-between text-xs text-primary font-medium pt-1 hover:underline"
+            type="button"
+          >
+            <span class="flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">local_offer</span>
+              View 3 more coupons available for you
+            </span>
+            <span class="material-symbols-outlined text-[16px]">arrow_forward_ios</span>
+          </button>
+        </section>
+        <!-- 5. Bhopal Delivery Slot Selection Card -->
+        <section
+          class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container-high space-y-2.5"
+        >
+          <div class="flex items-center justify-between">
+            <h3 class="font-headline text-xs font-bold text-on-surface flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-primary text-lg">local_shipping</span>
+              Choose Delivery Preference (Bhopal 462001)
+            </h3>
+          </div>
+          <div class="space-y-2">
+            <!-- Option 1: Selected Express -->
+            <label
+              class="flex items-center justify-between p-2.5 rounded-lg border-2 border-primary-container bg-primary-fixed/20 cursor-pointer transition-all"
+            >
+              <div class="flex items-start space-x-2.5">
+                <input
+                  checked=""
+                  class="mt-0.5 text-primary focus:ring-primary"
+                  name="delivery_slot"
+                  type="radio"
+                />
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-on-surface"
+                      >Bhopal Express (Within 2 Hours)</span
+                    >
+                    <span
+                      class="text-[9px] font-extrabold bg-primary-container text-on-primary-container px-1.5 py-0.2 rounded"
+                      >FREE</span
+                    >
+                  </div>
+                  <p class="text-[11px] text-primary font-semibold mt-0.5">
+                    Guaranteed delivery by 4:30 PM today
+                  </p>
+                </div>
+              </div>
+              <span class="material-symbols-outlined text-primary text-xl">bolt</span>
+            </label>
+            <!-- Option 2: Today Evening -->
+            <label
+              class="flex items-center justify-between p-2.5 rounded-lg border border-surface-container-high bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors"
+            >
+              <div class="flex items-start space-x-2.5">
+                <input
+                  class="mt-0.5 text-primary focus:ring-primary"
+                  name="delivery_slot"
+                  type="radio"
+                />
+                <div>
+                  <p class="text-xs font-semibold text-on-surface">
+                    Today Evening (5:00 PM - 8:00 PM)
+                  </p>
+                  <p class="text-[11px] text-tertiary mt-0.5">Eco-friendly combined van delivery</p>
+                </div>
+              </div>
+              <span class="text-[11px] font-semibold text-tertiary">FREE</span>
+            </label>
+            <!-- Option 3: Tomorrow Morning -->
+            <label
+              class="flex items-center justify-between p-2.5 rounded-lg border border-surface-container-high bg-surface-container-lowest hover:bg-surface-container-low cursor-pointer transition-colors"
+            >
+              <div class="flex items-start space-x-2.5">
+                <input
+                  class="mt-0.5 text-primary focus:ring-primary"
+                  name="delivery_slot"
+                  type="radio"
+                />
+                <div>
+                  <p class="text-xs font-semibold text-on-surface">
+                    Tomorrow Morning (9:00 AM - 12:00 PM)
+                  </p>
+                  <p class="text-[11px] text-tertiary mt-0.5">Convenient morning drop-off</p>
+                </div>
+              </div>
+              <span class="text-[11px] font-semibold text-tertiary">FREE</span>
+            </label>
+          </div>
+        </section>
+        <!-- 6. Bill Details & Price Breakdown Card -->
+        <section
+          class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container-high space-y-2.5"
+        >
+          <h3
+            class="font-headline text-xs font-bold text-on-surface uppercase tracking-wide pb-1 border-b border-surface-container"
+          >
+            Bill Summary
+          </h3>
+          <div class="space-y-1.5 text-xs">
+            <div class="flex justify-between text-on-surface-variant">
+              <span>Items Total (MRP)</span>
+              <span class="font-medium text-on-surface">₹4,749</span>
+            </div>
+            <div class="flex justify-between text-on-surface-variant">
+              <span>Product Discount</span>
+              <span class="font-semibold text-primary">-₹1,701</span>
+            </div>
+            <div class="flex justify-between text-on-surface-variant">
+              <span class="flex items-center gap-1">
+                Coupon Discount (WONDER150)
+                <span class="material-symbols-outlined text-[13px] text-primary">verified</span>
+              </span>
+              <span class="font-semibold text-primary">-₹150</span>
+            </div>
+            <div class="flex justify-between text-on-surface-variant">
+              <span>Bhopal Express 2-Hr Delivery</span>
+              <div>
+                <span class="text-[10px] text-outline line-through mr-1">₹49</span>
+                <span class="font-bold text-primary">FREE</span>
+              </div>
+            </div>
+            <div class="flex justify-between text-on-surface-variant">
+              <span>Packaging &amp; Handling</span>
+              <div>
+                <span class="text-[10px] text-outline line-through mr-1">₹19</span>
+                <span class="font-bold text-primary">FREE</span>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-dashed border-surface-container-high pt-2 mt-2">
+            <div class="flex justify-between items-baseline">
+              <div>
+                <span class="font-headline text-sm font-bold text-on-surface"
+                  >Total Amount to Pay</span
+                >
+                <p class="text-[10px] text-tertiary">(Inclusive of all taxes)</p>
+              </div>
+              <div class="text-right">
+                <span class="font-headline text-lg font-extrabold text-on-surface">₹2,898</span>
+              </div>
+            </div>
+          </div>
+          <!-- Savings Callout Banner -->
+          <div
+            class="bg-primary-fixed/30 border border-primary-fixed-dim rounded-lg p-2 text-center mt-2"
+          >
+            <p
+              class="text-xs font-bold text-on-primary-fixed flex items-center justify-center gap-1"
+            >
+              <span class="material-symbols-outlined text-sm text-primary">savings</span>
+              You are saving a total of ₹1,851 on this order!
+            </p>
+          </div>
+        </section>
+        <!-- 7. Safe & Secure Checkout Trust Strip -->
+        <section class="grid grid-cols-3 gap-2 px-1 py-1 text-center">
+          <div
+            class="bg-surface-container-lowest p-2 rounded-lg border border-surface-container shadow-xs"
+          >
+            <span class="material-symbols-outlined text-primary text-xl">verified_user</span>
+            <p class="text-[10px] font-bold text-on-surface mt-1 leading-tight">100% Genuine</p>
+            <p class="text-[9px] text-tertiary">Brand Warranty</p>
+          </div>
+          <div
+            class="bg-surface-container-lowest p-2 rounded-lg border border-surface-container shadow-xs"
+          >
+            <span class="material-symbols-outlined text-primary text-xl"
+              >published_with_changes</span
+            >
+            <p class="text-[10px] font-bold text-on-surface mt-1 leading-tight">
+              7-Day Replacement
+            </p>
+            <p class="text-[9px] text-tertiary">Doorstep Pickup</p>
+          </div>
+          <div
+            class="bg-surface-container-lowest p-2 rounded-lg border border-surface-container shadow-xs"
+          >
+            <span class="material-symbols-outlined text-primary text-xl">security</span>
+            <p class="text-[10px] font-bold text-on-surface mt-1 leading-tight">256-Bit SSL</p>
+            <p class="text-[9px] text-tertiary">Secure UPI &amp; Cards</p>
+          </div>
+        </section>
+        <!-- Cancellation and Support Policy Note -->
+        <div class="text-center pb-2">
+          <p class="text-[10px] text-tertiary">
+            Need help with your Bhopal order?
+            <a class="text-primary font-semibold underline underline-offset-2" href="#"
+              >Wondersale Arera Hub Helpline</a
+            >
+          </p>
+        </div>
+      </div>
+      <!-- 8. Sticky Bottom Action Bar & Navigation Shell Context -->
+      <div
+        class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-lowest border-t border-surface-container shadow-[0_-4px_12px_rgba(0,0,0,0.08)]"
+      >
+        <div class="max-w-md mx-auto px-4 py-2.5 flex items-center justify-between">
+          <!-- Price Preview Left -->
+          <div>
+            <span class="text-[10px] uppercase font-bold text-tertiary tracking-wide"
+              >Total Payable</span
+            >
+            <div class="flex items-baseline space-x-1">
+              <span class="font-headline text-lg font-black text-on-surface">₹2,898</span>
+              <button
+                class="text-[11px] font-bold text-primary flex items-center active:scale-95"
+                type="button"
+              >
+                Bill
+                <span class="material-symbols-outlined text-[13px]">expand_less</span>
+              </button>
+            </div>
+          </div>
+          <!-- Checkout Primary CTA Right -->
+          <button
+            class="bg-primary-container hover:bg-secondary text-on-primary-container px-6 py-3 rounded-lg font-headline font-bold text-sm shadow-md active:scale-95 transition-all duration-150 flex items-center space-x-1.5"
+            type="button"
+          >
+            <span>Proceed to Checkout</span>
+            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+          </button>
+        </div>
+        <!-- Bottom Navigation Anchor (Docked bottom) -->
+        <nav
+          class="border-t border-surface-container px-2 py-1 flex justify-around items-center bg-surface-container-lowest text-[11px]"
+        >
+          <a
+            class="flex flex-col items-center justify-center text-on-surface-variant font-medium py-1 px-3"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-xl">home</span>
+            <span>Home</span>
+          </a>
+          <a
+            class="flex flex-col items-center justify-center text-on-surface-variant font-medium py-1 px-3"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-xl">grid_view</span>
+            <span>Categories</span>
+          </a>
+          <a
+            class="flex flex-col items-center justify-center text-on-surface-variant font-medium py-1 px-3"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-xl">local_offer</span>
+            <span>Offers</span>
+          </a>
+          <a
+            class="flex flex-col items-center justify-center text-primary font-bold py-1 px-3"
+            href="#"
+          >
+            <div class="relative">
+              <span class="material-symbols-outlined text-xl fill">shopping_cart</span>
+              <span
+                class="absolute -top-1 -right-2 bg-primary text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center"
+                >2</span
+              >
+            </div>
+            <span>Cart</span>
+          </a>
+          <a
+            class="flex flex-col items-center justify-center text-on-surface-variant font-medium py-1 px-3"
+            href="#"
+          >
+            <span class="material-symbols-outlined text-xl">person</span>
+            <span>Account</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </body>
+</html>

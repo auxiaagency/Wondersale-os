@@ -10,11 +10,15 @@ scratch/
 venv/
 .env
 
-# Node & Frontend
+# Node & Frontend (OS App + Website)
 node_modules/
 dist/
 dist-ssr/
 *.local
+
+# Next.js build output (website/)
+.next/
+out/
 
 # Environment variables & secrets (CRITICAL)
 .env

@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+:root {
+  /* Stitch Design System Palette Tokens */
+  --surface: #ffffff;
+  --surface-grey: #f7f7f8;
+  --border: #e5e7eb;
+  --ink: #1a1a1a;
+  --body: #3c4043;
+  --muted: #6b7280;
+
+  /* Brand Red Accent Tokens */
+  --red-500: #d91e2a;
+  --red-600: #b31520;
+  --red-700: #8e0e17;
+  --red-50: #fdecee;
+  --red-100: #feecec;
+
+  /* Status Color Tokens */
+  --success: #1e9e5a;
+  --success-bg: #e8f7f0;
+  --warning: #f59e0b;
+  --warning-bg: #fef3c7;
+  --error: #d91e2a;
+  --error-bg: #feecec;
+  --info: #2563eb;
+  --info-bg: #eff6ff;
+  --star: #f5a623;
+
+  /* Touch & Layout Targets */
+  --min-touch-target: 44px;
+}
+
+@theme inline {
+  --color-brand: var(--red-500);
+  --color-brand-hover: var(--red-600);
+  --color-brand-pressed: var(--red-700);
+  --color-brand-subtle: var(--red-50);
+  --color-brand-muted: var(--red-100);
+
+  --color-surface: var(--surface);
+  --color-surface-grey: var(--surface-grey);
+  --color-border: var(--border);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+
+  --color-status-success: var(--success);
+  --color-status-success-bg: var(--success-bg);
+  --color-status-warning: var(--warning);
+  --color-status-warning-bg: var(--warning-bg);
+  --color-status-error: var(--error);
+  --color-status-error-bg: var(--error-bg);
+  --color-status-info: var(--info);
+  --color-status-info-bg: var(--info-bg);
+  --color-star: var(--star);
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
