@@ -360,7 +360,7 @@ export default function HomePage() {
             icon="⚡"
             title="Deals of the Day"
             subtitle="Handpicked limited-time discounts with 2-hour express doorstep delivery"
-            bgClass="bg-[#EFE0BC] border-2 border-[#680114]"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114]"
             badge={
               <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] font-bold shadow-2xs">
                 <Clock className="w-3 h-3 text-[#680114]" />
@@ -393,7 +393,7 @@ export default function HomePage() {
               {/* Cat 1 */}
               <Link
                 href="/category/kitchen-appliances"
-                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
                 <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
@@ -414,7 +414,7 @@ export default function HomePage() {
               {/* Cat 2 */}
               <Link
                 href="/category/electronics-audio"
-                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
                 <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
@@ -435,7 +435,7 @@ export default function HomePage() {
               {/* Cat 3 */}
               <Link
                 href="/category/toys-games"
-                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
                 <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
@@ -456,7 +456,7 @@ export default function HomePage() {
               {/* Cat 4 */}
               <Link
                 href="/category/sunglasses-accessories"
-                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
                 <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
@@ -495,7 +495,7 @@ export default function HomePage() {
                 </p>
                 <div className="pt-2">
                   <button
-                    className="inline-flex items-center gap-2 bg-[#EFE0BC] text-[#680114] px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-2xs hover:bg-[#F6E9C8] transition-colors cursor-pointer border-2 border-[#680114]"
+                    className="inline-flex items-center gap-2 bg-[#F6E9C8] text-[#680114] px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-2xs hover:bg-[#EFE0BC] transition-colors cursor-pointer border-2 border-[#680114]"
                     onClick={() => handleCopyCode("WONDERFEST")}
                     type="button"
                   >
@@ -525,7 +525,7 @@ export default function HomePage() {
             icon={<TrendingUp className="w-5 h-5 text-[#680114]" />}
             title="Best Sellers"
             subtitle="Most loved and highest ordered products from our superstore"
-            bgClass="bg-[#EFE0BC] border-2 border-[#680114] shadow-xs"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#680114] bg-[#FAEBEF] px-2 py-0.5 rounded-full border border-[#F4D3D8]">
                 Updated Hourly
@@ -545,7 +545,7 @@ export default function HomePage() {
             icon="✨"
             title="Fresh In Store"
             subtitle="Just unboxed new season arrivals with guaranteed fast delivery"
-            bgClass="bg-[#E8D7B0] border-2 border-[#680114] shadow-xs"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 New Arrivals
@@ -565,7 +565,7 @@ export default function HomePage() {
             icon="🍳"
             title="Kitchen & Dining Must-Haves"
             subtitle="Pressure cookers, mixer grinders, air fryers & hard anodized cookware"
-            bgClass="bg-[#EFE0BC] border-2 border-[#680114] shadow-xs"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                 Up to 45% Off
@@ -585,7 +585,7 @@ export default function HomePage() {
             icon="🎧"
             title="Smart Audio & Tech Gadgets"
             subtitle="Wireless headphones, fast car mounts, smartwatch calling & speakers"
-            bgClass="bg-[#E8D7B0] border-2 border-[#680114] shadow-xs"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                 Top Rated Audio
@@ -605,7 +605,7 @@ export default function HomePage() {
             icon="🛒"
             title="Daily Essentials & Gourmet Pantry"
             subtitle="Artisan roasted coffee, California almonds, mountain honey & cold-pressed oils"
-            bgClass="bg-[#EFE0BC] border-2 border-[#680114] shadow-xs"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 100% Genuine
@@ -625,7 +625,7 @@ export default function HomePage() {
             icon="🎲"
             title="Toys, STEM & Family Games"
             subtitle="Montessori puzzles, RC monster trucks, board games & speed cubes"
-            bgClass="bg-[#E8D7B0] border-2 border-[#680114] shadow-xs"
+            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-sky-800 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
                 Kids &amp; Family
@@ -642,7 +642,7 @@ export default function HomePage() {
 
 
           {/* 10. MOBILE FOOTER ACCORDION & TRUST INFO (< md screens) */}
-          <section className="md:hidden w-full bg-[#EFE0BC]/80 rounded-2xl p-4 space-y-2 border-2 border-[#680114]">
+          <section className="md:hidden w-full bg-[#F6E9C8] rounded-2xl p-4 space-y-2 border-2 border-[#680114]">
             {/* Accordion 1: About Wondersale */}
             <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
               <button

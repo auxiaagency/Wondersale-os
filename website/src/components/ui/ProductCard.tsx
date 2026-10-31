@@ -43,14 +43,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   if (variant === "horizontal") {
     return (
-      <div className="bg-[#FAF3E0] rounded-2xl border-2 border-[#680114] p-3 shadow-2xs hover:shadow-xs transition-all flex space-x-3 items-center group">
-        <div className="w-24 h-24 bg-[#FDF8EE] rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden border border-[#680114]/30">
+      <div className="bg-[#F6E9C8] rounded-2xl border-2 border-[#680114] p-3 shadow-2xs hover:shadow-xs transition-all flex space-x-3 items-center group">
+        <div className="w-24 h-24 bg-[#F6E9C8] rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden border border-[#680114]/30">
           {discount > 0 ? (
-            <span className="absolute top-1 left-1 bg-[#7A0C16] text-[#FDF8EE] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
+            <span className="absolute top-1 left-1 bg-[#680114] text-[#F6E9C8] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
               {discount}% OFF
             </span>
           ) : badge ? (
-            <span className="absolute top-1 left-1 bg-[#5A0A10] text-[#FDF8EE] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
+            <span className="absolute top-1 left-1 bg-[#520210] text-[#F6E9C8] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
               {badge}
             </span>
           ) : null}
@@ -58,7 +58,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt={title} className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-200" />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-[#EADFC7] flex items-center justify-center text-[#735A4A] font-bold text-xs">
+            <div className="w-10 h-10 rounded-full bg-[#E8D7B0] flex items-center justify-center text-[#735A4A] font-bold text-xs">
               WS
             </div>
           )}
@@ -66,7 +66,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="flex-1 min-w-0">
           {express2Hr && (
             <div className="flex items-center justify-end mb-0.5">
-              <span className="text-[9px] font-bold text-[#7A0C16] bg-[#FCEDEE] px-1.5 py-0.5 rounded">
+              <span className="text-[9px] font-bold text-[#680114] bg-[#FAEBEF] px-1.5 py-0.5 rounded">
                 ⚡ 2-Hr
               </span>
             </div>
@@ -77,7 +77,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </span>
           )}
           {slug ? (
-            <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors">
+            <Link href={`/product/${slug}`} className="hover:text-[#680114] transition-colors">
               <h4 className="text-xs font-semibold text-[#2C1810] truncate mb-1">{title}</h4>
             </Link>
           ) : (
@@ -98,7 +98,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <button
                 type="button"
                 onClick={() => onAddToCart?.(id)}
-                className="h-8 px-3.5 bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
+                className="h-8 px-3.5 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
                 Add
               </button>
@@ -114,24 +114,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Default: Vertical Grid Card
   return (
     <div
-      className={`w-full bg-[#FAF3E0] rounded-xl border-2 border-[#680114] p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group ${
+      className={`w-full bg-[#F6E9C8] rounded-xl border-2 border-[#680114] p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group ${
         !inStock ? "opacity-75" : ""
       }`}
     >
       <div>
         {/* Product Image Frame with Overlaid Badges to save vertical height */}
-        <div className="w-full aspect-square bg-[#FDF8EE] rounded-lg flex items-center justify-center overflow-hidden mb-1.5 relative border border-[#EADFC7]/60">
+        <div className="w-full aspect-square bg-[#F6E9C8] rounded-lg flex items-center justify-center overflow-hidden mb-1.5 relative border border-[#680114]/20">
           {/* Top Left Discount Tag */}
           {discount > 0 && inStock ? (
-            <span className="absolute top-1 left-1 bg-[#7A0C16] text-[#FDF8EE] text-[8px] font-extrabold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
+            <span className="absolute top-1 left-1 bg-[#680114] text-[#F6E9C8] text-[8px] font-extrabold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
               {discount}% OFF
             </span>
           ) : badge && inStock ? (
-            <span className="absolute top-1 left-1 bg-[#5A0A10] text-[#FDF8EE] text-[8px] font-bold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
+            <span className="absolute top-1 left-1 bg-[#520210] text-[#F6E9C8] text-[8px] font-bold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
               {badge}
             </span>
           ) : !inStock ? (
-            <span className="absolute top-1 left-1 bg-[#F4ECDC] text-[#735A4A] text-[8px] font-bold px-1 py-0.5 rounded z-10 leading-none">
+            <span className="absolute top-1 left-1 bg-[#E8D7B0] text-[#735A4A] text-[8px] font-bold px-1 py-0.5 rounded z-10 leading-none">
               OUT
             </span>
           ) : null}
@@ -144,8 +144,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.stopPropagation();
               onToggleWishlist?.(id);
             }}
-            className={`absolute top-1 right-1 w-5 h-5 rounded-full bg-[#FAF3E0] border border-[#D5C4A1] flex items-center justify-center transition-all z-10 hover:scale-110 cursor-pointer shadow-2xs ${
-              isWishlisted ? "text-[#7A0C16]" : "text-[#735A4A] hover:text-[#7A0C16]"
+            className={`absolute top-1 right-1 w-5 h-5 rounded-full bg-[#F6E9C8] border border-[#680114]/40 flex items-center justify-center transition-all z-10 hover:scale-110 cursor-pointer shadow-2xs ${
+              isWishlisted ? "text-[#680114]" : "text-[#735A4A] hover:text-[#680114]"
             }`}
             aria-label="Wishlist"
           >
