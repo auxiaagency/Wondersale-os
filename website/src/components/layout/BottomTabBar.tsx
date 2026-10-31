@@ -3,29 +3,27 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Grid, Tag, ShoppingBag, User } from "lucide-react";
+import { Home, Grid, Search, ShoppingBag, User } from "lucide-react";
+import { useStorefront } from "@/context/StorefrontContext";
 
-export interface BottomTabBarProps {
-  cartCount?: number;
-}
-
-export const BottomTabBar: React.FC<BottomTabBarProps> = ({ cartCount = 3 }) => {
+export const BottomTabBar: React.FC = () => {
   const pathname = usePathname();
+  const { cartCount, isHydrated } = useStorefront();
 
   const navItems = [
     { label: "Home", href: "/", icon: Home },
     { label: "Categories", href: "/categories", icon: Grid },
-    { label: "Offers", href: "/offers", icon: Tag, badge: "HOT" },
-    { label: "Cart", href: "/cart", icon: ShoppingBag, count: cartCount },
+    { label: "Search", href: "/search", icon: Search },
+    { label: "Cart", href: "/cart", icon: ShoppingBag, count: isHydrated ? cartCount : 0 },
     { label: "Account", href: "/account", icon: User },
   ];
 
   return (
     <nav
-      aria-label="Main Navigation"
-      className="fixed bottom-0 left-0 w-full z-40 bg-white border-t border-slate-200 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+      aria-label="Mobile Bottom Navigation"
+      className="md:hidden fixed bottom-0 left-0 right-0 w-full z-50 pb-[env(safe-area-inset-bottom,0px)] bg-[#FDF8EE]/95 backdrop-blur-xl shadow-[0_-2px_12px_rgba(90,10,16,0.08)] border-t border-[#EADFC7]"
     >
-      <div className="max-w-md mx-auto flex justify-around items-center px-2 py-1.5">
+      <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -34,26 +32,22 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ cartCount = 3 }) => 
             <Link
               key={item.label}
               href={item.href}
-              className={`flex flex-col items-center justify-center py-1 w-14 transition-all duration-150 relative select-none ${
+              className={`flex flex-col items-center justify-center flex-1 h-full transition-colors relative min-w-[44px] ${
                 isActive
-                  ? "text-[#D91E2A] font-bold"
-                  : "text-slate-500 hover:text-slate-900 font-medium"
+                  ? "text-[#7A0C16] font-bold text-xs"
+                  : "text-[#735A4A] hover:text-[#2C1810] font-medium text-xs"
               }`}
             >
-              <div className="relative">
+              <div className="relative flex items-center justify-center">
                 <Icon className={`w-5 h-5 ${isActive ? "stroke-[2.5]" : "stroke-2"}`} />
-                {item.badge && (
-                  <span className="absolute -top-1 -right-2 bg-[#D91E2A] text-white text-[8px] font-black px-1 rounded-full uppercase leading-tight">
-                    {item.badge}
-                  </span>
-                )}
                 {item.count !== undefined && item.count > 0 && (
-                  <span className="absolute -top-1 -right-2 bg-[#D91E2A] text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                  <span className="absolute -top-1.5 -right-2 bg-[#7A0C16] text-[#FDF8EE] text-[9px] font-bold min-w-[15px] h-[15px] rounded-full flex items-center justify-center px-0.5">
                     {item.count}
                   </span>
                 )}
               </div>
-              <span className="text-[10px] mt-0.5 leading-none">{item.label}</span>
+              <span className="text-[10px] mt-0.5 leading-tight">{item.label}</span>
+              {isActive && <span className="w-1 h-1 bg-[#7A0C16] rounded-full mt-0.5" />}
             </Link>
           );
         })}
@@ -61,3 +55,4 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ cartCount = 3 }) => 
     </nav>
   );
 };
+

@@ -37,7 +37,7 @@ export const otpRequestSchema = z.object({
 
 export const otpVerifySchema = z.object({
   mobile: z.string().regex(/^[6-9]\d{9}$/, "Please enter a valid 10-digit Indian mobile number"),
-  code: z.string().length(6, "OTP must be exactly 6 digits"),
+  code: z.string().regex(/^\d{6}$/, "OTP must be exactly 6 numeric digits"),
 });
 
 export const pincodeCheckSchema = z.object({
@@ -81,3 +81,11 @@ export const orderCreateSchema = z.object({
     .or(z.literal("")),
   notes: z.string().max(500).optional(),
 });
+
+export function sanitizeSearchQuery(input: string): string {
+  if (!input) return "";
+  return input
+    .replace(/[<>'"\\;]/g, "")
+    .replace(/\b(DROP|DELETE|TRUNCATE|ALTER|UPDATE|INSERT|EXEC)\b/gi, "")
+    .trim();
+}

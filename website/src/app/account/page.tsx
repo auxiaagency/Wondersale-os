@@ -23,35 +23,42 @@ import {
   LogOut,
   ChevronRight,
 } from "lucide-react";
+import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
+import { GlobalHeader } from "@/components/layout/GlobalHeader";
+import { StorefrontFooter } from "@/components/layout/StorefrontFooter";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
+import { useStorefront } from "@/context/StorefrontContext";
 
 export default function AccountPage() {
   const router = useRouter();
+  const { location } = useStorefront();
 
   return (
-    <div className="w-full max-w-[390px] mx-auto min-h-screen bg-neutral-50 relative flex flex-col pb-24 shadow-2xl font-sans">
-      {/* 1. TOP BAR HEADER */}
-      <header className="flex flex-col w-full px-4 pt-3 pb-2 sticky top-0 z-40 bg-white shadow-xs border-b border-neutral-200">
+    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
+      {/* 1. Desktop Global Header */}
+      <div className="hidden md:block">
+        <GlobalHeader />
+      </div>
+
+      {/* Mobile Top Bar Header */}
+      <header className="md:hidden flex flex-col w-full px-4 pt-3 pb-2 sticky top-0 z-40 bg-[#FDF8EE] shadow-xs border-b border-[#EADFC7]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Building className="h-5 w-5 text-[#D91E2A]" />
-            <span className="font-black tracking-tight text-xl text-[#D91E2A]">Wondersale</span>
-          </div>
+          <WondersaleLogo size="sm" showSubtitle={false} />
           <div className="flex items-center gap-2">
             {/* Notification Bell */}
             <button
               aria-label="Notifications"
-              className="relative p-2 rounded-full hover:bg-neutral-100 text-neutral-600 transition-transform active:scale-95"
+              className="relative p-2 rounded-full hover:bg-[#F4ECDC] text-[#735A4A] transition-transform active:scale-95"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[1rem] px-1 items-center justify-center rounded-full bg-[#D91E2A] text-[10px] font-bold text-white leading-none">
+              <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[1rem] px-1 items-center justify-center rounded-full bg-[#7A0C16] text-[10px] font-bold text-[#FDF8EE] leading-none">
                 2
               </span>
             </button>
             {/* Settings */}
             <button
               aria-label="Settings"
-              className="p-2 rounded-full hover:bg-neutral-100 text-neutral-600 transition-transform active:scale-95"
+              className="p-2 rounded-full hover:bg-[#F4ECDC] text-[#735A4A] transition-transform active:scale-95"
             >
               <Settings className="h-5 w-5" />
             </button>
@@ -59,25 +66,25 @@ export default function AccountPage() {
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <h1 className="font-bold text-lg text-neutral-900 tracking-tight">My Account</h1>
-          <div className="flex items-center gap-1 text-[11px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">
-            <MapPin className="h-3 w-3 text-[#D91E2A]" />
+          <h1 className="font-bold text-lg text-[#2C1810] tracking-tight font-serif">My Account</h1>
+          <div className="flex items-center gap-1 text-[11px] font-medium text-[#735A4A] bg-[#FAF3E0] px-2.5 py-0.5 rounded-full border border-[#EADFC7]">
+            <MapPin className="h-3 w-3 text-[#7A0C16]" />
             <span>Bhopal, MP</span>
           </div>
         </div>
       </header>
 
-      {/* MAIN CONTENT STREAM */}
-      <main className="flex-1 px-3.5 pt-3 space-y-3.5">
+      {/* MAIN CONTENT STREAM (Responsive max width on desktop) */}
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-4">
         {/* 2. USER PROFILE SUMMARY CARD */}
-        <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 relative overflow-hidden">
+        <section className="bg-[#FFFFFF] rounded-3xl p-5 shadow-xs border border-[#EADFC7] relative overflow-hidden">
           <div className="flex items-start gap-3.5">
             {/* Avatar */}
             <div className="relative shrink-0">
-              <div className="w-14 h-14 rounded-full bg-red-100 text-[#D91E2A] font-extrabold text-lg flex items-center justify-center border-2 border-red-200">
+              <div className="w-14 h-14 rounded-full bg-[#5A0A10] text-[#FDF8EE] font-bold text-lg flex items-center justify-center border-2 border-[#7A0C16]">
                 RV
               </div>
-              <div className="absolute bottom-0 right-0 bg-emerald-600 text-white p-0.5 rounded-full ring-2 ring-white flex items-center justify-center">
+              <div className="absolute bottom-0 right-0 bg-emerald-600 text-white p-0.5 rounded-full ring-2 ring-[#FFFFFF] flex items-center justify-center">
                 <Check className="h-3 w-3" />
               </div>
             </div>
@@ -85,14 +92,14 @@ export default function AccountPage() {
             {/* Details */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
-                <h2 className="font-bold text-base text-neutral-900 truncate">Rohit Verma</h2>
-                <button className="text-xs font-semibold text-[#D91E2A] hover:underline flex items-center gap-0.5">
+                <h2 className="font-bold text-base text-[#2C1810] font-serif truncate">Rohit Verma</h2>
+                <button className="text-xs font-semibold text-[#7A0C16] hover:underline flex items-center gap-0.5">
                   Edit <Edit2 className="h-3 w-3" />
                 </button>
               </div>
 
-              <div className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 bg-sky-50 text-sky-800 rounded-md text-[11px] font-semibold border border-sky-100">
-                <span>Verified Bhopal Member</span>
+              <div className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 bg-[#FAF3E0] text-[#7A0C16] rounded-md text-[11px] font-semibold border border-[#EADFC7]">
+                <span>Verified {location.city || "Bhopal"} Member</span>
               </div>
 
               <div className="mt-2 text-xs text-neutral-500 space-y-0.5 font-normal">
@@ -140,7 +147,7 @@ export default function AccountPage() {
         <section className="grid grid-cols-2 gap-2.5">
           {/* Orders */}
           <Link
-            href="/order-confirmation"
+            href="/track-order"
             className="bg-white p-3 rounded-lg border border-neutral-200 shadow-2xs flex flex-col justify-between active:scale-98 transition-transform hover:border-neutral-300"
           >
             <div className="flex items-center justify-between">
@@ -187,8 +194,14 @@ export default function AccountPage() {
               </span>
             </div>
             <div className="mt-2.5">
-              <div className="font-bold text-xs text-neutral-900 truncate">E-7 Arera Colony</div>
-              <div className="text-[11px] text-neutral-500">Home &amp; 1 other address</div>
+              <div className="font-bold text-xs text-neutral-900 truncate">
+                {location.locality || location.city} ({location.pincode})
+              </div>
+              <div className="text-[11px] text-neutral-500">
+                {location.isExpressAvailable
+                  ? "Bhopal 2-Hr Express Zone"
+                  : "Pan-India Standard Shipping"}
+              </div>
             </div>
           </div>
 
@@ -274,7 +287,7 @@ export default function AccountPage() {
           {/* Actions */}
           <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-neutral-100">
             <Link
-              href="/order-confirmation"
+              href="/track-order?orderId=WS-BHP-8921"
               className="flex-1 bg-[#D91E2A] hover:bg-[#B31520] text-white py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-xs active:scale-95 transition-all"
             >
               <span>Track Live Delivery</span>
@@ -359,6 +372,42 @@ export default function AccountPage() {
             <ChevronRight className="h-4 w-4 text-neutral-400" />
           </div>
 
+          <Link
+            href="/shipping"
+            className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Zap className="h-4 w-4 text-neutral-500" />
+              <div>
+                <div className="text-xs font-semibold text-neutral-900">
+                  Shipping &amp; Delivery Coverage
+                </div>
+                <div className="text-[10px] text-neutral-500">
+                  2-Hour Express zones &amp; free delivery rules
+                </div>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-neutral-400" />
+          </Link>
+
+          <Link
+            href="/returns"
+            className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Building className="h-4 w-4 text-neutral-500" />
+              <div>
+                <div className="text-xs font-semibold text-neutral-900">
+                  Returns &amp; Replacement
+                </div>
+                <div className="text-[10px] text-neutral-500">
+                  7-Day doorstep replacement guarantee
+                </div>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-neutral-400" />
+          </Link>
+
           <a
             href="tel:07554209999"
             className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors"
@@ -390,6 +439,11 @@ export default function AccountPage() {
           </p>
         </div>
       </main>
+
+      {/* Desktop Footer */}
+      <div className="hidden md:block">
+        <StorefrontFooter />
+      </div>
 
       {/* 7. DOCKED BOTTOM NAVIGATION */}
       <BottomTabBar />

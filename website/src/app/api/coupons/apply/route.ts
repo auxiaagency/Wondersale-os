@@ -3,6 +3,13 @@ import { couponApplySchema, successResponse, errorResponse } from "@/lib/api";
 
 const ACTIVE_COUPONS = [
   {
+    code: "WONDER150",
+    description: "Flat ₹150 off on orders above ₹1,499",
+    discountType: "FLAT_AMOUNT",
+    discountValuePaise: 15000,
+    minOrderPaise: 149900,
+  },
+  {
     code: "WONDER50",
     description: "Flat ₹50 off on orders above ₹499",
     discountType: "FLAT_AMOUNT",
@@ -15,6 +22,13 @@ const ACTIVE_COUPONS = [
     discountType: "PERCENTAGE",
     discountValuePercent: 10,
     maxDiscountPaise: 30000,
+    minOrderPaise: 99900,
+  },
+  {
+    code: "BHOPALEXPRESS",
+    description: "Flat ₹100 off on Bhopal orders above ₹999",
+    discountType: "FLAT_AMOUNT",
+    discountValuePaise: 10000,
     minOrderPaise: 99900,
   },
 ];

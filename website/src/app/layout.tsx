@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const viewport: Viewport = {
-  themeColor: "#D91E2A",
+  themeColor: "#5A0A10",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -47,6 +47,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { StorefrontProvider } from "@/context/StorefrontContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,9 +58,15 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <link rel="icon" href="/next.svg" />
+        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
-      <body className="min-h-screen bg-white text-neutral-900 antialiased selection:bg-red-100 selection:text-red-700">
-        {children}
+      <body className="min-h-screen bg-[#FDF8EE] text-[#2C1810] antialiased selection:bg-[#7A0C16]/20 selection:text-[#7A0C16]">
+        <StorefrontProvider>{children}</StorefrontProvider>
       </body>
     </html>
   );

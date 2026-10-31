@@ -41,10 +41,34 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/product/prestige-svachh-deluxe-alpha-5l`,
+      url: `${baseUrl}/track-order`,
       lastModified: new Date("2026-10-16"),
-      changeFrequency: "weekly" as const,
-      priority: 0.9,
+      changeFrequency: "daily" as const,
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/shipping`,
+      lastModified: new Date("2026-10-16"),
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/returns`,
+      lastModified: new Date("2026-10-16"),
+      changeFrequency: "monthly" as const,
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/terms`,
+      lastModified: new Date("2026-10-16"),
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    },
+    {
+      url: `${baseUrl}/privacy`,
+      lastModified: new Date("2026-10-16"),
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
     },
     ...categoryEntries,
   ];

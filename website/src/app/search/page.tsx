@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,164 +17,28 @@ import {
   ArrowUpDown,
   Check,
   Zap,
-  Flame,
   SearchX,
   ChevronRight,
 } from "lucide-react";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
+import { useStorefront } from "@/context/StorefrontContext";
 
-// Catalog items for instant search demonstration and catalog integration
-const CATALOG_ITEMS = [
-  {
-    id: "prestige-svachh-5l",
-    title: "Prestige Svachh Deluxe Alpha Stainless Steel 5L Pressure Cooker",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Prestige",
-    mrpPaise: 345000,
-    sellingPricePaise: 219900,
-    rating: 4.4,
-    ratingCount: 3410,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["cooker", "prestige", "pressure cooker", "kitchen", "5l", "stainless steel"],
-  },
-  {
-    id: "hawkins-contura-3l",
-    title: "Hawkins Stainless Steel 3 Litre Contura Pressure Cooker",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Hawkins",
-    mrpPaise: 270000,
-    sellingPricePaise: 185000,
-    rating: 4.5,
-    ratingCount: 5120,
-    inStock: true,
-    fastDelivery: true,
-    keywords: [
-      "cooker",
-      "hawkins",
-      "contura",
-      "pressure cooker",
-      "kitchen",
-      "3l",
-      "stainless steel",
-    ],
-  },
-  {
-    id: "pigeon-favourite-3l",
-    title: "Pigeon by Stovekraft Favourite 3L Induction Base Aluminium Cooker",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Pigeon",
-    mrpPaise: 149500,
-    sellingPricePaise: 89900,
-    rating: 4.1,
-    ratingCount: 1850,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["cooker", "pigeon", "stovekraft", "aluminium", "induction", "3l"],
-  },
-  {
-    id: "bajaj-pcx65-5l",
-    title: "Bajaj PCX 65 Deluxe 5L Aluminium Pressure Cooker",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Bajaj",
-    mrpPaise: 199900,
-    sellingPricePaise: 129900,
-    rating: 4.3,
-    ratingCount: 890,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["cooker", "bajaj", "pressure cooker", "5l", "aluminium"],
-  },
-  {
-    id: "prestige-pic-20",
-    title: "Prestige PIC 20 1600W Induction Cooktop with Indian Menu",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Prestige",
-    mrpPaise: 329500,
-    sellingPricePaise: 189900,
-    rating: 4.3,
-    ratingCount: 3120,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["cooktop", "induction", "prestige", "cooker", "kitchen"],
-  },
-  {
-    id: "butterfly-cordial-5l",
-    title: "Butterfly Cordial 5L Induction Base Aluminium Pressure Cooker",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Butterfly",
-    mrpPaise: 185000,
-    sellingPricePaise: 114900,
-    rating: 4.2,
-    ratingCount: 720,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["cooker", "butterfly", "5l", "induction", "pressure cooker"],
-  },
-  {
-    id: "philips-hl7756",
-    title: "Philips HL7756/00 750W Mixer Grinder (3 Stainless Steel Jars)",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Philips",
-    mrpPaise: 529500,
-    sellingPricePaise: 329900,
-    rating: 4.4,
-    ratingCount: 5412,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["mixer", "grinder", "philips", "750w", "kitchen appliances"],
-  },
-  {
-    id: "bajaj-kettle-15",
-    title: "Bajaj Majesty KKN 1.5L Cordless Electric Kettle",
-    category: "Kitchen Appliances",
-    categorySlug: "kitchen-appliances",
-    brand: "Bajaj",
-    mrpPaise: 129900,
-    sellingPricePaise: 84900,
-    rating: 4.5,
-    ratingCount: 2840,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["kettle", "electric kettle", "bajaj", "tea", "water heater"],
-  },
-  {
-    id: "titan-wall-clock",
-    title: "Titan Contemporary Round Silent Sweep Wall Clock (30cm)",
-    category: "Clocks & Timepieces",
-    categorySlug: "clocks-timepieces",
-    brand: "Titan",
-    mrpPaise: 199500,
-    sellingPricePaise: 149500,
-    rating: 4.6,
-    ratingCount: 920,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["clock", "wall clock", "titan", "watch", "home decor"],
-  },
-  {
-    id: "fastrack-aviator",
-    title: "Fastrack Polarized Pilot Sunglasses with 100% UV Protection",
-    category: "Sunglasses & Accessories",
-    categorySlug: "sunglasses-accessories",
-    brand: "Fastrack",
-    mrpPaise: 249900,
-    sellingPricePaise: 149900,
-    rating: 4.3,
-    ratingCount: 1450,
-    inStock: true,
-    fastDelivery: true,
-    keywords: ["sunglasses", "fastrack", "goggles", "eyewear", "aviator"],
-  },
-];
+interface SearchProduct {
+  id: string;
+  name: string;
+  slug: string;
+  brand?: { name: string; slug: string } | null;
+  category?: { name: string; slug: string } | null;
+  variants: {
+    mrpPaise: number;
+    sellingPricePaise: number;
+    stockQuantity: number;
+    inStock: boolean;
+  }[];
+  ratingAverage: number;
+  reviewCount: number;
+}
 
 const INITIAL_RECENT_SEARCHES = [
   "Prestige Cooker",
@@ -187,25 +51,23 @@ const TRENDING_BHOPAL = [
   { rank: "#1", query: "Wall Clock" },
   { rank: "#2", query: "Non-stick Tawa" },
   { rank: "#3", query: "Electric Kettle" },
-  { rank: "#4", query: "Kids Toys" },
+  { rank: "#4", query: "Mixer Grinder" },
   { rank: "#5", query: "Pressure Cooker" },
 ];
 
 const DIRECT_SUGGESTIONS = [
-  { title: "cooker 5L", subtitle: "in Kitchen Appliances", query: "cooker 5l" },
-  { title: "Prestige Induction cooker", subtitle: "Top brand", query: "prestige induction" },
-  { title: "Electric Rice cooker 1.8L", subtitle: "Automatic warm", query: "electric rice cooker" },
-  {
-    title: "Hawkins Contura Pressure cooker",
-    subtitle: "Stainless steel",
-    query: "hawkins contura",
-  },
+  { title: "Cooker 5L", subtitle: "in Kitchen Appliances", query: "cooker" },
+  { title: "Prestige Induction cooktop", subtitle: "Top brand", query: "prestige" },
+  { title: "Electric Kettle 1.5L", subtitle: "Cordless stainless", query: "kettle" },
+  { title: "boAt Bluetooth Headphones", subtitle: "Electronics & Audio", query: "boat" },
 ];
 
 function SearchContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
+
+  const { cartCount, location, isHydrated, addToCart, toggleWishlist, isInWishlist } = useStorefront();
 
   const [query, setQuery] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
@@ -217,9 +79,11 @@ function SearchContent() {
   );
   const [fastDeliveryOnly, setFastDeliveryOnly] = useState(false);
   const [isSortOpen, setIsSortOpen] = useState(false);
+  const [products, setProducts] = useState<SearchProduct[]>([]);
+  const [loading, setLoading] = useState(false);
   const [, startTransition] = useTransition();
 
-  // Synchronize when query param changes externally without direct setState in effect
+  // Synchronize query param changes externally
   const [prevInitialQuery, setPrevInitialQuery] = useState(initialQuery);
   if (initialQuery !== prevInitialQuery) {
     setPrevInitialQuery(initialQuery);
@@ -227,13 +91,43 @@ function SearchContent() {
     setActiveQuery(initialQuery);
   }
 
+  // Fetch from database API
+  const fetchSearchResults = useCallback(async (searchQuery: string, sort: string) => {
+    setLoading(true);
+    try {
+      const sp = new URLSearchParams();
+      if (searchQuery.trim()) {
+        sp.set("q", searchQuery.trim());
+      }
+      if (sort === "price-asc") sp.set("sort", "price_asc");
+      else if (sort === "price-desc") sp.set("sort", "price_desc");
+      else if (sort === "rating") sp.set("sort", "rating");
+
+      const res = await fetch(`/api/catalog/products?${sp.toString()}`);
+      const data = await res.json();
+      if (data.success && data.data?.products) {
+        setProducts(data.data.products);
+      } else {
+        setProducts([]);
+      }
+    } catch {
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSearchResults(activeQuery, sortBy);
+  }, [activeQuery, sortBy, fetchSearchResults]);
+
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const clean = query.trim();
-    if (!clean) return;
 
     setActiveQuery(clean);
-    if (!recentSearches.includes(clean)) {
+    setShowSuggestions(false);
+    if (clean && !recentSearches.includes(clean)) {
       setRecentSearches((prev) => [clean, ...prev.slice(0, 5)]);
     }
     startTransition(() => {
@@ -244,6 +138,7 @@ function SearchContent() {
   const handleSelectRecent = (term: string) => {
     setQuery(term);
     setActiveQuery(term);
+    setShowSuggestions(false);
     startTransition(() => {
       router.push(`/search?q=${encodeURIComponent(term)}`);
     });
@@ -258,30 +153,18 @@ function SearchContent() {
     setRecentSearches([]);
   };
 
-  // Filter products based on search term & quick pills
-  const filteredProducts = CATALOG_ITEMS.filter((item) => {
-    if (activeQuery) {
-      const q = activeQuery.toLowerCase();
-      const matchTitle = item.title.toLowerCase().includes(q);
-      const matchBrand = item.brand.toLowerCase().includes(q);
-      const matchCat = item.category.toLowerCase().includes(q);
-      const matchKey = item.keywords.some((k) => k.toLowerCase().includes(q));
-      if (!matchTitle && !matchBrand && !matchCat && !matchKey) return false;
-    }
+  // Filter products based on quick pills in memory
+  const filteredProducts = products.filter((item) => {
+    const primaryVariant = item.variants[0];
+    const price = primaryVariant ? primaryVariant.sellingPricePaise : 0;
+    const brandName = item.brand?.name.toLowerCase() || "";
 
-    if (fastDeliveryOnly && !item.fastDelivery) return false;
-
-    if (selectedQuickFilter === "under-999" && item.sellingPricePaise > 99900) return false;
-    if (selectedQuickFilter === "rating-4" && item.rating < 4.0) return false;
-    if (selectedQuickFilter === "prestige" && item.brand.toLowerCase() !== "prestige") return false;
-    if (selectedQuickFilter === "hawkins" && item.brand.toLowerCase() !== "hawkins") return false;
+    if (selectedQuickFilter === "under-999" && price > 99900) return false;
+    if (selectedQuickFilter === "rating-4" && item.ratingAverage < 4.0) return false;
+    if (selectedQuickFilter === "prestige" && brandName !== "prestige") return false;
+    if (selectedQuickFilter === "philips" && brandName !== "philips") return false;
 
     return true;
-  }).sort((a, b) => {
-    if (sortBy === "price-asc") return a.sellingPricePaise - b.sellingPricePaise;
-    if (sortBy === "price-desc") return b.sellingPricePaise - a.sellingPricePaise;
-    if (sortBy === "rating") return b.rating - a.rating;
-    return 0; // relevance
   });
 
   return (
@@ -306,7 +189,10 @@ function SearchContent() {
               id="searchInput"
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setShowSuggestions(true);
+              }}
               placeholder="Search for cookers, brands..."
               className="w-full bg-transparent p-0 text-sm font-medium text-neutral-900 placeholder:text-neutral-500 focus:outline-none border-none ring-0"
               autoFocus={!initialQuery}
@@ -319,6 +205,7 @@ function SearchContent() {
                 onClick={() => {
                   setQuery("");
                   setActiveQuery("");
+                  setShowSuggestions(false);
                 }}
                 aria-label="Clear query"
                 className="p-1 text-neutral-400 hover:text-neutral-700 active:scale-90 transition-transform"
@@ -353,9 +240,11 @@ function SearchContent() {
             className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-800 hover:bg-neutral-100 active:scale-95 transition-transform"
           >
             <ShoppingBag className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#D91E2A] px-1 text-[10px] font-bold text-white shadow-xs">
-              3
-            </span>
+            {isHydrated && cartCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#D91E2A] px-1 text-[10px] font-bold text-white shadow-xs">
+                {cartCount}
+              </span>
+            )}
           </Link>
         </form>
 
@@ -364,11 +253,16 @@ function SearchContent() {
           <div className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
             <MapPin className="h-3.5 w-3.5 text-[#D91E2A] shrink-0" />
             <span className="font-medium text-neutral-900">
-              Deliver to <span className="font-bold">Bhopal 462001</span>
+              Deliver to{" "}
+              <span className="font-bold">
+                {location.city} {location.pincode}
+              </span>
             </span>
-            <span className="text-[11px] text-neutral-500">(Arera Colony, MP)</span>
+            <span className="text-[11px] text-neutral-500">
+              ({location.locality || "Bhopal Hub"})
+            </span>
           </div>
-          <span className="text-[11px] font-bold text-[#D91E2A] shrink-0">Change</span>
+          <span className="text-[11px] font-bold text-[#D91E2A] shrink-0">Bhopal Hub</span>
         </div>
       </header>
 
@@ -386,7 +280,7 @@ function SearchContent() {
               </span>
               <button
                 onClick={() => setShowSuggestions(false)}
-                className="text-[11px] font-medium text-[#D91E2A] hover:underline"
+                className="text-[11px] font-medium text-[#D91E2A] hover:underline cursor-pointer"
               >
                 Hide suggestions
               </button>
@@ -399,6 +293,7 @@ function SearchContent() {
                   onClick={() => {
                     setQuery(item.query);
                     setActiveQuery(item.query);
+                    setShowSuggestions(false);
                     startTransition(() => {
                       router.push(`/search?q=${encodeURIComponent(item.query)}`);
                     });
@@ -430,80 +325,76 @@ function SearchContent() {
                 href="/category/kitchen-appliances"
                 className="shrink-0 px-2.5 py-1 rounded-full bg-red-50 text-[#D91E2A] text-[11px] font-semibold border border-red-200 hover:bg-red-100 transition-colors"
               >
-                Pressure Cookers
+                Kitchen Appliances
               </Link>
               <Link
                 href="/category/crockery-kitchenware"
                 className="shrink-0 px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-800 text-[11px] font-medium border border-neutral-200 hover:bg-neutral-200 transition-colors"
               >
-                Cookware Sets
+                Crockery & Flasks
               </Link>
               <Link
-                href="/category/kitchen-appliances"
+                href="/category/electronics-audio"
                 className="shrink-0 px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-800 text-[11px] font-medium border border-neutral-200 hover:bg-neutral-200 transition-colors"
               >
-                Induction Cooktops
+                Electronics & Audio
               </Link>
             </div>
           </div>
         )}
 
-        {/* 3. RECENT SEARCHES & TRENDING IN BHOPAL */}
-        <section className="px-4 py-3 bg-neutral-100 border-b border-neutral-200">
-          {recentSearches.length > 0 && (
-            <div className="mb-2.5">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-600">
-                  <History className="h-3.5 w-3.5" />
-                  <span>Recent Searches</span>
-                </div>
-                <button
-                  onClick={handleClearRecent}
-                  className="text-[11px] font-bold text-neutral-600 hover:text-[#D91E2A] hover:underline"
-                >
-                  Clear History
-                </button>
-              </div>
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-                {recentSearches.map((term, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => handleSelectRecent(term)}
-                    className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-medium text-neutral-800 shadow-xs border border-neutral-200 cursor-pointer hover:border-neutral-400 transition-colors"
+        {/* 3. RECENT SEARCHES & TRENDING */}
+        {!activeQuery && (
+          <section className="bg-white p-4 mb-2 shadow-2xs space-y-4">
+            {recentSearches.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
+                    <History className="h-3.5 w-3.5 text-neutral-400" /> Recent Searches
+                  </h3>
+                  <button
+                    onClick={handleClearRecent}
+                    className="text-[11px] text-neutral-400 hover:text-neutral-700"
                   >
-                    <span>{term}</span>
-                    <button
-                      onClick={(e) => handleRemoveRecent(term, e)}
-                      aria-label="Remove search"
-                      className="text-neutral-400 hover:text-[#D91E2A] ml-0.5"
+                    Clear All
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentSearches.map((term) => (
+                    <span
+                      key={term}
+                      onClick={() => handleSelectRecent(term)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-1 text-xs text-neutral-800 hover:bg-neutral-200 cursor-pointer transition-colors"
                     >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
+                      {term}
+                      <X
+                        className="h-3 w-3 text-neutral-400 hover:text-neutral-700"
+                        onClick={(e) => handleRemoveRecent(term, e)}
+                      />
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5 mb-2">
+                <TrendingUp className="h-3.5 w-3.5 text-[#D91E2A]" /> Trending in Bhopal
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {TRENDING_BHOPAL.map((trend) => (
+                  <button
+                    key={trend.query}
+                    onClick={() => handleSelectRecent(trend.query)}
+                    className="flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 hover:border-[#D91E2A] hover:text-[#D91E2A] transition-colors cursor-pointer"
+                  >
+                    <span className="text-[#D91E2A] font-bold">{trend.rank}</span> {trend.query}
+                  </button>
                 ))}
               </div>
             </div>
-          )}
-
-          {/* Trending in Bhopal */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-neutral-600">
-              <Flame className="h-3.5 w-3.5 text-[#D91E2A]" />
-              <span>Trending in Bhopal</span>
-            </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              {TRENDING_BHOPAL.map((trend, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSelectRecent(trend.query)}
-                  className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[11px] font-medium text-neutral-800 border border-neutral-200 hover:border-neutral-400 transition-colors shrink-0"
-                >
-                  <span className="text-[#D91E2A] font-bold">{trend.rank}</span> {trend.query}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* 4. RESULTS STATUS & REFINEMENT BAR */}
         <section className="sticky top-[95px] z-30 bg-white shadow-xs">
@@ -518,7 +409,7 @@ function SearchContent() {
                     </span>
                   </>
                 ) : (
-                  <>Showing {filteredProducts.length} popular products</>
+                  <>Showing {filteredProducts.length} retail products from Bhopal catalog</>
                 )}
               </h1>
               <p className="text-[11px] text-neutral-500 font-normal">
@@ -533,8 +424,8 @@ function SearchContent() {
           {/* Quick Horizontal Filter Pills */}
           <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto no-scrollbar">
             <button
-              onClick={() => setSelectedQuickFilter(selectedQuickFilter === "all" ? "all" : "all")}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              onClick={() => setSelectedQuickFilter("all")}
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
                 selectedQuickFilter === "all"
                   ? "bg-[#D91E2A] text-white font-semibold"
                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
@@ -546,7 +437,7 @@ function SearchContent() {
               onClick={() =>
                 setSelectedQuickFilter(selectedQuickFilter === "under-999" ? "all" : "under-999")
               }
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
                 selectedQuickFilter === "under-999"
                   ? "bg-[#D91E2A] text-white font-semibold"
                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
@@ -558,7 +449,7 @@ function SearchContent() {
               onClick={() =>
                 setSelectedQuickFilter(selectedQuickFilter === "rating-4" ? "all" : "rating-4")
               }
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
                 selectedQuickFilter === "rating-4"
                   ? "bg-[#D91E2A] text-white font-semibold"
                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
@@ -570,7 +461,7 @@ function SearchContent() {
               onClick={() =>
                 setSelectedQuickFilter(selectedQuickFilter === "prestige" ? "all" : "prestige")
               }
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
                 selectedQuickFilter === "prestige"
                   ? "bg-[#D91E2A] text-white font-semibold"
                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
@@ -580,47 +471,34 @@ function SearchContent() {
             </button>
             <button
               onClick={() =>
-                setSelectedQuickFilter(selectedQuickFilter === "hawkins" ? "all" : "hawkins")
+                setSelectedQuickFilter(selectedQuickFilter === "philips" ? "all" : "philips")
               }
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                selectedQuickFilter === "hawkins"
+              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                selectedQuickFilter === "philips"
                   ? "bg-[#D91E2A] text-white font-semibold"
                   : "bg-neutral-100 text-neutral-800 border border-neutral-200"
               }`}
             >
-              Hawkins
+              Philips
             </button>
           </div>
 
-          {/* Sticky Docked Sort & Filter Bar */}
-          <div className="grid grid-cols-3 divide-x divide-neutral-200 border-t border-b border-neutral-200 py-1.5 text-xs font-semibold text-neutral-800">
+          {/* Sticky Docked Sort Bar */}
+          <div className="grid grid-cols-2 divide-x divide-neutral-200 border-t border-b border-neutral-200 py-1.5 text-xs font-semibold text-neutral-800">
             <button
               onClick={() => setIsSortOpen(!isSortOpen)}
-              className="flex items-center justify-center gap-1 py-1 hover:text-[#D91E2A] active:scale-95 transition-transform"
+              className="flex items-center justify-center gap-1 py-1 hover:text-[#D91E2A] active:scale-95 transition-transform cursor-pointer"
             >
               <ArrowUpDown className="h-3.5 w-3.5" />
               <span>
                 {sortBy === "relevance"
-                  ? "Relevance"
+                  ? "Sort: Relevance"
                   : sortBy === "price-asc"
-                    ? "Price: Low"
+                    ? "Price: Low to High"
                     : sortBy === "price-desc"
-                      ? "Price: High"
+                      ? "Price: High to Low"
                       : "Top Rated"}
               </span>
-            </button>
-
-            <button
-              onClick={() => setIsSortOpen(true)}
-              className="flex items-center justify-center gap-1.5 py-1 hover:text-[#D91E2A] active:scale-95 transition-transform"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>Filters</span>
-              {selectedQuickFilter !== "all" && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#D91E2A] text-[10px] font-bold text-white">
-                  1
-                </span>
-              )}
             </button>
 
             <label className="flex items-center justify-center gap-1.5 py-1 cursor-pointer select-none">
@@ -631,7 +509,7 @@ function SearchContent() {
                 className="h-3.5 w-3.5 rounded text-[#D91E2A] focus:ring-[#D91E2A] border-neutral-300"
               />
               <span className="text-[11px] font-bold text-[#D91E2A] flex items-center gap-0.5">
-                <Zap className="h-3 w-3 fill-current" /> 2-Hr Fast
+                <Zap className="h-3 w-3 fill-current" /> 2-Hr Bhopal Fast
               </span>
             </label>
           </div>
@@ -639,22 +517,53 @@ function SearchContent() {
 
         {/* 5. 2-COLUMN PRODUCT GRID */}
         <section className="p-3">
-          {filteredProducts.length > 0 ? (
+          {loading ? (
+            <div className="py-20 flex flex-col items-center justify-center text-center">
+              <div className="w-8 h-8 border-3 border-[#D91E2A] border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-xs font-semibold text-neutral-500">Searching store database...</p>
+            </div>
+          ) : filteredProducts.length > 0 ? (
             <div className="grid grid-cols-2 gap-2.5">
-              {filteredProducts.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  id={p.id}
-                  title={p.title}
-                  mrpPaise={p.mrpPaise}
-                  sellingPricePaise={p.sellingPricePaise}
-                  rating={p.rating}
-                  ratingCount={p.ratingCount}
-                  onAddToCart={() => {
-                    // Dispatch or show notification
-                  }}
-                />
-              ))}
+              {filteredProducts.map((p) => {
+                const primaryVariant = p.variants[0];
+                const mrpPaise = primaryVariant ? primaryVariant.mrpPaise : 0;
+                const sellingPricePaise = primaryVariant ? primaryVariant.sellingPricePaise : 0;
+                return (
+                  <ProductCard
+                    key={p.id}
+                    id={p.id}
+                    slug={p.slug}
+                    title={p.name}
+                    brand={p.brand?.name}
+                    mrpPaise={mrpPaise}
+                    sellingPricePaise={sellingPricePaise}
+                    rating={p.ratingAverage || 4.2}
+                    ratingCount={p.reviewCount || 10}
+                    inStock={primaryVariant?.inStock ?? true}
+                    isWishlisted={isInWishlist(p.id)}
+                    onAddToCart={() =>
+                      addToCart({
+                        id: p.id,
+                        slug: p.slug,
+                        title: p.name,
+                        brand: p.brand?.name,
+                        sellingPricePaise,
+                        mrpPaise,
+                      })
+                    }
+                    onToggleWishlist={() =>
+                      toggleWishlist({
+                        id: p.id,
+                        slug: p.slug,
+                        title: p.name,
+                        brand: p.brand?.name,
+                        sellingPricePaise,
+                        mrpPaise,
+                      })
+                    }
+                  />
+                );
+              })}
             </div>
           ) : (
             /* ZERO SEARCH RESULTS STATE */
@@ -676,7 +585,7 @@ function SearchContent() {
                   setSelectedQuickFilter("all");
                   setFastDeliveryOnly(false);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#D91E2A] px-4 py-2 text-xs font-bold text-white hover:bg-[#B31520] transition-colors shadow-xs"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#D91E2A] px-4 py-2 text-xs font-bold text-white hover:bg-[#B31520] transition-colors shadow-xs cursor-pointer"
               >
                 Clear Search &amp; View All
               </button>
@@ -692,8 +601,7 @@ function SearchContent() {
             </div>
             <h3 className="text-xs font-bold text-neutral-900">Looking for something else?</h3>
             <p className="text-[11px] text-neutral-600 max-w-xs mx-auto mt-1 mb-3">
-              Didn&apos;t find the exact model? Explore our complete Bhopal retail superstore
-              warehouse catalog by department.
+              Explore our complete Bhopal retail superstore warehouse catalog by department.
             </p>
             <Link
               href="/categories"
@@ -732,9 +640,11 @@ function SearchContent() {
                     setSortBy(opt.id as typeof sortBy);
                     setIsSortOpen(false);
                   }}
-                  className="flex items-center justify-between w-full py-3 text-xs font-semibold text-neutral-800 hover:text-[#D91E2A]"
+                  className="flex items-center justify-between w-full py-3 text-xs font-semibold text-neutral-800 hover:text-[#D91E2A] cursor-pointer"
                 >
-                  <span>{opt.label}</span>
+                  <span className={sortBy === opt.id ? "text-[#D91E2A] font-bold" : ""}>
+                    {opt.label}
+                  </span>
                   {sortBy === opt.id && <Check className="h-4 w-4 text-[#D91E2A]" />}
                 </button>
               ))}

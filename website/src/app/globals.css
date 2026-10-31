@@ -1,40 +1,51 @@
 @import "tailwindcss";
 
 :root {
-  /* Stitch Design System Palette Tokens */
-  --surface: #ffffff;
-  --surface-grey: #f7f7f8;
-  --border: #e5e7eb;
-  --ink: #1a1a1a;
-  --body: #3c4043;
-  --muted: #6b7280;
+  /* Warm Cream & Burgundy Aesthetic Palette (from Hero Reference) */
+  --surface: #FDF8EE;
+  --surface-cream: #FAF3E0;
+  --surface-card: #FFFFFF;
+  --surface-grey: #F4ECDC;
+  --border: #EADFC7;
+  --border-strong: #D5C4A1;
+  --ink: #2C1810;
+  --body: #4A3428;
+  --muted: #735A4A;
 
-  /* Brand Red Accent Tokens */
-  --red-500: #d91e2a;
-  --red-600: #b31520;
-  --red-700: #8e0e17;
-  --red-50: #fdecee;
-  --red-100: #feecec;
+  /* Brand Burgundy Accent Tokens */
+  --red-900: #42060B;
+  --red-800: #5A0A10;
+  --red-700: #7A0C16;
+  --red-600: #9E101D;
+  --red-500: #C51B26;
+  --red-100: #F6D8DA;
+  --red-50: #FCEDEE;
+
+  /* Warm Gold / Beige Tokens */
+  --beige-100: #FDF8EE;
+  --beige-200: #F4ECDC;
+  --beige-300: #EADFC7;
+  --beige-400: #D5C4A1;
 
   /* Status Color Tokens */
-  --success: #1e9e5a;
-  --success-bg: #e8f7f0;
-  --warning: #f59e0b;
-  --warning-bg: #fef3c7;
-  --error: #d91e2a;
-  --error-bg: #feecec;
-  --info: #2563eb;
-  --info-bg: #eff6ff;
-  --star: #f5a623;
+  --success: #1E824C;
+  --success-bg: #EAF7EE;
+  --warning: #D97706;
+  --warning-bg: #FEF3C7;
+  --error: #7A0C16;
+  --error-bg: #FCEDEE;
+  --info: #1D4ED8;
+  --info-bg: #EFF6FF;
+  --star: #F59E0B;
 
   /* Touch & Layout Targets */
   --min-touch-target: 44px;
 }
 
 @theme inline {
-  --color-brand: var(--red-500);
-  --color-brand-hover: var(--red-600);
-  --color-brand-pressed: var(--red-700);
+  --color-brand: var(--red-700);
+  --color-brand-hover: var(--red-800);
+  --color-brand-pressed: var(--red-900);
   --color-brand-subtle: var(--red-50);
   --color-brand-muted: var(--red-100);
 
@@ -55,7 +66,8 @@
   --color-status-info-bg: var(--info-bg);
   --color-star: var(--star);
 
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 body {

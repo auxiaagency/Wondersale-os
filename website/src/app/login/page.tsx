@@ -17,18 +17,20 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [phoneNumber, setPhoneNumber] = useState("98260 12345");
-  const [isOtpSent, setIsOtpSent] = useState(true);
-  const [otp, setOtp] = useState(["4", "8", "2", "9", "", ""]);
-  const [countdown, setCountdown] = useState(28);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [countdown, setCountdown] = useState(30);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [devOtpHint, setDevOtpHint] = useState("");
 
-  const handleSendOtp = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendOtp = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const cleanNumber = phoneNumber.replace(/\D/g, "");
     if (cleanNumber.length !== 10) {
       setErrorMsg("Please enter a valid 10-digit mobile number");
@@ -36,10 +38,26 @@ export default function LoginPage() {
     }
     setErrorMsg("");
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: cleanNumber }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsOtpSent(true);
+        setDevOtpHint(data.data.devOtp || "123456");
+        setCountdown(30);
+        setErrorMsg("");
+      } else {
+        setErrorMsg(data.error?.message || "Failed to dispatch OTP");
+      }
+    } catch {
+      setErrorMsg("Network error. Please try again.");
+    } finally {
       setLoading(false);
-      setIsOtpSent(true);
-    }, 600);
+    }
   };
 
   const handleOtpChange = (index: number, val: string) => {
@@ -57,17 +75,32 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     const entered = otp.join("");
-    if (entered.length < 4) {
-      setErrorMsg("Please enter complete OTP");
+    if (entered.length !== 6) {
+      setErrorMsg("Please enter the complete 6-digit OTP");
       return;
     }
+    const cleanNumber = phoneNumber.replace(/\D/g, "");
     setLoading(true);
-    setTimeout(() => {
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile: cleanNumber, code: entered }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        router.push("/account");
+      } else {
+        setErrorMsg(data.error?.message || "Invalid OTP code");
+      }
+    } catch {
+      setErrorMsg("Verification failed. Please try again.");
+    } finally {
       setLoading(false);
-      router.push("/account");
-    }, 800);
+    }
   };
 
   return (
@@ -82,19 +115,7 @@ export default function LoginPage() {
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#D91E2A] flex items-center justify-center text-white shadow-sm">
-              <Store className="h-4 w-4" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-black tracking-tight text-base leading-none text-[#D91E2A] uppercase">
-                WONDERSALE
-              </span>
-              <span className="text-[10px] font-medium text-neutral-500 tracking-normal leading-tight mt-0.5">
-                Bhopal Store &amp; Online Pan-India
-              </span>
-            </div>
-          </div>
+          <WondersaleLogo size="sm" />
         </div>
 
         <a
@@ -244,10 +265,11 @@ export default function LoginPage() {
               {/* WhatsApp Alternative */}
               <div className="mt-2.5 pt-2 border-t border-neutral-100 flex items-center justify-between">
                 <span className="text-[11px] text-neutral-500 font-medium">
-                  Didn&apos;t receive SMS?
+                  {devOtpHint ? `Dev OTP: ${devOtpHint}` : "Didn't receive SMS?"}
                 </span>
                 <button
                   type="button"
+                  onClick={() => setCountdown(30)}
                   className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 hover:bg-emerald-100 transition-colors"
                 >
                   <MessageCircle className="h-3 w-3 text-emerald-700" />
@@ -259,15 +281,20 @@ export default function LoginPage() {
 
           {/* Primary CTA Button */}
           <button
-            onClick={handleVerifyOtp}
+            onClick={isOtpSent ? handleVerifyOtp : () => handleSendOtp()}
             disabled={loading}
             className="w-full py-3.5 px-4 bg-[#D91E2A] text-white font-bold text-sm rounded-xl shadow-lg shadow-red-600/20 flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-[#B31520]"
           >
             {loading ? (
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
+            ) : isOtpSent ? (
               <>
                 <span>Verify &amp; Proceed</span>
+                <ArrowRight className="h-4 w-4" />
+              </>
+            ) : (
+              <>
+                <span>Get Verification Code</span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}

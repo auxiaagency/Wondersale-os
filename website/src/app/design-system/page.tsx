@@ -12,6 +12,7 @@ import { QuantityStepper } from "@/components/ui/QuantityStepper";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { PriceBreakdownCard } from "@/components/ui/PriceBreakdownCard";
 import { OrderTimeline } from "@/components/ui/OrderTimeline";
+import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
 
 export default function DesignSystemPage() {
   if (process.env.NODE_ENV === "production") {
@@ -32,18 +33,8 @@ export default function DesignSystemPage() {
       {/* Top Banner */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 py-3 shadow-xs">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-[#D91E2A] flex items-center justify-center text-white font-bold text-lg shadow-sm">
-              W
-            </div>
-            <div>
-              <h1 className="text-base font-bold tracking-tight text-slate-900 leading-none">
-                Wondersale Design System
-              </h1>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                Stitch MCP Token & Component Verification
-              </p>
-            </div>
+          <div className="flex items-center space-x-3">
+            <WondersaleLogo size="sm" subtitle="Stitch MCP Token & Component Verification" />
           </div>
           <Badge variant="error" size="sm">
             DEV ONLY

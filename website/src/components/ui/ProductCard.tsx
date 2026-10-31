@@ -1,15 +1,20 @@
 import React from "react";
+import Link from "next/link";
 import { formatPrice, calculateDiscountPercentage } from "@/lib/format";
 
 export interface ProductCardProps {
   id: string;
+  slug?: string;
   title: string;
+  brand?: string;
   mrpPaise: number;
   sellingPricePaise: number;
   rating?: number;
   ratingCount?: number;
   imageUrl?: string;
   inStock?: boolean;
+  badge?: string;
+  express2Hr?: boolean;
   variant?: "grid" | "horizontal";
   onAddToCart?: (id: string) => void;
   onToggleWishlist?: (id: string) => void;
@@ -18,13 +23,17 @@ export interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   id,
+  slug,
   title,
+  brand,
   mrpPaise,
   sellingPricePaise,
   rating = 4.0,
   ratingCount = 0,
   imageUrl,
   inStock = true,
+  badge,
+  express2Hr = true,
   variant = "grid",
   onAddToCart,
   onToggleWishlist,
@@ -34,37 +43,53 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   if (variant === "horizontal") {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex space-x-3 items-center">
-        <div className="w-24 h-24 bg-slate-100 rounded-lg flex-shrink-0 flex items-center justify-center relative overflow-hidden">
-          {discount > 0 && (
-            <span className="absolute top-1 left-1 bg-emerald-600 text-white text-[9px] font-bold px-1 rounded z-10">
+      <div className="bg-[#FAF3E0] rounded-2xl border border-[#EADFC7] p-3 shadow-2xs hover:shadow-xs hover:border-[#CDB992] transition-all flex space-x-3 items-center group">
+        <div className="w-24 h-24 bg-[#FDF8EE] rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden border border-[#EADFC7]/60">
+          {discount > 0 ? (
+            <span className="absolute top-1 left-1 bg-[#7A0C16] text-[#FDF8EE] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
               {discount}% OFF
             </span>
-          )}
+          ) : badge ? (
+            <span className="absolute top-1 left-1 bg-[#5A0A10] text-[#FDF8EE] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
+              {badge}
+            </span>
+          ) : null}
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
+            <img src={imageUrl} alt={title} className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-200" />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 font-bold text-xs">
+            <div className="w-10 h-10 rounded-full bg-[#EADFC7] flex items-center justify-center text-[#735A4A] font-bold text-xs">
               WS
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center space-x-1 mb-0.5">
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 rounded">
-              {rating.toFixed(1)} ★
+          {express2Hr && (
+            <div className="flex items-center justify-end mb-0.5">
+              <span className="text-[9px] font-bold text-[#7A0C16] bg-[#FCEDEE] px-1.5 py-0.5 rounded">
+                ⚡ 2-Hr
+              </span>
+            </div>
+          )}
+          {brand && (
+            <span className="text-[9px] font-bold uppercase tracking-wider text-[#735A4A] block truncate">
+              {brand}
             </span>
-            {ratingCount > 0 && <span className="text-[10px] text-slate-400">({ratingCount})</span>}
-          </div>
-          <h4 className="text-xs font-semibold text-slate-800 truncate mb-1">{title}</h4>
-          <div className="flex items-center justify-between">
+          )}
+          {slug ? (
+            <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors">
+              <h4 className="text-xs font-semibold text-[#2C1810] truncate mb-1">{title}</h4>
+            </Link>
+          ) : (
+            <h4 className="text-xs font-semibold text-[#2C1810] truncate mb-1">{title}</h4>
+          )}
+          <div className="flex items-center justify-between mt-1">
             <div>
-              <span className="text-xs font-extrabold text-slate-900">
+              <span className="text-xs font-extrabold text-[#2C1810]">
                 {formatPrice(sellingPricePaise)}
               </span>
               {discount > 0 && (
-                <span className="text-[10px] text-slate-400 line-through ml-1">
+                <span className="text-[10px] text-[#735A4A] line-through ml-1">
                   {formatPrice(mrpPaise)}
                 </span>
               )}
@@ -73,12 +98,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <button
                 type="button"
                 onClick={() => onAddToCart?.(id)}
-                className="h-8 px-3 bg-red-50 text-[#D91E2A] hover:bg-[#D91E2A] hover:text-white border border-red-200 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                className="h-8 px-3.5 bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
               >
                 Add
               </button>
             ) : (
-              <span className="text-[10px] font-semibold text-slate-400">Out of Stock</span>
+              <span className="text-[10px] font-semibold text-[#735A4A]">Out of Stock</span>
             )}
           </div>
         </div>
@@ -89,34 +114,43 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Default: Vertical Grid Card
   return (
     <div
-      className={`w-full bg-white rounded-xl border border-slate-200 p-2.5 shadow-2xs relative flex flex-col justify-between ${
+      className={`w-full bg-[#FAF3E0] rounded-xl border border-[#EADFC7] p-2 shadow-2xs hover:shadow-md hover:border-[#CDB992] transition-all relative flex flex-col justify-between group ${
         !inStock ? "opacity-75" : ""
       }`}
     >
       <div>
-        <div className="flex justify-between items-start mb-2">
+        {/* Product Image Frame with Overlaid Badges to save vertical height */}
+        <div className="w-full aspect-square bg-[#FDF8EE] rounded-lg flex items-center justify-center overflow-hidden mb-1.5 relative border border-[#EADFC7]/60">
+          {/* Top Left Discount Tag */}
           {discount > 0 && inStock ? (
-            <span className="bg-[#D91E2A] text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded shadow-2xs">
-              SAVE {discount}%
+            <span className="absolute top-1 left-1 bg-[#7A0C16] text-[#FDF8EE] text-[8px] font-extrabold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
+              {discount}% OFF
+            </span>
+          ) : badge && inStock ? (
+            <span className="absolute top-1 left-1 bg-[#5A0A10] text-[#FDF8EE] text-[8px] font-bold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
+              {badge}
             </span>
           ) : !inStock ? (
-            <span className="bg-slate-200 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-              OUT OF STOCK
+            <span className="absolute top-1 left-1 bg-[#F4ECDC] text-[#735A4A] text-[8px] font-bold px-1 py-0.5 rounded z-10 leading-none">
+              OUT
             </span>
-          ) : (
-            <span />
-          )}
+          ) : null}
 
+          {/* Top Right Wishlist Button */}
           <button
             type="button"
-            onClick={() => onToggleWishlist?.(id)}
-            className={`w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center transition-colors cursor-pointer ${
-              isWishlisted ? "text-[#D91E2A]" : "text-slate-400 hover:text-[#D91E2A]"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleWishlist?.(id);
+            }}
+            className={`absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 backdrop-blur-xs border border-[#EADFC7] flex items-center justify-center transition-all z-10 hover:scale-110 cursor-pointer ${
+              isWishlisted ? "text-[#7A0C16]" : "text-[#735A4A] hover:text-[#7A0C16]"
             }`}
             aria-label="Wishlist"
           >
             <svg
-              className="w-3.5 h-3.5"
+              className="w-2.5 h-2.5"
               fill={isWishlisted ? "currentColor" : "none"}
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -129,52 +163,71 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               />
             </svg>
           </button>
-        </div>
 
-        <div className="w-full h-32 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden mb-2 relative">
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
-          ) : (
-            <div className="text-slate-400 flex flex-col items-center">
-              <svg
-                className="w-8 h-8 opacity-50"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.5"
-                  d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
+          {/* Image */}
+          {slug ? (
+            <Link href={`/product/${slug}`} className="w-full h-full flex items-center justify-center p-1">
+              {imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrl}
+                  alt={title}
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
                 />
-              </svg>
-              <span className="text-[9px] font-medium text-slate-500 mt-1">Wondersale</span>
+              ) : (
+                <div className="text-[#735A4A] flex flex-col items-center">
+                  <span className="text-[10px] font-bold">WS</span>
+                </div>
+              )}
+            </Link>
+          ) : imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt={title} className="w-full h-full object-contain p-1" />
+          ) : (
+            <div className="text-[#735A4A] flex flex-col items-center">
+              <span className="text-[10px] font-bold">WS</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center space-x-1 mb-1">
-          <div className="flex items-center bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] font-bold text-emerald-700">
-            <span>{rating.toFixed(1)}</span>
-            <span className="text-amber-500 ml-0.5">★</span>
-          </div>
-          {ratingCount > 0 && <span className="text-[10px] text-slate-400">({ratingCount})</span>}
+        {/* Brand / Delivery Tag Inline */}
+        <div className="flex items-center justify-between text-[9px] text-[#735A4A] mb-1 leading-none">
+          {brand ? (
+            <span className="font-bold uppercase tracking-wider truncate max-w-[65%]">
+              {brand}
+            </span>
+          ) : <span />}
+          {express2Hr && (
+            <span className="font-semibold text-[#7A0C16] shrink-0">
+              ⚡ 2-Hr
+            </span>
+          )}
         </div>
 
-        <h3 className="text-xs font-semibold text-slate-800 line-clamp-2 leading-snug mb-1.5 min-h-[32px]">
-          {title}
-        </h3>
+        {/* Product Title */}
+        {slug ? (
+          <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors block">
+            <h3 className="text-[11px] font-semibold text-[#2C1810] line-clamp-2 leading-tight mb-1.5 min-h-[26px]">
+              {title}
+            </h3>
+          </Link>
+        ) : (
+          <h3 className="text-[11px] font-semibold text-[#2C1810] line-clamp-2 leading-tight mb-1.5 min-h-[26px]">
+            {title}
+          </h3>
+        )}
       </div>
 
-      <div>
-        <div className="flex items-baseline space-x-1.5 mb-2.5">
-          <span className="text-sm font-extrabold text-slate-900">
+      {/* Bottom Row: Price & Inline Add Button */}
+      <div className="flex items-center justify-between pt-1 border-t border-[#EADFC7]/70 gap-1 mt-auto">
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs font-extrabold text-[#2C1810] leading-none">
             {formatPrice(sellingPricePaise)}
           </span>
           {discount > 0 && (
-            <span className="text-[11px] text-slate-400 line-through">{formatPrice(mrpPaise)}</span>
+            <span className="text-[9px] text-[#735A4A] line-through mt-0.5 leading-none">
+              {formatPrice(mrpPaise)}
+            </span>
           )}
         </div>
 
@@ -182,17 +235,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             type="button"
             onClick={() => onAddToCart?.(id)}
-            className="w-full h-9 bg-[#D91E2A] hover:bg-[#B31520] text-white text-xs font-semibold rounded-lg flex items-center justify-center space-x-1 shadow-sm transition-colors cursor-pointer"
+            className="h-6 px-2 bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] text-[10px] font-bold rounded-md flex items-center justify-center shadow-xs transition-colors cursor-pointer shrink-0"
           >
-            <span>+ Add to Cart</span>
+            + Add
           </button>
         ) : (
           <button
             type="button"
             disabled
-            className="w-full h-9 bg-slate-100 text-slate-400 text-xs font-medium rounded-lg flex items-center justify-center cursor-not-allowed border border-slate-200"
+            className="h-6 px-1.5 bg-[#F4ECDC] text-[#735A4A] text-[9px] font-medium rounded-md flex items-center justify-center cursor-not-allowed border border-[#EADFC7] shrink-0"
           >
-            Out of Stock
+            Out
           </button>
         )}
       </div>

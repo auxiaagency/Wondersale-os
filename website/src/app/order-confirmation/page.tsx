@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -16,18 +16,130 @@ import {
   MapPin,
   Store,
   ShieldCheck,
+  Truck,
 } from "lucide-react";
+import { useStorefront } from "@/context/StorefrontContext";
+import { formatPrice } from "@/lib/format";
+import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
+
+interface OrderData {
+  orderNumber: string;
+  status: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  itemTotalPaise: number;
+  deliveryFeePaise: number;
+  discountPaise: number;
+  grandTotalPaise: number;
+  address: {
+    fullName: string;
+    mobile: string;
+    line1: string;
+    city: string;
+    state: string;
+    pincode: string;
+  };
+  items: {
+    id: string;
+    productName: string;
+    variantTitle: string;
+    quantity: number;
+    pricePaise: number;
+    mrpPaise: number;
+    totalPaise: number;
+  }[];
+}
 
 function OrderConfirmationContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId") || "WS-BHP-8921";
+  const { location } = useStorefront();
   const [copiedTracking, setCopiedTracking] = useState(false);
+  const [liveOrder, setLiveOrder] = useState<OrderData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchOrder() {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`);
+        const data = await res.json();
+        if (isMounted && res.ok && data.success && data.data) {
+          setLiveOrder(data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch order details:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    if (orderId) {
+      fetchOrder();
+    } else {
+      setLoading(false);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId]);
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(orderId);
     setCopiedTracking(true);
     setTimeout(() => setCopiedTracking(false), 2000);
   };
+
+  // Derive display values from live order or robust fallback
+  const isBhopal =
+    liveOrder?.address?.city?.toLowerCase() === "bhopal" ||
+    liveOrder?.address?.pincode?.startsWith("462") ||
+    location.isExpressAvailable;
+
+  const displayOrderNumber = liveOrder?.orderNumber || orderId;
+  const items =
+    liveOrder?.items && liveOrder.items.length > 0
+      ? liveOrder.items
+      : [
+          {
+            id: "item-1",
+            productName: "Prestige Svachh Deluxe Alpha Pressure Cooker",
+            variantTitle: "5L",
+            quantity: 1,
+            pricePaise: 219900,
+            mrpPaise: 345000,
+            totalPaise: 219900,
+          },
+          {
+            id: "item-2",
+            productName: "Bajaj Majesty KKN Cordless Electric Kettle",
+            variantTitle: "1.5L",
+            quantity: 1,
+            pricePaise: 84900,
+            mrpPaise: 129900,
+            totalPaise: 84900,
+          },
+        ];
+
+  const totalMrpPaise = items.reduce((sum, it) => sum + it.mrpPaise * it.quantity, 0);
+  const itemsSellingPaise =
+    liveOrder?.itemTotalPaise ?? items.reduce((sum, it) => sum + it.totalPaise, 0);
+  const discountPaise = liveOrder?.discountPaise ?? 15000;
+  const deliveryFeePaise = liveOrder?.deliveryFeePaise ?? 0;
+  const grandTotalPaise =
+    liveOrder?.grandTotalPaise ?? itemsSellingPaise + deliveryFeePaise - discountPaise;
+  const productDiscountPaise = Math.max(0, totalMrpPaise - itemsSellingPaise);
+  const totalSavingsPaise = productDiscountPaise + discountPaise;
+
+  const recipientName = liveOrder?.address?.fullName || "Rohit Verma";
+  const recipientMobile = liveOrder?.address?.mobile || "+91 98260 12345";
+  const deliveryAddressLine = liveOrder?.address
+    ? `${liveOrder.address.line1}, ${liveOrder.address.city}, ${liveOrder.address.state} — ${liveOrder.address.pincode}`
+    : `${location.locality ? `${location.locality}, ` : ""}${location.city}, ${location.state} — ${location.pincode}`;
+
+  // Deterministic 4-digit OTP from order number for proof of delivery
+  const deliveryOtp = displayOrderNumber.replace(/\D/g, "").slice(-4) || "4921";
 
   return (
     <div className="relative mx-auto min-h-screen w-full max-w-[420px] bg-neutral-50 shadow-2xl flex flex-col pb-16 font-sans">
@@ -43,14 +155,16 @@ function OrderConfirmationContent() {
           </Link>
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-[#D91E2A]">Confirmed</span>
-              <span className="text-[10px] text-neutral-500">#{orderId}</span>
+              <span className="text-xs font-semibold text-[#D91E2A]">
+                {liveOrder?.status ? liveOrder.status.replace(/_/g, " ") : "Confirmed"}
+              </span>
+              <span className="text-[10px] text-neutral-500">#{displayOrderNumber}</span>
             </div>
             <button
               onClick={handleCopy}
               className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-neutral-800 hover:text-[#D91E2A] transition-colors"
             >
-              <span>{orderId}</span>
+              <span>{displayOrderNumber}</span>
               {copiedTracking ? (
                 <Check className="h-3 w-3 text-emerald-600" />
               ) : (
@@ -60,15 +174,9 @@ function OrderConfirmationContent() {
           </div>
         </div>
 
-        {/* Store Contact & Help */}
+        {/* Store Brand / Help */}
         <div className="flex items-center gap-1.5">
-          <a
-            href="tel:07554209999"
-            title="Call Store"
-            className="p-1.5 rounded-full text-neutral-600 hover:bg-neutral-100 transition-all active:scale-95"
-          >
-            <Store className="h-5 w-5" />
-          </a>
+          <WondersaleLogo size="sm" showSubtitle={false} />
         </div>
       </header>
 
@@ -89,30 +197,42 @@ function OrderConfirmationContent() {
               Order Placed Successfully!
             </h1>
             <p className="text-xs text-neutral-600 mt-1.5 leading-relaxed max-w-[300px]">
-              Thank you <span className="font-semibold text-neutral-900">Rohit</span>! Your order
-              has been routed to{" "}
-              <span className="font-semibold text-[#D91E2A]">Wondersale Superstore</span>, MP Nagar,
-              Bhopal.
+              Thank you <span className="font-semibold text-neutral-900">{recipientName}</span>!
+              Your order has been routed to{" "}
+              <span className="font-semibold text-[#D91E2A]">
+                {isBhopal
+                  ? "Wondersale Superstore, MP Nagar, Bhopal"
+                  : "Wondersale Central Fulfillment Hub"}
+              </span>
+              .
             </p>
 
-            {/* Express Delivery Guarantee Pill */}
+            {/* Express Delivery Guarantee Pill / Pan India Pill */}
             <div className="mt-3.5 w-full bg-neutral-50 rounded-xl p-2.5 border border-red-200 flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg bg-[#D91E2A] text-white flex items-center justify-center shrink-0">
-                  <Zap className="h-4 w-4 fill-current" />
+                  {isBhopal ? (
+                    <Zap className="h-4 w-4 fill-current" />
+                  ) : (
+                    <Truck className="h-4 w-4" />
+                  )}
                 </span>
                 <div className="text-left">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-neutral-900">Today by 4:30 PM</span>
+                    <span className="text-[11px] font-bold text-neutral-900">
+                      {isBhopal ? "Today within 2 Hours" : "Estimated in 3-5 Business Days"}
+                    </span>
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   </div>
                   <p className="text-[10px] text-neutral-500">
-                    Bhopal Express 2-Hour Delivery Guarantee
+                    {isBhopal
+                      ? `Bhopal Express Delivery Guarantee to ${liveOrder?.address?.city || location.locality || "Bhopal"}`
+                      : `Fast Pan-India Tracked Courier to ${liveOrder?.address?.pincode || location.pincode}`}
                   </p>
                 </div>
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-red-100 text-[#D91E2A] px-2 py-0.5 rounded-full shrink-0">
-                Express
+                {isBhopal ? "Express" : "Standard"}
               </span>
             </div>
           </div>
@@ -126,7 +246,7 @@ function OrderConfirmationContent() {
               Live Order Tracking
             </h2>
             <span className="text-[11px] font-semibold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
-              In Packing
+              {liveOrder?.status === "PLACED" ? "In Packing" : "Order Confirmed"}
             </span>
           </div>
 
@@ -138,10 +258,10 @@ function OrderConfirmationContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-xs font-bold text-neutral-900">Order Confirmed</h3>
-                <time className="text-[10px] font-medium text-neutral-400">12:45 PM</time>
+                <time className="text-[10px] font-medium text-neutral-400">Just now</time>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
-                Order verified and accepted by Bhopal Hub
+                Order verified and accepted by {isBhopal ? "Bhopal Hub" : "Central Hub"}
               </p>
             </div>
 
@@ -151,15 +271,17 @@ function OrderConfirmationContent() {
                 <Store className="h-3 w-3" />
               </div>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-xs font-bold text-[#D91E2A]">Packed at Bhopal Warehouse Hub</h3>
-                <time className="text-[10px] font-bold text-[#D91E2A]">1:10 PM</time>
+                <h3 className="text-xs font-bold text-[#D91E2A]">
+                  Packed at {isBhopal ? "Bhopal Warehouse Hub" : "National Distribution Center"}
+                </h3>
+                <time className="text-[10px] font-bold text-[#D91E2A]">Active</time>
               </div>
               <p className="text-[11px] text-neutral-600 mt-0.5">
                 Packing in progress — Items verified with tamper-proof security seal
               </p>
               <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#D91E2A] bg-red-50 px-2 py-1 rounded w-fit border border-red-200">
                 <ShieldCheck className="h-3 w-3" />
-                Zone A-4, Chetak Bridge Logistics Yard
+                {isBhopal ? "Zone A-4, Chetak Bridge Logistics Yard" : "Zone N-1, National Hub"}
               </div>
             </div>
 
@@ -170,10 +292,14 @@ function OrderConfirmationContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-xs font-semibold text-neutral-800">Out for Delivery</h3>
-                <span className="text-[10px] text-neutral-400">Est. 2:00 PM</span>
+                <span className="text-[10px] text-neutral-400">
+                  {isBhopal ? "Est. 2:00 PM" : "Est. Day 3"}
+                </span>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
-                Wondersale Express Rider assigned &amp; departing
+                {isBhopal
+                  ? "Wondersale Express Rider assigned & departing"
+                  : "Handed over to BlueDart / Delhivery"}
               </p>
             </div>
 
@@ -184,9 +310,14 @@ function OrderConfirmationContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-xs font-semibold text-neutral-800">Delivered</h3>
-                <span className="text-[10px] text-neutral-400">Est. 4:30 PM</span>
+                <span className="text-[10px] text-neutral-400">
+                  {isBhopal ? "Est. 4:30 PM" : "Est. 3-5 Days"}
+                </span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">Arera Colony, Bhopal 462001</p>
+              <p className="text-[11px] text-neutral-500 mt-0.5">
+                {liveOrder?.address?.city || location.city}{" "}
+                {liveOrder?.address?.pincode || location.pincode}
+              </p>
             </div>
           </div>
         </section>
@@ -195,21 +326,25 @@ function OrderConfirmationContent() {
         <section className="bg-white rounded-2xl p-4 border border-neutral-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-              Dedicated Rider
+              {isBhopal ? "Dedicated Rider" : "Logistics Partner"}
             </span>
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
               <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-              Vaccinated &amp; Sanitized
+              Verified &amp; Sanitized
             </span>
           </div>
 
           <div className="flex items-center gap-3 mt-3">
             <div className="relative w-12 h-12 rounded-full overflow-hidden bg-neutral-200 shrink-0 border-2 border-red-200 flex items-center justify-center text-xs font-bold text-neutral-700">
-              MS
+              {isBhopal ? "MS" : "WS"}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-xs font-bold text-neutral-900 truncate">Mukesh S.</h3>
-              <p className="text-[10px] text-neutral-500 truncate">Wondersale Express Partner</p>
+              <h3 className="text-xs font-bold text-neutral-900 truncate">
+                {isBhopal ? "Mukesh S." : "Wondersale Express Fleet"}
+              </h3>
+              <p className="text-[10px] text-neutral-500 truncate">
+                {isBhopal ? "Wondersale Express Partner" : "Tracked Dispatch Service"}
+              </p>
               <div className="flex items-center gap-1 mt-0.5">
                 <span className="text-[11px] font-bold text-neutral-900">4.8 ★</span>
                 <span className="text-[10px] text-neutral-400">(1,240 deliveries in Bhopal)</span>
@@ -244,12 +379,12 @@ function OrderConfirmationContent() {
                 Secure Handover OTP
               </span>
               <span className="text-[10px] text-neutral-600">
-                Share only with Mukesh upon delivery
+                Share only with delivery rider upon handover
               </span>
             </div>
             <div className="bg-white px-3 py-1.5 rounded-lg border border-neutral-200 shadow-2xs">
               <span className="font-mono text-base font-extrabold tracking-widest text-[#D91E2A]">
-                4921
+                {deliveryOtp}
               </span>
             </div>
           </div>
@@ -260,96 +395,101 @@ function OrderConfirmationContent() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-bold text-neutral-900 flex items-center gap-1.5">
               <ShoppingBag className="h-4 w-4 text-[#D91E2A]" />
-              Items in Order (2 items)
+              Items in Order ({items.length} {items.length === 1 ? "item" : "items"})
             </h2>
-            <span className="text-[10px] font-semibold text-neutral-400">Invoice #{orderId}</span>
+            <span className="text-[10px] font-semibold text-neutral-400">
+              Invoice #{displayOrderNumber}
+            </span>
           </div>
 
           <div className="space-y-3 divide-y divide-neutral-100">
-            {/* Item 1 */}
-            <div className="flex items-center gap-3 pt-2 first:pt-0">
-              <div className="w-12 h-12 rounded-lg bg-neutral-100 p-1 shrink-0 border border-neutral-200 flex items-center justify-center text-[10px] font-bold text-[#D91E2A]">
-                5L Cooker
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-bold uppercase tracking-wider bg-neutral-100 px-1.5 py-0.2 rounded text-neutral-600">
-                    5L
-                  </span>
-                  <span className="text-[10px] font-medium text-neutral-400">Qty: 1</span>
+            {items.map((item, idx) => (
+              <div key={item.id || idx} className="flex items-center gap-3 pt-2 first:pt-0">
+                <div className="w-12 h-12 rounded-lg bg-neutral-100 p-1 shrink-0 border border-neutral-200 flex items-center justify-center text-[10px] font-bold text-[#D91E2A] text-center">
+                  {item.variantTitle || "Item"}
                 </div>
-                <h3 className="text-xs font-semibold text-neutral-900 truncate mt-0.5">
-                  Prestige Svachh Deluxe Alpha Pressure Cooker
-                </h3>
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-xs font-extrabold text-neutral-900">₹2,199</span>
-                  <span className="text-[10px] text-neutral-400 line-through">₹3,450</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Item 2 */}
-            <div className="flex items-center gap-3 pt-3">
-              <div className="w-12 h-12 rounded-lg bg-neutral-100 p-1 shrink-0 border border-neutral-200 flex items-center justify-center text-[10px] font-bold text-[#D91E2A]">
-                1.5L Kettle
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-bold uppercase tracking-wider bg-neutral-100 px-1.5 py-0.2 rounded text-neutral-600">
-                    1.5L
-                  </span>
-                  <span className="text-[10px] font-medium text-neutral-400">Qty: 1</span>
-                </div>
-                <h3 className="text-xs font-semibold text-neutral-900 truncate mt-0.5">
-                  Bajaj Majesty KKN Cordless Electric Kettle
-                </h3>
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-xs font-extrabold text-neutral-900">₹849</span>
-                  <span className="text-[10px] text-neutral-400 line-through">₹1,299</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    {item.variantTitle && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-neutral-100 px-1.5 py-0.2 rounded text-neutral-600">
+                        {item.variantTitle}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-medium text-neutral-400">
+                      Qty: {item.quantity}
+                    </span>
+                  </div>
+                  <h3 className="text-xs font-semibold text-neutral-900 truncate mt-0.5">
+                    {item.productName}
+                  </h3>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <span className="text-xs font-extrabold text-neutral-900">
+                      {formatPrice(item.pricePaise)}
+                    </span>
+                    {item.mrpPaise > item.pricePaise && (
+                      <span className="text-[10px] text-neutral-400 line-through">
+                        {formatPrice(item.mrpPaise)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
 
           {/* Pricing Breakdown */}
           <div className="mt-4 pt-3.5 border-t border-neutral-100 space-y-1.5 text-xs">
             <div className="flex justify-between text-neutral-600">
               <span>Items Total (MRP)</span>
-              <span className="font-medium text-neutral-900">₹4,749</span>
+              <span className="font-medium text-neutral-900">{formatPrice(totalMrpPaise)}</span>
             </div>
-            <div className="flex justify-between text-emerald-700">
-              <span>Product Discount</span>
-              <span className="font-medium">-₹1,701</span>
-            </div>
-            <div className="flex justify-between text-emerald-700">
-              <span className="flex items-center gap-1">
-                Coupon{" "}
-                <span className="font-mono font-bold bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
-                  WONDER150
-                </span>
-              </span>
-              <span className="font-medium">-₹150</span>
-            </div>
+            {productDiscountPaise > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span>Product Discount</span>
+                <span className="font-medium">-{formatPrice(productDiscountPaise)}</span>
+              </div>
+            )}
+            {discountPaise > 0 && (
+              <div className="flex justify-between text-emerald-700">
+                <span className="flex items-center gap-1">Coupon Applied</span>
+                <span className="font-medium">-{formatPrice(discountPaise)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-neutral-600">
-              <span>Bhopal Express 2-Hr Delivery</span>
+              <span>
+                {isBhopal ? "Bhopal Express 2-Hr Delivery" : "Standard Nationwide Shipping"}
+              </span>
               <span className="font-bold text-emerald-700">
-                FREE{" "}
-                <span className="text-[10px] text-neutral-400 line-through font-normal">₹49</span>
+                {deliveryFeePaise === 0 ? (
+                  <>
+                    FREE{" "}
+                    <span className="text-[10px] text-neutral-400 line-through font-normal">
+                      {isBhopal ? "₹49" : "₹79"}
+                    </span>
+                  </>
+                ) : (
+                  formatPrice(deliveryFeePaise)
+                )}
               </span>
             </div>
             <div className="pt-2 border-t border-neutral-200 flex justify-between items-baseline font-bold">
               <div className="flex flex-col">
                 <span className="text-sm text-neutral-900">Total Paid</span>
-                <span className="text-[10px] font-normal text-neutral-500">
-                  PhonePe UPI (Txn: UPI/6289104821)
+                <span className="text-[10px] font-semibold text-emerald-700 flex items-center gap-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Instant UPI Payment Verified
                 </span>
               </div>
-              <span className="text-base text-[#D91E2A] font-black">₹2,898</span>
+              <span className="text-base text-[#D91E2A] font-black">
+                {formatPrice(grandTotalPaise)}
+              </span>
             </div>
             {/* Green Savings Tag */}
-            <div className="mt-2 py-1.5 px-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold flex items-center justify-center gap-1.5">
-              <span>You saved ₹1,851 on this order!</span>
-            </div>
+            {totalSavingsPaise > 0 && (
+              <div className="mt-2 py-1.5 px-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold flex items-center justify-center gap-1.5">
+                <span>You saved {formatPrice(totalSavingsPaise)} on this order!</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -364,12 +504,10 @@ function OrderConfirmationContent() {
               Home
             </span>
           </div>
-          <p className="text-xs font-bold text-neutral-900">Rohit Verma</p>
-          <p className="text-xs text-neutral-600 mt-0.5 leading-relaxed">
-            Flat 302, Green Meadows, E-7 Arera Colony, Bhopal, MP 462001
-          </p>
+          <p className="text-xs font-bold text-neutral-900">{recipientName}</p>
+          <p className="text-xs text-neutral-600 mt-0.5 leading-relaxed">{deliveryAddressLine}</p>
           <div className="flex items-center gap-2 mt-1.5 text-xs text-neutral-500">
-            <span>+91 98260 12345</span>
+            <span>{recipientMobile}</span>
           </div>
         </section>
 
@@ -377,7 +515,7 @@ function OrderConfirmationContent() {
         <section className="space-y-2.5 pt-1">
           <button
             onClick={() => {
-              alert("Invoice WS-BHP-8921 downloaded successfully.");
+              alert(`Invoice ${displayOrderNumber} downloaded successfully.`);
             }}
             className="w-full py-3 px-4 bg-[#D91E2A] hover:bg-[#B31520] text-white rounded-xl text-xs font-bold tracking-tight flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.98]"
           >

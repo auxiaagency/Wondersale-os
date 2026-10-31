@@ -11,16 +11,13 @@ import {
   XCircle,
   ExternalLink,
   RefreshCw,
-  SlidersHorizontal,
-  ChevronRight,
   Eye,
   EyeOff,
-  AlertCircle,
   User,
   Phone,
   MapPin,
-  IndianRupee,
-  Calendar,
+  ArrowLeft,
+  Filter,
 } from 'lucide-react';
 import {
   fetchWebsiteStats,
@@ -30,8 +27,8 @@ import {
   fetchItems,
 } from '../api';
 
-export default function WebsiteManagementView() {
-  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'orders' | 'config'
+export default function WebsiteManagementView({ currentUser, onBackToLauncher }) {
+  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'orders'
   const [stats, setStats] = useState({
     total_listed_items: 0,
     total_orders: 0,
@@ -75,7 +72,7 @@ export default function WebsiteManagementView() {
       setLoadingItems(true);
       const res = await fetchItems({
         search: searchQuery,
-        page_size: 50,
+        page_size: 100,
       });
       const itemList = Array.isArray(res) ? res : res.results || [];
       setItems(itemList);
@@ -95,12 +92,15 @@ export default function WebsiteManagementView() {
       });
       const orderList = Array.isArray(res) ? res : res.results || [];
       setOrders(orderList);
+      if (orderList.length > 0 && !selectedOrder) {
+        setSelectedOrder(orderList[0]);
+      }
     } catch (err) {
       console.error('Failed to load orders:', err);
     } finally {
       setLoadingOrders(false);
     }
-  }, [orderStatusFilter, orderSearchQuery]);
+  }, [orderStatusFilter, orderSearchQuery, selectedOrder]);
 
   useEffect(() => {
     loadStats();
@@ -160,226 +160,438 @@ export default function WebsiteManagementView() {
   });
 
   const getStatusBadge = (status) => {
-    const map = {
-      PENDING: { label: 'Pending', bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30' },
-      CONFIRMED: { label: 'Confirmed', bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' },
-      PROCESSING: { label: 'Processing', bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' },
-      SHIPPED: { label: 'Shipped', bg: 'bg-indigo-500/15', text: 'text-indigo-400', border: 'border-indigo-500/30' },
-      DELIVERED: { label: 'Delivered', bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30' },
-      CANCELLED: { label: 'Cancelled', bg: 'bg-rose-500/15', text: 'text-rose-400', border: 'border-rose-500/30' },
+    const styles = {
+      PENDING: { bg: 'rgba(245, 158, 11, 0.15)', text: '#F59E0B', border: '1px solid rgba(245, 158, 11, 0.3)' },
+      CONFIRMED: { bg: 'rgba(59, 130, 246, 0.15)', text: '#3B82F6', border: '1px solid rgba(59, 130, 246, 0.3)' },
+      PROCESSING: { bg: 'rgba(168, 85, 247, 0.15)', text: '#A855F7', border: '1px solid rgba(168, 85, 247, 0.3)' },
+      SHIPPED: { bg: 'rgba(99, 102, 241, 0.15)', text: '#6366F1', border: '1px solid rgba(99, 102, 241, 0.3)' },
+      DELIVERED: { bg: 'rgba(16, 185, 129, 0.15)', text: '#10B981', border: '1px solid rgba(16, 185, 129, 0.3)' },
+      CANCELLED: { bg: 'rgba(239, 68, 68, 0.15)', text: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.3)' },
     };
-    const s = map[status] || { label: status, bg: 'bg-slate-500/15', text: 'text-slate-400', border: 'border-slate-500/30' };
+    const s = styles[status] || { bg: 'rgba(148, 163, 184, 0.15)', text: '#94A3B8', border: '1px solid rgba(148, 163, 184, 0.3)' };
+
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${s.bg} ${s.text} ${s.border}`}>
-        {s.label}
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          padding: '2px 8px',
+          borderRadius: '12px',
+          fontSize: '0.72rem',
+          fontWeight: 700,
+          background: s.bg,
+          color: s.text,
+          border: s.border,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+        }}
+      >
+        {status}
       </span>
     );
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0B0F19] text-slate-100 overflow-y-auto p-4 md:p-6 space-y-6">
-      {/* Top Banner / Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-blue-900/40 via-indigo-900/30 to-purple-900/20 border border-blue-500/20 shadow-xl backdrop-blur-md">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-inner">
-            <Globe className="w-6 h-6 animate-pulse" />
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100%',
+        gap: '20px',
+        padding: '24px',
+        maxWidth: '1440px',
+        margin: '0 auto',
+        width: '100%',
+        boxSizing: 'border-box',
+        color: 'var(--text-primary)',
+      }}
+    >
+      {/* Top Header Card */}
+      <div
+        className="glass-panel"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          padding: '20px 24px',
+          borderRadius: 'var(--radius-xl)',
+          background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(20, 24, 41, 0.8) 100%)',
+          border: '1px solid rgba(14, 165, 233, 0.2)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          {onBackToLauncher && (
+            <button
+              type="button"
+              onClick={onBackToLauncher}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              title="Return to Menu"
+            >
+              <ArrowLeft size={15} />
+              <span>Menu</span>
+            </button>
+          )}
+
+          <div
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'rgba(14, 165, 233, 0.16)',
+              color: '#0EA5E9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid rgba(14, 165, 233, 0.3)',
+              flexShrink: 0,
+            }}
+          >
+            <Globe size={24} />
           </div>
+
           <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Website & Online Store</h1>
-              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                Connected
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
+                Website & Online Store
+              </h1>
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: 'rgba(16, 185, 129, 0.14)',
+                  color: '#10B981',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                }}
+              >
+                wonder.sale
               </span>
             </div>
-            <p className="text-sm text-slate-400">
-              Control which products are published to <span className="text-blue-300 font-medium">wonder.sale</span> and manage incoming online orders.
+            <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Manage online catalog visibility, sync stock in real time, and process incoming e-commerce orders.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
+            type="button"
             onClick={() => {
               loadStats();
               if (activeTab === 'catalog') loadItems();
               if (activeTab === 'orders') loadOrders();
             }}
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-sm font-medium transition"
-            title="Refresh data"
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            title="Refresh statistics and data"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw size={14} className={loadingStats ? 'animate-spin' : ''} />
             <span>Refresh</span>
           </button>
           <a
             href="http://localhost:3000"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold shadow-lg shadow-blue-600/30 transition transform hover:-translate-y-0.5"
+            className="btn btn-primary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
           >
             <span>Visit Storefront</span>
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink size={14} />
           </a>
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+      {/* KPI Stats Cards */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '16px',
+        }}
+      >
+        <div
+          className="glass-panel"
+          style={{
+            padding: '18px 20px',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Listed Products</p>
-            <p className="text-2xl font-bold text-white mt-1">
+            <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Listed Products
+            </div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '4px', color: 'var(--text-primary)' }}>
               {loadingStats ? '...' : stats.total_listed_items}
-            </p>
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Package className="w-5 h-5" />
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(16, 185, 129, 0.14)',
+              color: '#10B981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Package size={20} />
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div
+          className="glass-panel"
+          style={{
+            padding: '18px 20px',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Orders</p>
-            <p className="text-2xl font-bold text-white mt-1">
+            <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Total Online Orders
+            </div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '4px', color: 'var(--text-primary)' }}>
               {loadingStats ? '...' : stats.total_orders}
-            </p>
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-            <ShoppingBag className="w-5 h-5" />
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(59, 130, 246, 0.14)',
+              color: '#3B82F6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <ShoppingBag size={20} />
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div
+          className="glass-panel"
+          style={{
+            padding: '18px 20px',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Pending Orders</p>
-            <p className="text-2xl font-bold text-amber-400 mt-1">
+            <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Pending Fulfillment
+            </div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '4px', color: '#F59E0B' }}>
               {loadingStats ? '...' : stats.pending_orders}
-            </p>
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-            <Clock className="w-5 h-5" />
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(245, 158, 11, 0.14)',
+              color: '#F59E0B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Clock size={20} />
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+        <div
+          className="glass-panel"
+          style={{
+            padding: '18px 20px',
+            borderRadius: 'var(--radius-lg)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            border: '1px solid var(--border-subtle)',
+          }}
+        >
           <div>
-            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Online Revenue</p>
-            <p className="text-2xl font-bold text-emerald-400 mt-1">
-              ₹{loadingStats ? '...' : Number(stats.total_revenue).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-            </p>
+            <div style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Delivered Revenue
+            </div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '4px', color: '#10B981' }}>
+              ₹{loadingStats ? '...' : Number(stats.total_revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-            <TrendingUp className="w-5 h-5" />
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(168, 85, 247, 0.14)',
+              color: '#A855F7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <TrendingUp size={20} />
           </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-800 space-x-6">
+      {/* Tabs Header */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          borderBottom: '1px solid var(--border-subtle)',
+          paddingBottom: '2px',
+        }}
+      >
         <button
+          type="button"
           onClick={() => setActiveTab('catalog')}
-          className={`flex items-center space-x-2 pb-3 text-sm font-semibold transition border-b-2 ${
-            activeTab === 'catalog'
-              ? 'border-blue-500 text-blue-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+          className={`btn ${activeTab === 'catalog' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
-          <Package className="w-4 h-4" />
+          <Package size={15} />
           <span>Product Catalog ({stats.total_listed_items} Listed)</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('orders')}
-          className={`flex items-center space-x-2 pb-3 text-sm font-semibold transition border-b-2 relative ${
-            activeTab === 'orders'
-              ? 'border-blue-500 text-blue-400'
-              : 'border-transparent text-slate-400 hover:text-slate-200'
-          }`}
+          className={`btn ${activeTab === 'orders' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', position: 'relative' }}
         >
-          <ShoppingBag className="w-4 h-4" />
+          <ShoppingBag size={15} />
           <span>Online Orders</span>
           {stats.pending_orders > 0 && (
-            <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-black">
+            <span
+              style={{
+                marginLeft: '6px',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                fontSize: '0.7rem',
+                fontWeight: 800,
+                background: '#F59E0B',
+                color: '#000',
+              }}
+            >
               {stats.pending_orders}
             </span>
           )}
         </button>
       </div>
 
-      {/* Tab 1: Product Catalog Management */}
+      {/* TAB 1: PRODUCT CATALOG */}
       {activeTab === 'catalog' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Search & Filter Bar */}
+          <div
+            className="glass-panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '14px 18px',
+              borderRadius: 'var(--radius-lg)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '260px' }}>
+              <Search size={16} style={{ color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search items by name or UID..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                placeholder="Search catalog by name, UID, or barcode..."
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.9rem',
+                }}
               />
             </div>
 
-            <div className="flex items-center space-x-2 self-start sm:self-auto">
-              <span className="text-xs text-slate-400">Filter:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Filter:</span>
               <button
+                type="button"
                 onClick={() => setCatalogFilter('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                  catalogFilter === 'all'
-                    ? 'bg-blue-600/20 text-blue-400 border-blue-500/40'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
+                className={`btn btn-sm ${catalogFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               >
-                All
+                All Items
               </button>
               <button
+                type="button"
                 onClick={() => setCatalogFilter('listed')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                  catalogFilter === 'listed'
-                    ? 'bg-emerald-600/20 text-emerald-400 border-emerald-500/40'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
+                className={`btn btn-sm ${catalogFilter === 'listed' ? 'btn-primary' : 'btn-secondary'}`}
               >
-                Listed Only
+                Published Only
               </button>
               <button
+                type="button"
                 onClick={() => setCatalogFilter('unlisted')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-                  catalogFilter === 'unlisted'
-                    ? 'bg-rose-600/20 text-rose-400 border-rose-500/40'
-                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                }`}
+                className={`btn btn-sm ${catalogFilter === 'unlisted' ? 'btn-primary' : 'btn-secondary'}`}
               >
-                Unlisted
+                Unpublished
               </button>
             </div>
           </div>
 
-          <div className="bg-slate-900/60 rounded-xl border border-slate-800 overflow-hidden shadow-lg">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-800/60 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
-                  <tr>
-                    <th className="px-4 py-3">Product</th>
-                    <th className="px-4 py-3">UID</th>
-                    <th className="px-4 py-3">Price</th>
-                    <th className="px-4 py-3">MRP</th>
-                    <th className="px-4 py-3">Stock</th>
-                    <th className="px-4 py-3 text-right">Website Listing</th>
+          {/* Catalog Table */}
+          <div
+            className="glass-panel"
+            style={{
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-surface-solid)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '12px 18px', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase' }}>Product</th>
+                    <th style={{ padding: '12px 18px', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase' }}>UID</th>
+                    <th style={{ padding: '12px 18px', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase' }}>Selling Price</th>
+                    <th style={{ padding: '12px 18px', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase' }}>MRP</th>
+                    <th style={{ padding: '12px 18px', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase' }}>In Stock</th>
+                    <th style={{ padding: '12px 18px', fontWeight: 700, fontSize: '0.78rem', textTransform: 'uppercase', textAlign: 'right' }}>Website Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
+                <tbody>
                   {loadingItems ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
-                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-                        Loading items...
+                      <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px', color: '#0EA5E9' }} />
+                        <div>Loading inventory items...</div>
                       </td>
                     </tr>
                   ) : filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
-                        No items found matching criteria.
+                      <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No items match the current search / filter criteria.
                       </td>
                     </tr>
                   ) : (
@@ -389,73 +601,99 @@ export default function WebsiteManagementView() {
                       return (
                         <tr
                           key={item.id}
-                          className="hover:bg-slate-800/40 transition group"
+                          style={{
+                            borderBottom: '1px solid var(--border-subtle)',
+                            transition: 'background 0.15s ease',
+                          }}
                         >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center space-x-3">
+                          <td style={{ padding: '12px 18px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                               {item.primary_image_url ? (
                                 <img
                                   src={item.primary_image_url}
                                   alt={item.name}
-                                  className="w-10 h-10 object-cover rounded-lg border border-slate-700"
+                                  style={{
+                                    width: '38px',
+                                    height: '38px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    objectFit: 'cover',
+                                    border: '1px solid var(--border-subtle)',
+                                  }}
                                 />
                               ) : (
-                                <div className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500">
-                                  <Package className="w-5 h-5" />
+                                <div
+                                  style={{
+                                    width: '38px',
+                                    height: '38px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: 'var(--bg-surface-solid)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'var(--text-muted)',
+                                    border: '1px solid var(--border-subtle)',
+                                  }}
+                                >
+                                  <Package size={18} />
                                 </div>
                               )}
                               <div>
-                                <p className="font-medium text-white group-hover:text-blue-300 transition">
-                                  {item.name}
-                                </p>
-                                <p className="text-xs text-slate-500 line-clamp-1">
-                                  {item.description || 'No description'}
-                                </p>
+                                <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{item.name}</div>
+                                <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {item.description || 'No description entered'}
+                                </div>
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs text-slate-400">
+                          <td style={{ padding: '12px 18px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                             {item.uid}
                           </td>
-                          <td className="px-4 py-3 font-semibold text-emerald-400">
+                          <td style={{ padding: '12px 18px', fontWeight: 800, color: '#10B981' }}>
                             ₹{Number(item.selling_price).toFixed(2)}
                           </td>
-                          <td className="px-4 py-3 text-slate-500 line-through text-xs">
+                          <td style={{ padding: '12px 18px', fontSize: '0.8rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
                             ₹{Number(item.mrp || item.selling_price).toFixed(2)}
                           </td>
-                          <td className="px-4 py-3">
+                          <td style={{ padding: '12px 18px' }}>
                             <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                item.quantity > 5
-                                  ? 'bg-emerald-500/15 text-emerald-400'
-                                  : item.quantity > 0
-                                  ? 'bg-amber-500/15 text-amber-400'
-                                  : 'bg-rose-500/15 text-rose-400'
-                              }`}
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                background: (item.quantity || 0) > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                color: (item.quantity || 0) > 0 ? '#10B981' : '#EF4444',
+                              }}
                             >
                               {item.quantity} in stock
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td style={{ padding: '12px 18px', textAlign: 'right' }}>
                             <button
+                              type="button"
                               onClick={() => handleToggleListing(item)}
                               disabled={isToggling}
-                              className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition border ${
-                                isListed
-                                  ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400 hover:bg-rose-600/20 hover:border-rose-500/40 hover:text-rose-400'
-                                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-emerald-600/20 hover:border-emerald-500/40 hover:text-emerald-400'
-                              }`}
+                              className="btn btn-sm"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: isListed ? 'rgba(16, 185, 129, 0.16)' : 'var(--bg-surface-solid)',
+                                color: isListed ? '#10B981' : 'var(--text-muted)',
+                                border: isListed ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid var(--border-subtle)',
+                                cursor: 'pointer',
+                              }}
                             >
                               {isToggling ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                <RefreshCw size={13} className="animate-spin" />
                               ) : isListed ? (
                                 <>
-                                  <Eye className="w-3.5 h-3.5" />
+                                  <Eye size={13} />
                                   <span>Published</span>
                                 </>
                               ) : (
                                 <>
-                                  <EyeOff className="w-3.5 h-3.5" />
+                                  <EyeOff size={13} />
                                   <span>Unlisted</span>
                                 </>
                               )}
@@ -472,29 +710,55 @@ export default function WebsiteManagementView() {
         </div>
       )}
 
-      {/* Tab 2: Online Orders Management */}
+      {/* TAB 2: ONLINE ORDERS */}
       {activeTab === 'orders' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Order Search & Status Filter */}
+          <div
+            className="glass-panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '14px 18px',
+              borderRadius: 'var(--radius-lg)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '260px' }}>
+              <Search size={16} style={{ color: 'var(--text-muted)' }} />
               <input
                 type="text"
                 value={orderSearchQuery}
                 onChange={(e) => setOrderSearchQuery(e.target.value)}
-                placeholder="Search by Order #, tracking or phone..."
-                className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                placeholder="Search by Order #, tracking ID, or customer phone..."
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.9rem',
+                }}
               />
             </div>
 
-            <div className="flex items-center space-x-2 self-start sm:self-auto">
-              <span className="text-xs text-slate-400">Status:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status:</span>
               <select
                 value={orderStatusFilter}
                 onChange={(e) => setOrderStatusFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 focus:outline-none focus:border-blue-500"
+                style={{
+                  background: 'var(--bg-surface-solid)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  padding: '6px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.82rem',
+                }}
               >
-                <option value="">All Orders</option>
+                <option value="">All Statuses</option>
                 <option value="PENDING">Pending</option>
                 <option value="CONFIRMED">Confirmed</option>
                 <option value="PROCESSING">Processing</option>
@@ -505,19 +769,20 @@ export default function WebsiteManagementView() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Orders Master/Detail Layout */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '18px' }}>
             {/* Orders List */}
-            <div className="lg:col-span-2 space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {loadingOrders ? (
-                <div className="p-12 text-center text-slate-400 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-                  Loading online orders...
+                <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', borderRadius: 'var(--radius-lg)' }}>
+                  <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px', color: '#0EA5E9' }} />
+                  <div>Loading orders...</div>
                 </div>
               ) : orders.length === 0 ? (
-                <div className="p-12 text-center text-slate-400 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-slate-600" />
-                  <p className="font-medium text-slate-300">No online orders found</p>
-                  <p className="text-xs text-slate-500 mt-1">Orders placed on wonder.sale will appear right here.</p>
+                <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', borderRadius: 'var(--radius-lg)' }}>
+                  <ShoppingBag size={32} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>No online orders yet</div>
+                  <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Customer purchases from wonder.sale will appear right here.</div>
                 </div>
               ) : (
                 orders.map((order) => {
@@ -526,41 +791,42 @@ export default function WebsiteManagementView() {
                     <div
                       key={order.id}
                       onClick={() => setSelectedOrder(order)}
-                      className={`p-4 rounded-xl border cursor-pointer transition ${
-                        isSelected
-                          ? 'bg-blue-900/20 border-blue-500/50 shadow-lg'
-                          : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
-                      }`}
+                      className="glass-panel"
+                      style={{
+                        padding: '16px 18px',
+                        borderRadius: 'var(--radius-md)',
+                        cursor: 'pointer',
+                        border: isSelected ? '1px solid #0EA5E9' : '1px solid var(--border-subtle)',
+                        background: isSelected ? 'rgba(14, 165, 233, 0.08)' : 'var(--bg-card)',
+                        transition: 'all 0.15s ease',
+                      }}
                     >
-                      <div className="flex items-center justify-between">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-mono font-bold text-white text-sm">#{order.order_number}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)' }}>#{order.order_number}</span>
                             {getStatusBadge(order.status)}
                           </div>
-                          <p className="text-xs text-slate-400 mt-1 flex items-center space-x-1">
-                            <User className="w-3 h-3" />
-                            <span>{order.customer_name || 'Customer'}</span>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <User size={12} />
+                              {order.customer_name || 'Customer'}
+                            </span>
                             <span>•</span>
-                            <Phone className="w-3 h-3 ml-1" />
-                            <span>{order.customer_mobile}</span>
-                          </p>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <Phone size={12} />
+                              {order.customer_mobile}
+                            </span>
+                          </div>
                         </div>
-
-                        <div className="text-right">
-                          <p className="font-bold text-white text-base">₹{Number(order.total_amount).toFixed(2)}</p>
-                          <p className="text-[11px] text-slate-500 font-mono">
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            ₹{Number(order.total_amount).toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                             {new Date(order.created_at).toLocaleDateString()}
-                          </p>
+                          </div>
                         </div>
-                      </div>
-
-                      {/* Line items summary */}
-                      <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                        <span>
-                          {order.items?.length || 0} item{(order.items?.length || 0) === 1 ? '' : 's'}
-                        </span>
-                        <span className="font-mono text-slate-500">{order.tracking_id}</span>
                       </div>
                     </div>
                   );
@@ -568,79 +834,110 @@ export default function WebsiteManagementView() {
               )}
             </div>
 
-            {/* Order Details & Action Panel */}
-            <div className="lg:col-span-1">
+            {/* Selected Order Detail Panel */}
+            <div>
               {selectedOrder ? (
-                <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-5 sticky top-6 shadow-xl">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div
+                  className="glass-panel"
+                  style={{
+                    padding: '22px',
+                    borderRadius: 'var(--radius-lg)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                    border: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '12px' }}>
                     <div>
-                      <p className="text-xs text-slate-400 uppercase tracking-wider">Order Detail</p>
-                      <p className="font-mono font-bold text-lg text-white">#{selectedOrder.order_number}</p>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Order Details
+                      </div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                        #{selectedOrder.order_number}
+                      </div>
                     </div>
                     {getStatusBadge(selectedOrder.status)}
                   </div>
 
-                  {/* Customer Information */}
-                  <div className="space-y-2 text-xs">
-                    <p className="font-semibold text-slate-300 uppercase tracking-wider">Customer</p>
-                    <div className="p-3 rounded-lg bg-slate-800/50 space-y-1">
-                      <p className="text-white font-medium flex items-center space-x-2">
-                        <User className="w-3.5 h-3.5 text-blue-400" />
-                        <span>{selectedOrder.customer_name || 'Customer'}</span>
-                      </p>
-                      <p className="text-slate-400 flex items-center space-x-2">
-                        <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>{selectedOrder.customer_mobile}</span>
-                      </p>
+                  {/* Customer Block */}
+                  <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-solid)' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                      Customer Info
                     </div>
+                    <div style={{ fontWeight: 700 }}>{selectedOrder.customer_name || 'Customer'}</div>
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{selectedOrder.customer_mobile}</div>
                   </div>
 
-                  {/* Delivery Address */}
+                  {/* Shipping Address */}
                   {selectedOrder.delivery_address && (
-                    <div className="space-y-2 text-xs">
-                      <p className="font-semibold text-slate-300 uppercase tracking-wider">Delivery Address</p>
-                      <div className="p-3 rounded-lg bg-slate-800/50 text-slate-300 space-y-1">
-                        <p>{selectedOrder.delivery_address.address_line || selectedOrder.delivery_address.address_line1 || selectedOrder.delivery_address.street || 'Address on file'}</p>
-                        <p>
-                          {[selectedOrder.delivery_address.city, selectedOrder.delivery_address.pincode].filter(Boolean).join(' - ')}
-                        </p>
+                    <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-surface-solid)' }}>
+                      <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Delivery Address
+                      </div>
+                      <div style={{ fontSize: '0.84rem' }}>
+                        {selectedOrder.delivery_address.address_line || selectedOrder.delivery_address.address_line1 || selectedOrder.delivery_address.street || 'Address on file'}
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {[selectedOrder.delivery_address.city, selectedOrder.delivery_address.pincode].filter(Boolean).join(' - ')}
                       </div>
                     </div>
                   )}
 
-                  {/* Order Items */}
-                  <div className="space-y-2 text-xs">
-                    <p className="font-semibold text-slate-300 uppercase tracking-wider">Purchased Items</p>
-                    <div className="divide-y divide-slate-800 bg-slate-800/30 rounded-lg max-h-48 overflow-y-auto">
+                  {/* Purchased Items */}
+                  <div>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Items Ordered ({(selectedOrder.items || []).length})
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
                       {(selectedOrder.items || []).map((oi) => (
-                        <div key={oi.id} className="p-2.5 flex justify-between items-center text-xs">
+                        <div
+                          key={oi.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '8px 12px',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'var(--bg-surface-solid)',
+                            fontSize: '0.84rem',
+                          }}
+                        >
                           <div>
-                            <p className="font-medium text-slate-200">{oi.item_name}</p>
-                            <p className="text-slate-500 font-mono text-[10px]">{oi.item_uid}</p>
+                            <div style={{ fontWeight: 600 }}>{oi.item_name}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{oi.item_uid}</div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-white font-medium">₹{Number(oi.total_price).toFixed(2)}</p>
-                            <p className="text-slate-400 text-[11px]">{oi.quantity}x @ ₹{Number(oi.unit_price).toFixed(2)}</p>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontWeight: 700 }}>₹{Number(oi.total_price).toFixed(2)}</div>
+                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{oi.quantity}x @ ₹{Number(oi.unit_price).toFixed(2)}</div>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Update Status Actions */}
-                  <div className="space-y-2 pt-2 border-t border-slate-800">
-                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Update Order Status</p>
-                    <div className="grid grid-cols-2 gap-2">
+                  {/* Status Actions */}
+                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
+                    <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      Change Order Status
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(95px, 1fr))', gap: '6px' }}>
                       {['CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'].map((st) => (
                         <button
                           key={st}
+                          type="button"
                           onClick={() => handleStatusChange(selectedOrder.id, st)}
                           disabled={updatingOrderId === selectedOrder.id || selectedOrder.status === st}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-                            selectedOrder.status === st
-                              ? 'bg-blue-600/30 border-blue-500 text-blue-300'
-                              : 'bg-slate-800/70 border-slate-700 text-slate-300 hover:bg-slate-700'
-                          }`}
+                          className="btn btn-sm"
+                          style={{
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            padding: '6px 8px',
+                            background: selectedOrder.status === st ? 'rgba(14, 165, 233, 0.2)' : 'var(--bg-surface-solid)',
+                            color: selectedOrder.status === st ? '#0EA5E9' : 'var(--text-primary)',
+                            border: selectedOrder.status === st ? '1px solid #0EA5E9' : '1px solid var(--border-subtle)',
+                            cursor: 'pointer',
+                          }}
                         >
                           {st}
                         </button>
@@ -649,9 +946,8 @@ export default function WebsiteManagementView() {
                   </div>
                 </div>
               ) : (
-                <div className="p-8 text-center text-slate-500 bg-slate-900/40 rounded-xl border border-slate-800/60">
-                  <Package className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">Select an order on the left to view items, address, and update tracking status.</p>
+                <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', borderRadius: 'var(--radius-lg)' }}>
+                  Select an order on the left to see details and update status.
                 </div>
               )}
             </div>
