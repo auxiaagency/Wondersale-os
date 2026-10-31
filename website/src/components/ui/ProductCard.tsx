@@ -43,8 +43,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   if (variant === "horizontal") {
     return (
-      <div className="bg-[#FAF3E0] rounded-2xl border border-[#EADFC7] p-3 shadow-2xs hover:shadow-xs hover:border-[#CDB992] transition-all flex space-x-3 items-center group">
-        <div className="w-24 h-24 bg-[#FDF8EE] rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden border border-[#EADFC7]/60">
+      <div className="bg-[#FAF3E0] rounded-2xl border-2 border-[#680114] p-3 shadow-2xs hover:shadow-xs transition-all flex space-x-3 items-center group">
+        <div className="w-24 h-24 bg-[#FDF8EE] rounded-xl flex-shrink-0 flex items-center justify-center relative overflow-hidden border border-[#680114]/30">
           {discount > 0 ? (
             <span className="absolute top-1 left-1 bg-[#7A0C16] text-[#FDF8EE] text-[9px] font-bold px-1.5 py-0.5 rounded-md z-10 shadow-2xs">
               {discount}% OFF
@@ -114,7 +114,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Default: Vertical Grid Card
   return (
     <div
-      className={`w-full bg-[#FAF3E0] rounded-xl border border-[#EADFC7] p-2 shadow-2xs hover:shadow-md hover:border-[#CDB992] transition-all relative flex flex-col justify-between group ${
+      className={`w-full bg-[#FAF3E0] rounded-xl border-2 border-[#680114] p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group ${
         !inStock ? "opacity-75" : ""
       }`}
     >

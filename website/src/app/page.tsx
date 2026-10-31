@@ -360,10 +360,10 @@ export default function HomePage() {
             icon="⚡"
             title="Deals of the Day"
             subtitle="Handpicked limited-time discounts with 2-hour express doorstep delivery"
-            bgClass="bg-[#F4ECDC]/90 border border-[#D5C4A1]"
+            bgClass="bg-[#EFE0BC] border-2 border-[#680114]"
             badge={
-              <div className="bg-[#EADFC7] text-[#5A0A10] border border-[#D5C4A1] px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] font-bold shadow-2xs">
-                <Clock className="w-3 h-3 text-[#7A0C16]" />
+              <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] font-bold shadow-2xs">
+                <Clock className="w-3 h-3 text-[#680114]" />
                 <span>
                   Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
                 </span>
@@ -383,7 +383,7 @@ export default function HomePage() {
               <h2 className="text-xl md:text-2xl text-[#2C1810] font-serif font-bold tracking-tight">Shop By Category</h2>
               <Link
                 href="/categories"
-                className="text-xs text-[#7A0C16] font-bold flex items-center hover:underline"
+                className="text-xs text-[#680114] font-bold flex items-center hover:underline"
               >
                 <span>See All</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -393,15 +393,15 @@ export default function HomePage() {
               {/* Cat 1 */}
               <Link
                 href="/category/kitchen-appliances"
-                className="bg-[#FAF3E0] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border border-[#EADFC7] hover:border-[#CDB992]"
+                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#FDF8EE]">
+                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Cookware & Dining category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9w2vUJKQkRNV1FUIkncrCapIM725jmL-G4rr-BgEIijGnUcOrUwaQD6BVKw5Wwm79xdLoqRaszlezpJ6H077FxVzakFF0vorXx2dP9LcnV_XTIB28W8uOjt7leYjhJLvPd3y6r6ILeVDWkiI1B_g4xcK5YTPfatiZw5jxpqIryrhTFz9qAfvAcSJDv6gx0qXKWohElzV1EN6zRF-LyYxA5jqnpUqI-QVPYQd3rEoKUgYoKnMiYvcR1Q"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#7A0C16] text-[#FDF8EE] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
                     Up to 60% Off
                   </span>
                 </div>
@@ -414,15 +414,15 @@ export default function HomePage() {
               {/* Cat 2 */}
               <Link
                 href="/category/electronics-audio"
-                className="bg-[#FAF3E0] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border border-[#EADFC7] hover:border-[#CDB992]"
+                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#FDF8EE]">
+                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Smart Gadgets category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmYpYYgOcAqx8zW2hmXeF5lgJgFB03SDzmr2JqIRTMHSAiVxdL6sT3FHPc0SksAwcHJpP7gU0ZIE0sIMBL09f5SMbTusBEsD9UiZ_RaP_5P011JBecJ5kiCwZhnDbXVDWDjNHAtCn89uJPFG_MLAisZbg6Mlwx1xvQ2lcL6SSVSFwjk6AQlMHafVHoReK5vHXJG1fBOmocUh8qif0vg8W-B4DNRIP5dYNbvzEfKB5QpWc2mjFGViG81g"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#7A0C16] text-[#FDF8EE] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
                     Min 40% Off
                   </span>
                 </div>
@@ -435,15 +435,15 @@ export default function HomePage() {
               {/* Cat 3 */}
               <Link
                 href="/category/toys-games"
-                className="bg-[#FAF3E0] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border border-[#EADFC7] hover:border-[#CDB992]"
+                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#FDF8EE]">
+                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Kids & Toys category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuD37ApjZxEPIH29J5O9A8EdaspEO4NB2MUkfTComCU8qol45FjqL0wKJQpVbJlIH-Ao1xen1ITW4rTgqN8enPGkxEj0C7jcuEenBanwxcoC5zwk7AUBvNQuCt8TwpV1TYPtnG5uaiZDnDyU7lfbFFoR4QKufOFTnE9-h2rwMZrDZivD0_3TXsBk1K7xGV3GANp_7XBbPBMEdK5nHFpScPwuwfLmT7lwXbP5a2Fu_nnKMzVCvgsRRJO87A"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#7A0C16] text-[#FDF8EE] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
                     Under ₹499
                   </span>
                 </div>
@@ -456,15 +456,15 @@ export default function HomePage() {
               {/* Cat 4 */}
               <Link
                 href="/category/sunglasses-accessories"
-                className="bg-[#FAF3E0] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border border-[#EADFC7] hover:border-[#CDB992]"
+                className="bg-[#EFE0BC] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#FDF8EE]">
+                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Eyewear & Style category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuCN1i80jVIbv2fEfKtFphirGBNs7n1uTfhjkqSC55XNFR0q_EHw_Lcgemw4XRLroqdEzkHa5yVjBULXzb36Npq3ES7DbpDDjtx4LUqx4bEFvmBLIOgs_rcceU4dmH5xuuec1JEAPGiCm0IMPl0oroYkEVn4wgJNY2bcc7i5X1PO-p7lC1pQgLCGm9I-ZvVdxvDU4dKBQ9uPVTg-0weRw3nrORWDNlDCdpi8SDYR95X29Wys8m44hxsEVQ"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#7A0C16] text-[#FDF8EE] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
                     Buy 1 Get 1
                   </span>
                 </div>
@@ -478,24 +478,24 @@ export default function HomePage() {
 
           {/* 6. PARTNER BANK OFFER BANNER */}
           <section className="w-full">
-            <div className="bg-gradient-to-r from-[#4A080D] via-[#5A0A10] to-[#7A0C16] text-[#FDF8EE] rounded-2xl p-6 md:p-7 shadow-md flex items-center justify-between relative overflow-hidden border border-[#D5C4A1]/40">
+            <div className="bg-gradient-to-r from-[#3E010C] via-[#520210] to-[#680114] text-[#F6E9C8] rounded-2xl p-6 md:p-7 shadow-md flex items-center justify-between relative overflow-hidden border-2 border-[#680114]">
               <CreditCard className="w-36 h-36 text-white/5 absolute -right-6 -bottom-6 select-none pointer-events-none" />
               <div className="z-10 max-w-2xl space-y-1.5">
                 <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-5 h-5 text-[#EADFC7]" />
-                  <span className="text-xs uppercase tracking-wider text-[#EADFC7] font-bold font-sans">
+                  <ShieldCheck className="w-5 h-5 text-[#EFE0BC]" />
+                  <span className="text-xs uppercase tracking-wider text-[#EFE0BC] font-bold font-sans">
                     Partner Bank Offer
                   </span>
                 </div>
-                <h3 className="text-xl md:text-2xl text-[#FDF8EE] leading-tight font-serif font-bold">
+                <h3 className="text-xl md:text-2xl text-[#F6E9C8] leading-tight font-serif font-bold">
                   Instant 10% Off on HDFC &amp; ICICI Cards
                 </h3>
-                <p className="text-sm text-[#EADFC7]/90">
+                <p className="text-sm text-[#EFE0BC]/90">
                   Applicable on cart value above ₹1,499. Use code at checkout.
                 </p>
                 <div className="pt-2">
                   <button
-                    className="inline-flex items-center gap-2 bg-[#FAF3E0] text-[#5A0A10] px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-2xs hover:bg-[#FDF8EE] transition-colors cursor-pointer border border-[#EADFC7]"
+                    className="inline-flex items-center gap-2 bg-[#EFE0BC] text-[#680114] px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-2xs hover:bg-[#F6E9C8] transition-colors cursor-pointer border-2 border-[#680114]"
                     onClick={() => handleCopyCode("WONDERFEST")}
                     type="button"
                   >
@@ -503,7 +503,7 @@ export default function HomePage() {
                     {copiedCoupon === "WONDERFEST" ? (
                       <Check className="w-4 h-4 text-emerald-600" />
                     ) : (
-                      <Copy className="w-4 h-4 text-[#7A0C16]" />
+                      <Copy className="w-4 h-4 text-[#680114]" />
                     )}
                   </button>
                   {copiedCoupon === "WONDERFEST" && (
@@ -512,8 +512,8 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="z-10 hidden sm:flex flex-col items-center justify-center p-3">
-                <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-[#EADFC7]/20">
-                  <Tag className="w-8 h-8 text-[#EADFC7]" />
+                <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-[#EFE0BC]/20">
+                  <Tag className="w-8 h-8 text-[#EFE0BC]" />
                 </div>
               </div>
             </div>
@@ -522,12 +522,12 @@ export default function HomePage() {
           {/* 7. BEST SELLERS */}
           <ProductCarouselSection
             id="best-sellers"
-            icon={<TrendingUp className="w-5 h-5 text-[#7A0C16]" />}
+            icon={<TrendingUp className="w-5 h-5 text-[#680114]" />}
             title="Best Sellers"
             subtitle="Most loved and highest ordered products from our superstore"
-            bgClass="bg-[#FAF3E0] border border-[#EADFC7] shadow-xs"
+            bgClass="bg-[#EFE0BC] border-2 border-[#680114] shadow-xs"
             badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#7A0C16] bg-[#FCEDEE] px-2 py-0.5 rounded-full border border-[#F6D8DA]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#680114] bg-[#FAEBEF] px-2 py-0.5 rounded-full border border-[#F4D3D8]">
                 Updated Hourly
               </span>
             }
@@ -545,7 +545,7 @@ export default function HomePage() {
             icon="✨"
             title="Fresh In Store"
             subtitle="Just unboxed new season arrivals with guaranteed fast delivery"
-            bgClass="bg-[#F8F2E6] border border-[#E4D5B7] shadow-xs"
+            bgClass="bg-[#E8D7B0] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 New Arrivals
@@ -565,7 +565,7 @@ export default function HomePage() {
             icon="🍳"
             title="Kitchen & Dining Must-Haves"
             subtitle="Pressure cookers, mixer grinders, air fryers & hard anodized cookware"
-            bgClass="bg-[#FAF3E0] border border-[#EADFC7] shadow-xs"
+            bgClass="bg-[#EFE0BC] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                 Up to 45% Off
@@ -585,7 +585,7 @@ export default function HomePage() {
             icon="🎧"
             title="Smart Audio & Tech Gadgets"
             subtitle="Wireless headphones, fast car mounts, smartwatch calling & speakers"
-            bgClass="bg-[#F8F2E6] border border-[#E4D5B7] shadow-xs"
+            bgClass="bg-[#E8D7B0] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                 Top Rated Audio
@@ -605,7 +605,7 @@ export default function HomePage() {
             icon="🛒"
             title="Daily Essentials & Gourmet Pantry"
             subtitle="Artisan roasted coffee, California almonds, mountain honey & cold-pressed oils"
-            bgClass="bg-[#FAF3E0] border border-[#EADFC7] shadow-xs"
+            bgClass="bg-[#EFE0BC] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 100% Genuine
@@ -625,7 +625,7 @@ export default function HomePage() {
             icon="🎲"
             title="Toys, STEM & Family Games"
             subtitle="Montessori puzzles, RC monster trucks, board games & speed cubes"
-            bgClass="bg-[#F8F2E6] border border-[#E4D5B7] shadow-xs"
+            bgClass="bg-[#E8D7B0] border-2 border-[#680114] shadow-xs"
             badge={
               <span className="text-[10px] font-bold uppercase tracking-wider text-sky-800 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
                 Kids &amp; Family
@@ -642,9 +642,9 @@ export default function HomePage() {
 
 
           {/* 10. MOBILE FOOTER ACCORDION & TRUST INFO (< md screens) */}
-          <section className="md:hidden w-full bg-[#FAF3E0]/70 rounded-2xl p-4 space-y-2 border border-[#EADFC7]">
+          <section className="md:hidden w-full bg-[#EFE0BC]/80 rounded-2xl p-4 space-y-2 border-2 border-[#680114]">
             {/* Accordion 1: About Wondersale */}
-            <div className="bg-[#FAF3E0] rounded-xl overflow-hidden shadow-2xs border border-[#EADFC7]">
+            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
               <button
                 type="button"
                 className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
@@ -665,7 +665,7 @@ export default function HomePage() {
             </div>
 
             {/* Accordion 2: Help & Support */}
-            <div className="bg-[#FAF3E0] rounded-xl overflow-hidden shadow-2xs border border-[#EADFC7]">
+            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
               <button
                 type="button"
                 className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
@@ -688,7 +688,7 @@ export default function HomePage() {
             </div>
 
             {/* Accordion 3: Policies */}
-            <div className="bg-[#FAF3E0] rounded-xl overflow-hidden shadow-2xs border border-[#EADFC7]">
+            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
               <button
                 type="button"
                 className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
@@ -711,7 +711,7 @@ export default function HomePage() {
             </div>
 
             {/* Accordion 4: Contact */}
-            <div className="bg-[#FAF3E0] rounded-xl overflow-hidden shadow-2xs border border-[#EADFC7]">
+            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
               <button
                 type="button"
                 className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"

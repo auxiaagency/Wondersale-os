@@ -74,7 +74,7 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
   return (
     <section
       id={id}
-      className={`w-full rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-6 shadow-xs border border-[#EADFC7]/90 transition-all ${bgClass}`}
+      className={`w-full rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-6 shadow-xs border-2 border-[#680114] transition-all ${bgClass}`}
     >
       {/* Header with Title, Badges, and Navigation Arrows */}
       <div className="flex items-center justify-between gap-3 mb-3.5 sm:mb-4.5">
