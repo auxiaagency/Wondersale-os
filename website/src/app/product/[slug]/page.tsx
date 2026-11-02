@@ -320,7 +320,7 @@ function ProductDetailContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] font-sans flex flex-col justify-between">
+    <div className="min-h-screen bg-[#FDF8EE] text-[#680114] font-sans flex flex-col justify-between">
       {/* ======================================================== */}
       {/* DESKTOP VIEWPORT LAYOUT (md: and above, from Stitch Screen 34) */}
       {/* ======================================================== */}
@@ -339,7 +339,7 @@ function ProductDetailContent() {
               {product.category}
             </Link>
             <ChevronRight className="w-3.5 h-3.5" />
-            <span className="text-[#2C1810] font-semibold truncate max-w-xs">{product.title}</span>
+            <span className="text-[#680114] font-semibold truncate max-w-xs">{product.title}</span>
           </nav>
 
           {/* 2. Desktop Two-Column Split Layout */}
@@ -423,14 +423,14 @@ function ProductDetailContent() {
                   <div className="p-3 rounded-xl bg-[#FDF8EE] border border-[#EADFC7] flex items-start gap-2.5">
                     <Zap className="w-5 h-5 text-[#7A0C16] shrink-0" />
                     <div>
-                      <h4 className="font-bold text-[#2C1810]">Express 2-Hr Delivery</h4>
+                      <h4 className="font-bold text-[#680114]">Express 2-Hr Delivery</h4>
                       <p className="text-[#735A4A] text-[11px] mt-0.5">Dispatched directly from Fulfillment Hub</p>
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-[#FDF8EE] border border-[#EADFC7] flex items-start gap-2.5">
                     <ShieldCheck className="w-5 h-5 text-[#7A0C16] shrink-0" />
                     <div>
-                      <h4 className="font-bold text-[#2C1810]">100% Genuine</h4>
+                      <h4 className="font-bold text-[#680114]">100% Genuine</h4>
                       <p className="text-[#735A4A] text-[11px] mt-0.5">Direct manufacturer warranty</p>
                     </div>
                   </div>
@@ -448,14 +448,14 @@ function ProductDetailContent() {
                   </span>
                   <span className="text-xs text-[#735A4A] font-medium">Store Stock Verified</span>
                 </div>
-                <h1 className="font-serif font-bold text-2xl lg:text-3xl text-[#2C1810] leading-snug">
+                <h1 className="font-serif font-bold text-2xl lg:text-3xl text-[#680114] leading-snug">
                   {product.title}
                 </h1>
 
                 {/* Price Strip */}
                 <div className="mt-4 p-4 bg-[#FDF8EE] rounded-xl border border-[#EADFC7]">
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span className="text-3xl font-black text-[#2C1810]">
+                    <span className="text-3xl font-black text-[#680114]">
                       {formatPrice(currentSellingPricePaise)}
                     </span>
                     <span className="text-sm font-medium text-[#735A4A] line-through">
@@ -474,7 +474,7 @@ function ProductDetailContent() {
               {/* Variants Card */}
               {product.variants.length > 1 && (
                 <div className="bg-[#FAF3E0] p-5 rounded-2xl shadow-2xs border border-[#EADFC7]">
-                  <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wider mb-3">
+                  <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wider mb-3">
                     Select Size / Capacity: <span className="text-[#7A0C16]">{selectedVariant?.capacity}</span>
                   </h3>
                   <div className="grid grid-cols-3 gap-3">
@@ -491,10 +491,10 @@ function ProductDetailContent() {
                               : "border-[#EADFC7] bg-[#FAF3E0] hover:border-[#CDB992]"
                           }`}
                         >
-                          <p className={`text-xs font-bold ${isSelected ? "text-[#7A0C16]" : "text-[#2C1810]"}`}>
+                          <p className={`text-xs font-bold ${isSelected ? "text-[#7A0C16]" : "text-[#680114]"}`}>
                             {v.capacity}
                           </p>
-                          <p className="text-sm font-extrabold text-[#2C1810] mt-0.5">
+                          <p className="text-sm font-extrabold text-[#680114] mt-0.5">
                             {formatPrice(v.pricePaise)}
                           </p>
                           <p className="text-[10px] text-[#735A4A] mt-0.5">{v.note}</p>
@@ -508,7 +508,7 @@ function ProductDetailContent() {
               {/* Delivery & Pincode Card */}
               <div className="bg-[#FAF3E0] p-5 rounded-2xl shadow-2xs border border-[#EADFC7]">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#2C1810]">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#680114]">
                     <MapPin className="w-4 h-4 text-[#7A0C16]" />
                     <span>Deliver to: {pincode}</span>
                   </div>
@@ -528,7 +528,7 @@ function ProductDetailContent() {
                       value={pincode}
                       onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
                       placeholder="Enter 6-digit Pincode"
-                      className="flex-1 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] px-3 py-1.5 text-xs text-[#2C1810] focus:outline-none focus:border-[#7A0C16]"
+                      className="flex-1 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] px-3 py-1.5 text-xs text-[#680114] focus:outline-none focus:border-[#7A0C16]"
                     />
                     <button
                       type="submit"
@@ -539,7 +539,7 @@ function ProductDetailContent() {
                   </form>
                 )}
 
-                <div className={`mt-3 p-3 rounded-xl border ${isPincodeValid ? "bg-[#FDF8EE] border-[#EADFC7] text-[#2C1810]" : "bg-red-50 border-red-200 text-red-900"} text-xs`}>
+                <div className={`mt-3 p-3 rounded-xl border ${isPincodeValid ? "bg-[#FDF8EE] border-[#EADFC7] text-[#680114]" : "bg-red-50 border-red-200 text-red-900"} text-xs`}>
                   <div className="flex items-center gap-2 font-bold">
                     <Zap className="w-4 h-4 text-[#7A0C16] fill-current shrink-0" />
                     <span>{pincodeMessage}</span>
@@ -582,12 +582,12 @@ function ProductDetailContent() {
 
               {/* Specifications Card */}
               <div className="bg-[#FAF3E0] p-5 rounded-2xl shadow-2xs border border-[#EADFC7]">
-                <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wider mb-3">Specifications</h3>
+                <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wider mb-3">Specifications</h3>
                 <div className="divide-y divide-[#EADFC7]/60 text-xs">
                   {product.specs.map((item, idx) => (
                     <div key={idx} className="grid grid-cols-2 py-2">
                       <span className="text-[#735A4A] font-medium">{item.label}</span>
-                      <span className="text-[#2C1810] font-semibold">{item.value}</span>
+                      <span className="text-[#680114] font-semibold">{item.value}</span>
                     </div>
                   ))}
                 </div>
@@ -596,7 +596,7 @@ function ProductDetailContent() {
               {/* Verified Reviews Card */}
               <div className="bg-[#FAF3E0] p-5 rounded-2xl shadow-2xs border border-[#EADFC7]">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wider">Customer Reviews</h3>
+                  <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wider">Customer Reviews</h3>
                   <div className="flex items-center gap-1.5 text-xs text-[#735A4A]">
                     <span>Verified Store Buyers</span>
                   </div>
@@ -605,7 +605,7 @@ function ProductDetailContent() {
                   {product.reviews.map((r, idx) => (
                     <div key={idx} className="p-3 rounded-xl bg-[#FDF8EE] border border-[#EADFC7] text-xs">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-[#2C1810]">{r.name}</span>
+                        <span className="font-bold text-[#680114]">{r.name}</span>
                         <span className="text-[#735A4A] text-[10px]">{r.date}</span>
                       </div>
                       <p className="text-[#735A4A] leading-relaxed">{r.text}</p>
@@ -630,7 +630,7 @@ function ProductDetailContent() {
             <button
               onClick={() => router.back()}
               aria-label="Go back"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#2C1810] hover:bg-[#FDF8EE] active:scale-95 transition-transform cursor-pointer"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#FDF8EE] active:scale-95 transition-transform cursor-pointer"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -731,12 +731,12 @@ function ProductDetailContent() {
             )}
           </div>
 
-          <h1 className="mt-1.5 text-base font-bold text-[#2C1810] leading-snug">
+          <h1 className="mt-1.5 text-base font-bold text-[#680114] leading-snug">
             {product.title}
           </h1>
 
           <div className="mt-3 flex items-baseline gap-2.5">
-            <span className="text-2xl font-black tracking-tight text-[#2C1810]">
+            <span className="text-2xl font-black tracking-tight text-[#680114]">
               {formatPrice(currentSellingPricePaise)}
             </span>
             <span className="text-xs font-medium text-[#735A4A] line-through">
@@ -751,7 +751,7 @@ function ProductDetailContent() {
 
           <div className="mt-1 flex items-center justify-between text-[11px] text-[#735A4A]">
             <span>Inclusive of all taxes</span>
-            <span className="font-semibold text-[#2C1810]">
+            <span className="font-semibold text-[#680114]">
               EMI from <strong className="text-[#7A0C16] font-bold">₹106/mo</strong>{" "}
               <span className="underline cursor-pointer">View Plans</span>
             </span>
@@ -770,7 +770,7 @@ function ProductDetailContent() {
                   <p className="text-[10px] font-medium text-[#735A4A] uppercase tracking-wider">
                     Deliver to
                   </p>
-                  <p className="text-xs font-bold text-[#2C1810]">
+                  <p className="text-xs font-bold text-[#680114]">
                     {pincode}
                   </p>
                 </div>
@@ -791,7 +791,7 @@ function ProductDetailContent() {
                   value={pincode}
                   onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
                   placeholder="Enter 6-digit Pincode"
-                  className="flex-1 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] px-3 py-1 text-xs font-medium text-[#2C1810] focus:outline-none focus:border-[#7A0C16]"
+                  className="flex-1 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] px-3 py-1 text-xs font-medium text-[#680114] focus:outline-none focus:border-[#7A0C16]"
                 />
                 <button
                   type="submit"
@@ -805,7 +805,7 @@ function ProductDetailContent() {
             <div
               className={`mt-3 rounded-lg p-2.5 border ${
                 isPincodeValid
-                  ? "bg-[#FDF8EE] border-[#EADFC7] text-[#2C1810]"
+                  ? "bg-[#FDF8EE] border-[#EADFC7] text-[#680114]"
                   : "bg-red-50 border-red-200 text-red-900"
               }`}
             >
@@ -828,21 +828,21 @@ function ProductDetailContent() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FDF8EE] border border-[#EADFC7] text-[#7A0C16] mb-1">
                   <Wallet className="h-4 w-4" />
                 </div>
-                <span className="text-[10px] font-bold text-[#2C1810]">Cash On Delivery</span>
+                <span className="text-[10px] font-bold text-[#680114]">Cash On Delivery</span>
                 <span className="text-[9px] text-[#735A4A]">Available</span>
               </div>
               <div className="flex flex-col items-center">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FDF8EE] border border-[#EADFC7] text-[#7A0C16] mb-1">
                   <RefreshCw className="h-4 w-4" />
                 </div>
-                <span className="text-[10px] font-bold text-[#2C1810]">7-Day Easy Return</span>
+                <span className="text-[10px] font-bold text-[#680114]">7-Day Easy Return</span>
                 <span className="text-[9px] text-[#735A4A]">Doorstep</span>
               </div>
               <div className="flex flex-col items-center">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FDF8EE] border border-[#EADFC7] text-[#7A0C16] mb-1">
                   <ShieldCheck className="h-4 w-4" />
                 </div>
-                <span className="text-[10px] font-bold text-[#2C1810]">Brand Warranty</span>
+                <span className="text-[10px] font-bold text-[#680114]">Brand Warranty</span>
                 <span className="text-[9px] text-[#735A4A]">100% Genuine</span>
               </div>
             </div>
@@ -852,7 +852,7 @@ function ProductDetailContent() {
         {/* 5. SIZE & VARIANT SELECTOR */}
         {product.variants.length > 1 && (
           <section className="bg-[#FAF3E0] px-4 py-3.5 border-y border-[#EADFC7]">
-            <span className="text-xs font-bold text-[#2C1810]">
+            <span className="text-xs font-bold text-[#680114]">
               Select Option: <strong className="text-[#7A0C16]">{selectedVariant?.capacity}</strong>
             </span>
             <div className="mt-2.5 grid grid-cols-3 gap-2">
@@ -870,12 +870,12 @@ function ProductDetailContent() {
                   >
                     <span
                       className={`text-xs font-bold ${
-                        isSelected ? "text-[#7A0C16]" : "text-[#2C1810]"
+                        isSelected ? "text-[#7A0C16]" : "text-[#680114]"
                       }`}
                     >
                       {v.capacity}
                     </span>
-                    <span className="text-[11px] font-extrabold text-[#2C1810]">
+                    <span className="text-[11px] font-extrabold text-[#680114]">
                       {formatPrice(v.pricePaise)}
                     </span>
                   </button>
@@ -890,7 +890,7 @@ function ProductDetailContent() {
           <div className="rounded-2xl border border-[#EADFC7] bg-[#FAF3E0] p-3.5 shadow-2xs">
             <div className="flex items-center gap-2">
               <CreditCard className="h-4 w-4 text-[#7A0C16]" />
-              <h2 className="text-xs font-bold uppercase tracking-wider text-[#2C1810]">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#680114]">
                 Available Offers &amp; Promotions
               </h2>
             </div>
@@ -899,7 +899,7 @@ function ProductDetailContent() {
                 <div className="flex items-start gap-2">
                   <Wallet className="h-4 w-4 text-[#7A0C16] mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-[#2C1810]">
+                    <p className="text-xs font-bold text-[#680114]">
                       Flat ₹150 OFF on UPI Transactions
                     </p>
                     <p className="text-[11px] text-[#735A4A]">
@@ -922,14 +922,14 @@ function ProductDetailContent() {
 
         {/* 7. SPECIFICATIONS TABLE */}
         <section className="bg-[#FAF3E0] px-4 py-4 border-t border-[#EADFC7]">
-          <h2 className="text-sm font-bold text-[#2C1810] pb-2 border-b border-[#EADFC7]/60">
+          <h2 className="text-sm font-bold text-[#680114] pb-2 border-b border-[#EADFC7]/60">
             Product Specifications
           </h2>
           <div className="mt-3 divide-y divide-[#EADFC7]/60 text-xs">
             {product.specs.map((item, idx) => (
               <div key={idx} className="grid grid-cols-2 py-2">
                 <span className="font-medium text-[#735A4A]">{item.label}</span>
-                <span className="font-semibold text-[#2C1810]">{item.value}</span>
+                <span className="font-semibold text-[#680114]">{item.value}</span>
               </div>
             ))}
           </div>
@@ -938,7 +938,7 @@ function ProductDetailContent() {
         {/* 8. VERIFIED REVIEWS */}
         <section className="bg-[#FAF3E0] px-4 py-4 mt-2 border-t border-[#EADFC7]">
           <div className="flex items-center justify-between pb-3">
-            <h2 className="text-sm font-bold text-[#2C1810]">Verified Customer Reviews</h2>
+            <h2 className="text-sm font-bold text-[#680114]">Verified Customer Reviews</h2>
             <div className="flex items-center gap-1 text-xs text-[#735A4A]">
               <span>Verified Store Buyers</span>
             </div>
@@ -950,7 +950,7 @@ function ProductDetailContent() {
                 className="rounded-xl bg-[#FDF8EE] border border-[#EADFC7] p-3 shadow-2xs"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#2C1810]">{r.name}</span>
+                  <span className="text-xs font-bold text-[#680114]">{r.name}</span>
                   <span className="text-[10px] text-[#735A4A]">{r.date}</span>
                 </div>
                 <p className="mt-1 text-xs text-[#735A4A] leading-relaxed">{r.text}</p>
@@ -966,7 +966,7 @@ function ProductDetailContent() {
               <span className="text-[10px] font-medium text-[#735A4A] leading-none">
                 Total Price
               </span>
-              <span className="text-lg font-black tracking-tight text-[#2C1810]">
+              <span className="text-lg font-black tracking-tight text-[#680114]">
                 {formatPrice(currentSellingPricePaise)}
               </span>
               <span className="text-[9px] font-bold text-[#7A0C16] leading-tight">

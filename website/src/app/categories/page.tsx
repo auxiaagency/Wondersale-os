@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useStorefront } from "@/context/StorefrontContext";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
+import { StorefrontFooter } from "@/components/layout/StorefrontFooter";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { DEMO_PRODUCTS } from "@/data/demo-products";
@@ -566,51 +567,41 @@ const DEPARTMENTS: Department[] = [
   },
 ];
 
+import { getCategoryIcon } from "@/lib/category-icons";
+
+export interface BackendCategoryItem {
+  id: number;
+  name: string;
+  description: string;
+  icon: string | null;
+  items_count: number;
+  subcategories: Array<{ id: number; name: string }>;
+}
+
 export default function AllCategoriesPage() {
   const router = useRouter();
-  const [selectedDeptId, setSelectedDeptId] = useState<string>("kitchen-appliances");
+  const [backendCategories, setBackendCategories] = useState<BackendCategoryItem[]>([]);
+  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const { cartCount, addToCart, isInWishlist, toggleWishlist } = useStorefront();
 
-  const currentDept =
-    DEPARTMENTS.find((d) => d.id === selectedDeptId) || DEPARTMENTS[0];
+  useEffect(() => {
+    setIsLoading(true);
+    fetch("/api/categories")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setBackendCategories(data.data);
+          setSelectedCatId(data.data[0].id);
+        }
+      })
+      .catch((err) => console.error("Failed to load categories:", err))
+      .finally(() => setIsLoading(false));
+  }, []);
 
-  const handleAddToCart = (e: React.MouseEvent, prod: DepartmentProduct) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const priceNum = parseInt(prod.price.replace(/[^\d]/g, ""), 10) || 999;
-    const origPriceNum = parseInt(prod.originalPrice.replace(/[^\d]/g, ""), 10) || 1299;
-    addToCart(
-      {
-        id: prod.id,
-        slug: prod.id,
-        title: prod.title,
-        sellingPricePaise: priceNum * 100,
-        mrpPaise: origPriceNum * 100,
-        imageUrl: prod.image,
-      },
-      1
-    );
-  };
-
-  const handleToggleWish = (e: React.MouseEvent, prod: DepartmentProduct) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const priceNum = parseInt(prod.price.replace(/[^\d]/g, ""), 10) || 999;
-    const origPriceNum = parseInt(prod.originalPrice.replace(/[^\d]/g, ""), 10) || 1299;
-    toggleWishlist({
-      id: prod.id,
-      slug: prod.id,
-      title: prod.title,
-      brand: currentDept.name,
-      sellingPricePaise: priceNum * 100,
-      mrpPaise: origPriceNum * 100,
-      rating: parseFloat(prod.rating) || 4.5,
-      ratingCount: parseInt(prod.reviews.replace(/[^\d]/g, ""), 10) || 100,
-      inStock: true,
-      imageUrl: prod.image,
-    });
-  };
+  const currentCategory =
+    backendCategories.find((c) => c.id === selectedCatId) || backendCategories[0] || null;
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -620,41 +611,35 @@ export default function AllCategoriesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#F6E9C8] text-[#680114] antialiased flex flex-col justify-between font-sans">
       {/* 1. Global Header (Exact same header as Home Page) */}
       <GlobalHeader />
 
       {/* Main Content Wrapper */}
-      <main className="flex-1 w-full pb-20 px-4 sm:px-6 md:px-8 xl:px-12 py-5">
+      <main className="flex-1 w-full pb-20 px-4 sm:px-6 md:px-8 xl:px-12 py-5 bg-[#F6E9C8]">
         <div className="w-full max-w-[1600px] mx-auto space-y-6">
           {/* Breadcrumbs & Section Title */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Link
                 href="/"
-                className="w-9 h-9 rounded-xl border border-[#EADFC7] bg-[#F4ECDC] flex items-center justify-center text-[#735A4A] hover:border-[#7A0C16] hover:text-[#7A0C16] shadow-xs transition-colors"
+                className="w-9 h-9 rounded-xl border border-[#DBC599] bg-[#EFE0BC] flex items-center justify-center text-[#680114] hover:bg-[#E8D7B0] transition-colors"
                 title="Go Back"
               >
                 <ArrowLeft className="w-4 h-4" />
               </Link>
               <div>
-                <nav className="flex items-center space-x-2 text-xs text-[#735A4A] mb-0.5">
-                  <Link href="/" className="hover:text-[#2C1810] transition-colors">
+                <nav className="flex items-center space-x-2 text-xs text-[#88091E] mb-0.5">
+                  <Link href="/" className="hover:text-[#680114] transition-colors">
                     Home
                   </Link>
                   <span>/</span>
-                  <span className="text-[#2C1810] font-semibold">Departments</span>
+                  <span className="text-[#680114] font-semibold">Departments</span>
                 </nav>
-                <h1 className="text-xl sm:text-2xl font-bold text-[#2C1810] tracking-tight font-serif">
+                <h1 className="text-xl sm:text-2xl font-bold text-[#680114] tracking-tight font-serif">
                   All Departments &amp; Categories
                 </h1>
               </div>
-            </div>
-
-            {/* Central Warehouse Connected Pill */}
-            <div className="hidden sm:flex items-center space-x-2 text-xs font-semibold text-[#735A4A]">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-600" />
-              <span>Bhopal Central Warehouse Connected</span>
             </div>
           </div>
 
@@ -662,7 +647,7 @@ export default function AllCategoriesPage() {
               HERO BANNER (Deep burgundy strip matching hero screenshot)
               ========================================================================= */}
           <section
-            className="relative overflow-hidden rounded-3xl bg-[#5A0A10] p-6 sm:p-8 text-[#FDF8EE] shadow-xl border border-[#7A0C16]"
+            className="relative overflow-hidden rounded-3xl bg-[#680114] p-6 sm:p-8 text-[#F6E9C8] border-2 border-[#680114]"
             data-purpose="hero-banner"
           >
             {/* Wave glow decorations */}
@@ -672,22 +657,22 @@ export default function AllCategoriesPage() {
             <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-2.5 max-w-2xl">
                 {/* Verified Pill Badge */}
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/10 text-amber-200 backdrop-blur-sm border border-white/15">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/10 text-amber-200 backdrop-blur-sm border border-[#DBC599]/30">
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   Verified Store Inventory
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight font-serif text-[#FDF8EE]">
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight font-serif text-[#F6E9C8]">
                   Explore All 8 Retail Departments
                 </h2>
-                <p className="text-sm sm:text-base text-[#D8B4B8] font-normal leading-relaxed">
+                <p className="text-sm sm:text-base text-[#EFE0BC]/90 font-normal leading-relaxed">
                   Click any department below to view verified products with Express Doorstep Delivery &amp; Pan–India shipping.
                 </p>
               </div>
 
               {/* Express Delivery Tag */}
               <div className="flex-shrink-0">
-                <div className="inline-flex items-center gap-2 bg-[#42060B]/70 backdrop-blur-md border border-[#7A0C16] px-4 py-2.5 rounded-2xl text-[#FDF8EE] text-xs sm:text-sm font-semibold shadow-inner">
-                  <span className="w-6 h-6 rounded-full bg-amber-400 text-[#5A0A10] flex items-center justify-center font-bold text-xs">
+                <div className="inline-flex items-center gap-2 bg-black/20 backdrop-blur-md border border-[#DBC599]/30 px-4 py-2.5 rounded-2xl text-[#F6E9C8] text-xs sm:text-sm font-semibold">
+                  <span className="w-6 h-6 rounded-full bg-amber-400 text-[#680114] flex items-center justify-center font-bold text-xs">
                     ⚡
                   </span>
                   <span>2–Hour Delivery Active</span>
@@ -700,136 +685,154 @@ export default function AllCategoriesPage() {
               TWO COLUMN DIRECTORY LAYOUT
               ========================================================================= */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* LEFT COLUMN: Department List (8 Departments) */}
-            <aside className="lg:col-span-4 xl:col-span-4 space-y-3" data-purpose="department-selector">
+            {/* LEFT COLUMN: Real Categories List */}
+            <aside className="lg:col-span-4 xl:col-span-4 space-y-3" data-purpose="category-selector">
               <div className="flex items-center justify-between pb-1 px-1">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#735A4A]">
-                  Select Department ({DEPARTMENTS.length})
+                  Select Category ({backendCategories.length})
                 </h3>
-                <span className="text-[11px] text-[#735A4A]/80 font-medium">Express Stock Ready</span>
               </div>
 
-              <div className="space-y-2.5">
-                {DEPARTMENTS.map((dept) => {
-                  const Icon = dept.icon;
-                  const isSelected = selectedDeptId === dept.id;
+              {isLoading && backendCategories.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#735A4A]">
+                  Loading categories from backend...
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {backendCategories.map((cat) => {
+                    const Icon = getCategoryIcon(cat.icon, cat.name);
+                    const isSelected = currentCategory?.id === cat.id;
 
-                  return (
-                    <button
-                      key={dept.id}
-                      type="button"
-                      onClick={() => setSelectedDeptId(dept.id)}
-                      className={`w-full text-left rounded-2xl p-3.5 flex items-center justify-between transition-all relative overflow-hidden group cursor-pointer ${
-                        isSelected
-                          ? "bg-[#FAF3E0] border-2 border-[#7A0C16] shadow-sm"
-                          : "bg-[#FFFFFF] border border-[#EADFC7] hover:border-[#D5C4A1] shadow-xs hover:bg-[#FDF8EE]"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3.5">
-                        <div
-                          className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${
-                            isSelected
-                              ? "bg-[#5A0A10] text-[#FDF8EE] group-hover:scale-105"
-                              : "bg-[#F4ECDC] text-[#735A4A] group-hover:text-[#7A0C16]"
-                          }`}
-                        >
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4
-                            className={`text-sm ${
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setSelectedCatId(cat.id)}
+                        className={`w-full text-left rounded-2xl p-3.5 flex items-center justify-between transition-all relative overflow-hidden group cursor-pointer ${
+                          isSelected
+                            ? "bg-[#EFE0BC] border-2 border-[#680114]"
+                            : "bg-[#EFE0BC] border border-[#DBC599] hover:border-[#680114] hover:bg-[#E8D7B0]"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3.5">
+                          <div
+                            className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${
                               isSelected
-                                ? "font-bold text-[#2C1810] group-hover:text-[#7A0C16]"
-                                : "font-semibold text-[#4A3428]"
-                            } transition-colors`}
-                          >
-                            {dept.name}
-                          </h4>
-                          <p
-                            className={`text-xs ${
-                              isSelected ? "text-[#7A0C16] font-semibold" : "text-[#735A4A]"
+                                ? "bg-[#680114] text-[#F6E9C8] group-hover:scale-105"
+                                : "bg-[#F6E9C8] text-[#88091E] group-hover:text-[#680114]"
                             }`}
                           >
-                            {dept.itemCount}
-                          </p>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h4
+                              className={`text-sm ${
+                                isSelected
+                                  ? "font-bold text-[#680114]"
+                                  : "font-semibold text-[#680114]"
+                              } transition-colors`}
+                            >
+                              {cat.name}
+                            </h4>
+                            <p
+                              className={`text-xs ${
+                                isSelected ? "text-[#88091E] font-semibold" : "text-[#88091E]"
+                              }`}
+                            >
+                              {cat.subcategories && cat.subcategories.length > 0
+                                ? `${cat.subcategories.length} Subcategories`
+                                : "Store Department"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      {isSelected ? (
-                        <ChevronRight className="w-5 h-5 text-[#7A0C16] flex-shrink-0 transform group-hover:translate-x-0.5 transition-transform stroke-[2.5]" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-[#735A4A]/60 group-hover:text-[#2C1810] flex-shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                        {isSelected ? (
+                          <ChevronRight className="w-5 h-5 text-[#680114] flex-shrink-0 transform group-hover:translate-x-0.5 transition-transform stroke-[2.5]" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-[#88091E]/60 group-hover:text-[#680114] flex-shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </aside>
 
-            {/* RIGHT COLUMN: Selected Department Deep-Dive */}
-            <section className="lg:col-span-8 xl:col-span-8 space-y-6" data-purpose="department-detail">
-              {/* Department Header Card */}
-              <div className="bg-[#FFFFFF] border border-[#EADFC7] rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center space-x-4">
-                  <div className="w-14 h-14 rounded-2xl bg-[#5A0A10] flex items-center justify-center text-[#FDF8EE] flex-shrink-0 shadow-md">
-                    <currentDept.icon className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-bold text-[#2C1810] font-serif">
-                      {currentDept.name}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-[#735A4A]">
-                      {currentDept.description}
-                    </p>
-                  </div>
-                </div>
+            {/* RIGHT COLUMN: Selected Category Deep-Dive */}
+            <section className="lg:col-span-8 xl:col-span-8 space-y-6" data-purpose="category-detail">
+              {currentCategory && (
+                <>
+                  {/* Category Header Card */}
+                  <div className="bg-[#EFE0BC] border border-[#DBC599] rounded-3xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-14 h-14 rounded-2xl bg-[#680114] flex items-center justify-center text-[#F6E9C8] flex-shrink-0">
+                        {React.createElement(getCategoryIcon(currentCategory.icon, currentCategory.name), {
+                          className: "w-7 h-7 stroke-[2]",
+                        })}
+                      </div>
+                      <div>
+                        <h3 className="text-xl sm:text-2xl font-bold text-[#680114] font-serif">
+                          {currentCategory.name}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#88091E]">
+                          {currentCategory.description || "Official store category from Wondersale warehouse inventory."}
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Browse All Products CTA */}
-                <Link
-                  href={`/category/${currentDept.slug}`}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] text-sm font-semibold shadow-md transition-all flex-shrink-0"
-                >
-                  <span>Browse All Products</span>
-                  <ArrowRight className="w-4 h-4 stroke-[2.2]" />
-                </Link>
-              </div>
-
-              {/* Popular Sub-Categories Strip */}
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#735A4A]">
-                  Popular Sub-Categories in {currentDept.name}:
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {currentDept.subcategories.map((sub) => (
+                    {/* Browse All Products CTA */}
                     <Link
-                      key={sub}
-                      href={`/category/${currentDept.slug}?sub=${encodeURIComponent(sub)}`}
-                      className="px-3.5 py-1.5 bg-[#FAF3E0] border border-[#EADFC7] hover:border-[#7A0C16] hover:text-[#7A0C16] rounded-xl text-xs font-semibold text-[#4A3428] shadow-xs transition-colors"
+                      href={`/search?category=${encodeURIComponent(currentCategory.name)}`}
+                      className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-sm font-semibold transition-all flex-shrink-0"
                     >
-                      {sub}
+                      <span>Browse Products</span>
+                      <ArrowRight className="w-4 h-4 stroke-[2.2]" />
                     </Link>
-                  ))}
-                </div>
-              </div>
+                  </div>
+
+                  {/* Sub-Categories Strip */}
+                  <div className="space-y-2.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#680114]">
+                      Sub-Categories in {currentCategory.name}:
+                    </h4>
+                    {currentCategory.subcategories && currentCategory.subcategories.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {currentCategory.subcategories.map((sub) => (
+                          <Link
+                            key={sub.id}
+                            href={`/search?category=${encodeURIComponent(currentCategory.name)}&subcategory=${encodeURIComponent(sub.name)}`}
+                            className="px-3.5 py-1.5 bg-[#EFE0BC] border border-[#DBC599] hover:border-[#680114] hover:text-[#680114] rounded-xl text-xs font-semibold text-[#680114] transition-colors"
+                          >
+                            {sub.name}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#735A4A] italic">
+                        All products in this category are mapped to the primary department anchor.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
 
               {/* Featured Products Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#735A4A]">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#680114]">
                     Featured Products in this Category:
                   </h4>
-                  <div className="flex items-center space-x-1.5 text-xs text-emerald-800 font-semibold bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
-                    <span>Live in Bhopal</span>
-                  </div>
                 </div>
 
                 {/* Products Grid: Responsive Cards displaying all category products */}
                 {(() => {
+                  if (!currentCategory) return null;
+                  const categoryName = currentCategory.name.toLowerCase();
                   const deptProducts = DEMO_PRODUCTS.filter(
                     (p) =>
-                      p.categorySlug.toLowerCase() === currentDept.slug.toLowerCase() ||
-                      p.category.toLowerCase().replace(/\s+/g, "-") === currentDept.slug.toLowerCase()
+                      p.category.toLowerCase().includes(categoryName) ||
+                      categoryName.includes(p.category.toLowerCase()) ||
+                      p.categorySlug.toLowerCase().includes(categoryName.replace(/[^a-z0-9]/g, ""))
                   );
 
                   if (deptProducts.length > 0) {
@@ -883,183 +886,30 @@ export default function AllCategoriesPage() {
                   }
 
                   return (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
-                      {currentDept.featuredProducts.map((prod) => {
-                        const isWish = isInWishlist(prod.id);
-                        const priceNum = parseInt(prod.price.replace(/[^\d]/g, ""), 10) || 999;
-                        const origPriceNum = parseInt(prod.originalPrice.replace(/[^\d]/g, ""), 10) || 1299;
-
-                        return (
-                          <ProductCard
-                            key={prod.id}
-                            id={prod.id}
-                            slug={prod.id}
-                            title={prod.title}
-                            brand={currentDept.name}
-                            mrpPaise={origPriceNum * 100}
-                            sellingPricePaise={priceNum * 100}
-                            imageUrl={prod.image}
-                            rating={parseFloat(prod.rating) || 4.5}
-                            ratingCount={parseInt(prod.reviews.replace(/[^\d]/g, ""), 10) || 100}
-                            inStock={true}
-                            badge={prod.badge}
-                            express2Hr={prod.express2Hr}
-                            variant="grid"
-                            onAddToCart={() => handleAddToCart({ preventDefault: () => {}, stopPropagation: () => {} } as React.MouseEvent, prod)}
-                            onToggleWishlist={() => handleToggleWish({ preventDefault: () => {}, stopPropagation: () => {} } as React.MouseEvent, prod)}
-                            isWishlisted={isWish}
-                          />
-                        );
-                      })}
+                    <div className="p-8 text-center bg-[#EFE0BC]/50 border border-[#DBC599] rounded-2xl space-y-3">
+                      <p className="text-sm font-semibold text-[#680114]">
+                        No direct demo products cached for {currentCategory.name}.
+                      </p>
+                      <Link
+                        href={`/search?category=${encodeURIComponent(currentCategory.name)}`}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#680114] text-[#F6E9C8] text-xs font-semibold rounded-xl hover:bg-[#88091E] transition-colors"
+                      >
+                        Search Store Catalog for &quot;{currentCategory.name}&quot;
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
                     </div>
                   );
                 })()}
               </div>
-
-              {/* Quick Banner for Same Day Express Delivery */}
-              <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-200/80 rounded-2xl p-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-xs">
-                    ⚡
-                  </div>
-                  <div>
-                    <h5 className="text-sm font-bold text-slate-900">Need it immediately?</h5>
-                    <p className="text-xs text-slate-600">
-                      Order by 6:00 PM for verified 2-hour doorstep delivery across Bhopal pin codes.
-                    </p>
-                  </div>
-                </div>
-                <Link
-                  href="/delivery-checker"
-                  className="hidden sm:inline-flex text-xs font-bold text-amber-800 hover:text-amber-900 underline underline-offset-4"
-                >
-                  Check Pin Eligibility →
-                </Link>
-              </div>
             </section>
           </div>
-
-          {/* =========================================================================
-              TRUST PILLARS STRIP
-              ========================================================================= */}
-          <section className="mt-12 pt-8 border-t border-slate-200" data-purpose="trust-badges">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-              <div className="flex items-center space-x-3.5 p-3.5 bg-white rounded-xl border border-slate-200/70 shadow-xs">
-                <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M13 10V3L4 14h7v7l9-11h-7z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                  </svg>
-                </div>
-                <div>
-                  <h5 className="text-xs font-bold text-slate-900">2-Hour Express Delivery</h5>
-                  <p className="text-[11px] text-slate-500">Live for 462001 &amp; nearby</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3.5 p-3.5 bg-white rounded-xl border border-slate-200/70 shadow-xs">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h5 className="text-xs font-bold text-slate-900">100% Genuine Brands</h5>
-                  <p className="text-[11px] text-slate-500">Authorized manufacturer stock</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3.5 p-3.5 bg-white rounded-xl border border-slate-200/70 shadow-xs">
-                <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
-                  <RotateCcw className="w-5 h-5" />
-                </div>
-                <div>
-                  <h5 className="text-xs font-bold text-slate-900">7-Day Easy Returns</h5>
-                  <p className="text-[11px] text-slate-500">Doorstep instant pickup</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3.5 p-3.5 bg-white rounded-xl border border-slate-200/70 shadow-xs">
-                <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0">
-                  <CreditCard className="w-5 h-5" />
-                </div>
-                <div>
-                  <h5 className="text-xs font-bold text-slate-900">Secure Payments</h5>
-                  <p className="text-[11px] text-slate-500">UPI, Cards &amp; Pay on Delivery</p>
-                </div>
-              </div>
-            </div>
-          </section>
         </div>
       </main>
 
-      {/* =========================================================================
-          MAIN FOOTER (Matching HTML specification)
-          ========================================================================= */}
-      <footer className="bg-slate-900 text-slate-400 text-xs border-t border-slate-800 hidden md:block">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
-            {/* Brand Summary */}
-            <div className="md:col-span-2 space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#d91e2a] flex items-center justify-center text-white font-bold">
-                  ⚡
-                </div>
-                <span className="font-bold text-xl text-white font-display">WONDERSALE</span>
-              </div>
-              <p className="text-slate-400 text-xs max-w-sm leading-relaxed">
-                Wondersale is Bhopal’s premier retail omnichannel platform delivering over 15,000 verified kitchen, home, electronic, and daily essential products directly to your doorstep in 2 hours.
-              </p>
-              <div className="text-[11px] text-slate-500">
-                Fulfillment Centre: Plot 18, Commercial Zone, MP Nagar Zone-II, Bhopal, MP 462011
-              </div>
-            </div>
-
-            {/* Quick Links: Departments */}
-            <div className="space-y-3">
-              <h6 className="text-white font-bold text-xs uppercase tracking-wider">Top Departments</h6>
-              <ul className="space-y-2">
-                <li><Link href="/category/kitchen-appliances" className="hover:text-white transition-colors">Kitchen Appliances</Link></li>
-                <li><Link href="/category/home-appliances" className="hover:text-white transition-colors">Home Appliances</Link></li>
-                <li><Link href="/category/crockery-kitchenware" className="hover:text-white transition-colors">Crockery &amp; Cookware</Link></li>
-                <li><Link href="/category/electronics-audio" className="hover:text-white transition-colors">Electronics &amp; Audio</Link></li>
-                <li><Link href="/category/personal-care-grooming" className="hover:text-white transition-colors">Personal Grooming</Link></li>
-              </ul>
-            </div>
-
-            {/* Quick Links: Help & Customer */}
-            <div className="space-y-3">
-              <h6 className="text-white font-bold text-xs uppercase tracking-wider">Customer Care</h6>
-              <ul className="space-y-2">
-                <li><Link href="/track" className="hover:text-white transition-colors">Track Your Order</Link></li>
-                <li><Link href="/pincodes" className="hover:text-white transition-colors">2-Hour Delivery Pin Codes</Link></li>
-                <li><Link href="/returns" className="hover:text-white transition-colors">Return Policy</Link></li>
-                <li><Link href="/warranty" className="hover:text-white transition-colors">Warranty &amp; Service</Link></li>
-                <li><Link href="/support" className="hover:text-white transition-colors">Contact Support</Link></li>
-              </ul>
-            </div>
-
-            {/* Quick Links: Legal & Assurance */}
-            <div className="space-y-3">
-              <h6 className="text-white font-bold text-xs uppercase tracking-wider">Policies &amp; Trust</h6>
-              <ul className="space-y-2">
-                <li><Link href="/terms" className="hover:text-white transition-colors">Terms of Sale</Link></li>
-                <li><Link href="/privacy" className="hover:text-white transition-colors">Privacy Notice</Link></li>
-                <li><Link href="/grievance" className="hover:text-white transition-colors">Grievance Officer</Link></li>
-                <li><Link href="/wholesale" className="hover:text-white transition-colors">Wholesale &amp; Bulk Orders</Link></li>
-                <li><Link href="/stores" className="hover:text-white transition-colors">Store Locator</Link></li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Copyright Strip */}
-          <div className="mt-12 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
-            <p>© 2025 Wondersale Retail India Private Limited. All rights reserved.</p>
-            <div className="flex items-center space-x-4">
-              <span>Crafted for Bhopal Shoppers</span>
-              <span>•</span>
-              <span className="text-emerald-500 font-medium">Servers Operational</span>
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Global Footer (Desktop Viewports) */}
+      <div className="hidden md:block">
+        <StorefrontFooter />
+      </div>
 
       {/* Mobile Sticky Tab Bar */}
       <BottomTabBar />

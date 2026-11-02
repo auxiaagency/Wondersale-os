@@ -100,11 +100,21 @@ class Category(models.Model):
     """Parent Category classification (e.g. Apparel, Electronics, Groceries)."""
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, default="")
+    icon = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="Name of Lucide SVG icon representing this category (e.g. Utensils, Headphones, Shirt)."
+    )
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Custom display order ranking for frontend and website storefront."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['name']
+        ordering = ['display_order', 'name']
         verbose_name = 'Category'
         verbose_name_plural = 'Categories'
 

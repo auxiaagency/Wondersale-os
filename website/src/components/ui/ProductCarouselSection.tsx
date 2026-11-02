@@ -9,7 +9,7 @@ import { DemoProduct } from "@/data/demo-products";
 interface ProductCarouselSectionProps {
   id?: string;
   icon?: string | React.ReactNode;
-  title: string;
+  title: string | React.ReactNode;
   subtitle?: string;
   badge?: React.ReactNode;
   actionText?: string;
@@ -61,9 +61,111 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
     }
   }, [products]);
 
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasMovedRef = useRef(false);
+  const lastXRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const velocityRef = useRef(0);
+  const momentumRafRef = useRef<number | null>(null);
+
+  const stopMomentum = () => {
+    if (momentumRafRef.current) {
+      cancelAnimationFrame(momentumRafRef.current);
+      momentumRafRef.current = null;
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!scrollRef.current) return;
+    stopMomentum();
+    isDraggingRef.current = true;
+    hasMovedRef.current = false;
+    startXRef.current = e.pageX - scrollRef.current.offsetLeft;
+    scrollLeftRef.current = scrollRef.current.scrollLeft;
+    lastXRef.current = e.pageX;
+    lastTimeRef.current = performance.now();
+    velocityRef.current = 0;
+
+    // Temporarily disable CSS snapping and smooth behavior while mouse is down for 1:1 fluid tracking
+    scrollRef.current.style.scrollSnapType = "none";
+    scrollRef.current.style.scrollBehavior = "auto";
+    scrollRef.current.style.cursor = "grabbing";
+    scrollRef.current.style.userSelect = "none";
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || !scrollRef.current) return;
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const distance = x - startXRef.current;
+    if (Math.abs(distance) > 4) {
+      hasMovedRef.current = true;
+    }
+
+    // Direct 1:1 scroll without multipliers to mimic finger drag
+    scrollRef.current.scrollLeft = scrollLeftRef.current - distance;
+
+    // Calculate instantaneous velocity for release momentum
+    const now = performance.now();
+    const dt = now - lastTimeRef.current;
+    if (dt > 10) {
+      const dx = e.pageX - lastXRef.current;
+      velocityRef.current = dx / dt;
+      lastXRef.current = e.pageX;
+      lastTimeRef.current = now;
+    }
+    checkScroll();
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (!isDraggingRef.current || !scrollRef.current) return;
+    isDraggingRef.current = false;
+    const container = scrollRef.current;
+    container.style.cursor = "grab";
+    container.style.removeProperty("user-select");
+
+    // Inertial kinetic coasting (matches mobile touch release)
+    let currentVelocity = velocityRef.current * 16; // px per frame
+    if (Math.abs(currentVelocity) > 2) {
+      const decay = () => {
+        if (!scrollRef.current || isDraggingRef.current) return;
+        scrollRef.current.scrollLeft -= currentVelocity;
+        currentVelocity *= 0.94; // Smooth friction decay
+        checkScroll();
+
+        if (Math.abs(currentVelocity) > 0.5) {
+          momentumRafRef.current = requestAnimationFrame(decay);
+        } else {
+          // Re-enable native snapping once momentum settles
+          if (scrollRef.current) {
+            scrollRef.current.style.removeProperty("scroll-snap-type");
+            scrollRef.current.style.scrollBehavior = "smooth";
+          }
+        }
+      };
+      momentumRafRef.current = requestAnimationFrame(decay);
+    } else {
+      container.style.removeProperty("scroll-snap-type");
+      container.style.scrollBehavior = "smooth";
+    }
+  };
+
+  const handleClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    // If user dragged more than 4px, prevent card clicks
+    if (hasMovedRef.current) {
+      e.stopPropagation();
+      e.preventDefault();
+      hasMovedRef.current = false;
+    }
+  };
+
   const scroll = (direction: "left" | "right") => {
     if (scrollRef.current) {
-      const cardWidth = 190; // Approx card width + gap
+      stopMomentum();
+      scrollRef.current.style.removeProperty("scroll-snap-type");
+      scrollRef.current.style.scrollBehavior = "smooth";
+      const cardWidth = 190;
       const distance = direction === "left" ? -cardWidth * 3 : cardWidth * 3;
       scrollRef.current.scrollBy({ left: distance, behavior: "smooth" });
     }
@@ -71,26 +173,35 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
 
   if (!products || products.length === 0) return null;
 
+  const isCleanBackground = bgClass.includes("border-0") || bgClass.includes("border-none");
+  const borderStyle = isCleanBackground
+    ? ""
+    : "border-2 border-[#680114]";
+
+  const paddingStyle = isCleanBackground
+    ? "px-0 pt-0 pb-2 sm:pb-3"
+    : "p-4 sm:p-5 md:p-6";
+
   return (
     <section
       id={id}
-      className={`w-full rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-6 shadow-xs border-2 border-[#680114] transition-all ${bgClass}`}
+      className={`w-full rounded-2xl md:rounded-3xl shadow-xs transition-all ${borderStyle} ${paddingStyle} ${bgClass}`}
     >
       {/* Header with Title, Badges, and Navigation Arrows */}
-      <div className="flex items-center justify-between gap-3 mb-3.5 sm:mb-4.5">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="flex items-center justify-between gap-3 mb-3.5 sm:mb-4.5 px-1">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           {icon && typeof icon === "string" ? (
             <span className="text-xl sm:text-2xl select-none">{icon}</span>
           ) : icon ? (
-            <div className="text-[#7A0C16] shrink-0">{icon}</div>
+            <div className="text-[#680114] shrink-0 flex items-center">{icon}</div>
           ) : null}
 
           <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg sm:text-xl md:text-2xl text-[#2C1810] font-serif font-bold tracking-tight truncate">
+            <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+              <h2 className="text-xl sm:text-2xl md:text-3xl text-[#680114] font-serif font-bold tracking-tight leading-none truncate">
                 {title}
               </h2>
-              {badge}
+              <div className="flex items-center">{badge}</div>
             </div>
             {subtitle && (
               <p className="text-[11px] sm:text-xs text-[#735A4A] truncate mt-0.5">
@@ -101,18 +212,18 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
         </div>
 
         {/* Right Action & Controls: View All + Prev/Next Buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           {actionHref && actionText && (
             <Link
               href={actionHref}
-              className="text-xs text-[#7A0C16] hover:text-[#5A0A10] font-bold flex items-center gap-0.5 hover:underline mr-1"
+              className="text-xs sm:text-sm text-[#680114] font-serif font-bold py-0.5 transition-opacity relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-0.5 after:bg-[#680114] hover:after:w-full after:transition-all flex items-center gap-1"
             >
               <span>{actionText}</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           )}
 
-          {/* Swipe / Scroll Buttons */}
+          {/* Swipe / Scroll Buttons (Unified brand burgundy & cream color scheme) */}
           <div className="flex items-center gap-1.5">
             <button
               type="button"
@@ -121,8 +232,8 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
               aria-label="Scroll left"
               className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
                 canScrollLeft
-                  ? "bg-[#FAF3E0] hover:bg-[#EADFC7] border-[#D5C4A1] text-[#2C1810] shadow-xs hover:scale-105 active:scale-95"
-                  : "bg-neutral-100/60 border-neutral-200 text-neutral-400 opacity-40 cursor-not-allowed"
+                  ? "bg-[#680114] hover:bg-[#88091E] border-[#5A0A10] text-[#F6E9C8] shadow-xs hover:scale-105 active:scale-95"
+                  : "bg-[#680114]/15 border-[#680114]/20 text-[#680114]/40 cursor-not-allowed"
               }`}
             >
               <ChevronLeft className="w-4 h-4" />
@@ -134,8 +245,8 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
               aria-label="Scroll right"
               className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
                 canScrollRight
-                  ? "bg-[#5A0A10] hover:bg-[#7A0C16] border-[#42060B] text-[#FDF8EE] shadow-xs hover:scale-105 active:scale-95"
-                  : "bg-neutral-100/60 border-neutral-200 text-neutral-400 opacity-40 cursor-not-allowed"
+                  ? "bg-[#680114] hover:bg-[#88091E] border-[#5A0A10] text-[#F6E9C8] shadow-xs hover:scale-105 active:scale-95"
+                  : "bg-[#680114]/15 border-[#680114]/20 text-[#680114]/40 cursor-not-allowed"
               }`}
             >
               <ChevronRight className="w-4 h-4" />
@@ -144,16 +255,22 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
         </div>
       </div>
 
-      {/* Horizontal Carousel Track with Native Snapping and Touch Support */}
+      {/* Horizontal Carousel Track with Native Snapping, Touch Support & Smooth Mouse Drag */}
       <div
         ref={scrollRef}
         onScroll={checkScroll}
-        className="flex items-stretch gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory py-1 px-0.5 -mx-0.5"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUpOrLeave}
+        onMouseLeave={handleMouseUpOrLeave}
+        onClickCapture={handleClickCapture}
+        className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory py-1 px-0.5 -mx-0.5 cursor-grab select-none active:cursor-grabbing"
       >
         {products.map((item) => (
           <div
             key={item.id}
-            className="w-[160px] sm:w-[175px] md:w-[190px] lg:w-[195px] shrink-0 snap-start flex flex-col"
+            onDragStart={(e) => e.preventDefault()}
+            className="w-[calc((100vw-56px)/3.35)] min-w-[100px] max-w-[135px] sm:w-[175px] sm:max-w-none md:w-[190px] lg:w-[195px] shrink-0 snap-start flex flex-col select-none"
           >
             <ProductCard
               id={item.id}

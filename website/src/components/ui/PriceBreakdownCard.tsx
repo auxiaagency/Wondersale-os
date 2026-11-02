@@ -29,19 +29,19 @@ export const PriceBreakdownCard: React.FC<PriceBreakdownCardProps> = ({
     >
       <div className="flex justify-between text-slate-600">
         <span>Item Total</span>
-        <span className="font-medium text-slate-900">{formatPrice(itemTotalPaise)}</span>
+        <span className="font-medium text-[#680114]">{formatPrice(itemTotalPaise)}</span>
       </div>
       <div className="flex justify-between text-slate-600">
         <span>Delivery Fee</span>
         {deliveryFeePaise === 0 ? (
           <span className="text-[#1E9E5A] font-semibold">FREE</span>
         ) : (
-          <span className="font-medium text-slate-900">{formatPrice(deliveryFeePaise)}</span>
+          <span className="font-medium text-[#680114]">{formatPrice(deliveryFeePaise)}</span>
         )}
       </div>
       <div className="flex justify-between text-slate-600">
         <span>Taxes & GST (Included)</span>
-        <span className="font-medium text-slate-900">{formatPrice(gstPaise)}</span>
+        <span className="font-medium text-[#680114]">{formatPrice(gstPaise)}</span>
       </div>
       {couponDiscountPaise > 0 && (
         <div className="flex justify-between text-[#D91E2A] font-medium bg-red-50 p-1.5 rounded">
@@ -49,7 +49,7 @@ export const PriceBreakdownCard: React.FC<PriceBreakdownCardProps> = ({
           <span>−{formatPrice(couponDiscountPaise)}</span>
         </div>
       )}
-      <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-sm font-bold text-slate-900">
+      <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-sm font-bold text-[#680114]">
         <span>Grand Total</span>
         <span className="text-[#D91E2A] text-base">{formatPrice(grandTotalPaise)}</span>
       </div>

@@ -38,7 +38,7 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
       >
         −
       </button>
-      <span className="w-9 text-center text-xs font-bold text-slate-900">{value}</span>
+      <span className="w-9 text-center text-xs font-bold text-[#680114]">{value}</span>
       <button
         type="button"
         disabled={disabled || value >= max}

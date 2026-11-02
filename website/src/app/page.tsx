@@ -21,49 +21,86 @@ import {
   RotateCcw,
   ShieldCheck,
   ChevronRight,
+  ChevronLeft,
   ArrowRight,
   TrendingUp,
   CreditCard,
   Copy,
   Tag,
   Check,
+  LayoutGrid,
+  X,
+  Sparkles,
 } from "lucide-react";
 
 import { useStorefront } from "@/context/StorefrontContext";
 import { DEMO_PRODUCTS, DemoProduct } from "@/data/demo-products";
 import { formatPrice } from "@/lib/format";
+import { getCategoryIcon } from "@/lib/category-icons";
 
-interface CategoryItem {
-  id: string;
+export interface CategoryItem {
+  id: number | string;
   name: string;
-  slug: string;
+  slug?: string;
+  icon?: string | null;
   description?: string | null;
+  items_count?: number;
 }
 
-const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  "home-appliances": Fan,
-  "kitchen-appliances": Utensils,
-  "electronics-audio": Headphones,
-  "toys-games": Gamepad2,
-  "packaged-food-snacks": Cookie,
-  "clocks-timepieces": Clock,
-  "sunglasses-accessories": Glasses,
-  "crockery-kitchenware": Coffee,
-};
+export interface HeroSlideItem {
+  id: number | string;
+  badge: string;
+  title: string;
+  subtitle: string;
+  button_text?: string;
+  buttonText?: string;
+  button_link?: string;
+  buttonLink?: string;
+  image_url?: string;
+  image?: string;
+  alt_text?: string;
+  alt?: string;
+}
 
-const FALLBACK_CATEGORIES: CategoryItem[] = [
-  { id: "c1", name: "Home App", slug: "home-appliances", description: null },
-  { id: "c2", name: "Kitchen", slug: "kitchen-appliances", description: null },
-  { id: "c3", name: "Electronics", slug: "electronics-audio", description: null },
-  { id: "c4", name: "Toys", slug: "toys-games", description: null },
-  { id: "c5", name: "Snacks", slug: "packaged-food-snacks", description: null },
-  { id: "c6", name: "Clocks", slug: "clocks-timepieces", description: null },
-  { id: "c7", name: "Eyewear", slug: "sunglasses-accessories", description: null },
-  { id: "c8", name: "Crockery", slug: "crockery-kitchenware", description: null },
+const DEFAULT_HERO_SLIDES: HeroSlideItem[] = [
+  {
+    id: "slide-1",
+    badge: "Festival Special",
+    title: "Mega Kitchen Bonanza",
+    subtitle: "Up to 40% Off on Premium Air Fryers & Mixers",
+    button_text: "Shop Deals",
+    button_link: "/category/kitchen-appliances",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuAhqSUbvjWIHdKh4q59CJUJS1hL6VB-lIzmuz4ymqGpn6bv10LY8_6LoBntAmGTXnlkbF6nkFAISR8eNu3FwJRUOk-yILX4H97lZh_Aa-_csb7sGvNzAYrQPabKzqWi8U-NwDOR5mLwnJbTKBZvg8fYU2AABQdkyrxgIRGAtOs7EYrZUIvVphSMRnPUIANe6zdspgV9vQhALj26WMg40h98txzkPku5Q3FrXvK7zKpVRFNTBHFCWQY3qg",
+    alt_text: "Mega Kitchen Bonanza air fryers and blender display",
+  },
+  {
+    id: "slide-2",
+    badge: "Electronics Carnival",
+    title: "Smart Audio & Accessories",
+    subtitle: "Flat 50% Off on Bluetooth Headphones & RGB Speakers",
+    button_text: "Explore Audio",
+    button_link: "/category/electronics-audio",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuDhX23oALAsXCOEjIxtEWk7AsYgghM4p55dhNf3t-x0MEDV_iE-xEsk7eVoys0_6a9V9gqoQovqYJNPWB-UpYMCEyITscsxPj1sc8HRh09C7Yjww46yrDZy6rFrjRqnz_xcRncSockj_22AORYY1a3xepqBMTpXqccywREJqL6a0-kNqvjNsScovSMrGJnPgHZ1ROy5mDVPivmbJNyxyZZdGflRpa8DDhpXt1PoyDfHBylRhJHQfcq-A",
+    alt_text: "Smart Audio, wireless headphones and speakers",
+  },
+  {
+    id: "slide-3",
+    badge: "Home Makeover",
+    title: "Royal Crockery & Dining",
+    subtitle: "Starting at ₹499 | Opalware Sets & Anodized Tawas",
+    button_text: "View Collection",
+    button_link: "/category/crockery-kitchenware",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuAJe7xis5zKoGIyTbHhUMUVKjDb2d-hhGspRS0nSA67ntQoEV9iRlc280OojE7Xa9CprFgmU8fu-ymexGmxzEPzkt_QbpZcK0R29-M2xZg_HVSgch2DCC3v0kjjHTAAGpnz51xrIIZrbuuCpwT44o0JGqG9AAyEmArTDdSahwitTurYtZujCgNoqRNhHFl6ugHNJ4LDbmv0rlH7SfMnZuEzGR9FRdWRGaz3kvYz35VXgmMjH2KupSegAg",
+    alt_text: "Royal Crockery and Dining sets display",
+  },
 ];
 
 export default function HomePage() {
-  const [categories, setCategories] = useState<CategoryItem[]>(FALLBACK_CATEGORIES);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [heroSlides, setHeroSlides] = useState<HeroSlideItem[]>(DEFAULT_HERO_SLIDES);
   const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
   const [addedItemNotification, setAddedItemNotification] = useState<string | null>(null);
 
@@ -73,65 +110,19 @@ export default function HomePage() {
   // Hero carousel auto-slider state
   const [currentSlide, setCurrentSlide] = useState(0);
 
-  const HERO_SLIDES = [
-    {
-      id: "slide-1",
-      badge: "Festival Special",
-      title: "Mega Kitchen Bonanza",
-      subtitle: "Up to 40% Off on Premium Air Fryers & Mixers",
-      buttonText: "Shop Deals",
-      buttonLink: "/category/kitchen-appliances",
-      gradient: "from-[#ffdad7] via-[#ffdad7]/60 to-[#f1f4fa]",
-      image:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuAhqSUbvjWIHdKh4q59CJUJS1hL6VB-lIzmuz4ymqGpn6bv10LY8_6LoBntAmGTXnlkbF6nkFAISR8eNu3FwJRUOk-yILX4H97lZh_Aa-_csb7sGvNzAYrQPabKzqWi8U-NwDOR5mLwnJbTKBZvg8fYU2AABQdkyrxgIRGAtOs7EYrZUIvVphSMRnPUIANe6zdspgV9vQhALj26WMg40h98txzkPku5Q3FrXvK7zKpVRFNTBHFCWQY3qg",
-      alt: "Mega Kitchen Bonanza air fryers and blender display",
-    },
-    {
-      id: "slide-2",
-      badge: "Electronics Carnival",
-      title: "Smart Audio & Accessories",
-      subtitle: "Flat 50% Off on Bluetooth Headphones & RGB Speakers",
-      buttonText: "Explore Audio",
-      buttonLink: "/category/electronics-audio",
-      gradient: "from-[#ede9fe] via-[#ede9fe]/60 to-[#f1f4fa]",
-      image:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuDhX23oALAsXCOEjIxtEWk7AsYgghM4p55dhNf3t-x0MEDV_iE-xEsk7eVoys0_6a9V9gqoQovqYJNPWB-UpYMCEyITscsxPj1sc8HRh09C7Yjww46yrDZy6rFrjRqnz_xcRncSockj_22AORYY1a3xepqBMTpXqccywREJqL6a0-kNqvjNsScovSMrGJnPgHZ1ROy5mDVPivmbJNyxyZZdGflRpa8DDhpXt1PoyDfHBylRhJHQfcq-A",
-      alt: "Smart Audio, wireless headphones and speakers",
-    },
-    {
-      id: "slide-3",
-      badge: "Home Makeover",
-      title: "Royal Crockery & Dining",
-      subtitle: "Starting at ₹499 | Opalware Sets & Anodized Tawas",
-      buttonText: "View Collection",
-      buttonLink: "/category/crockery-kitchenware",
-      gradient: "from-[#dcfce7] via-[#dcfce7]/60 to-[#f1f4fa]",
-      image:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuAJe7xis5zKoGIyTbHhUMUVKjDb2d-hhGspRS0nSA67ntQoEV9iRlc280OojE7Xa9CprFgmU8fu-ymexGmxzEPzkt_QbpZcK0R29-M2xZg_HVSgch2DCC3v0kjjHTAAGpnz51xrIIZrbuuCpwT44o0JGqG9AAyEmArTDdSahwitTurYtZujCgNoqRNhHFl6ugHNJ4LDbmv0rlH7SfMnZuEzGR9FRdWRGaz3kvYz35VXgmMjH2KupSegAg",
-      alt: "Royal Crockery and Dining sets display",
-    },
-    {
-      id: "slide-4",
-      badge: "Kids & Toys Fest",
-      title: "STEM Toys & Puzzles",
-      subtitle: "Up to 45% Off on Learning Games & Action RC Toys",
-      buttonText: "Shop Kids Toys",
-      buttonLink: "/category/toys-games",
-      gradient: "from-[#fef3c7] via-[#fef3c7]/60 to-[#f1f4fa]",
-      image:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuD37ApjZxEPIH29J5O9A8EdaspEO4NB2MUkfTComCU8qol45FjqL0wKJQpVbJlIH-Ao1xen1ITW4rTgqN8enPGkxEj0C7jcuEenBanwxcoC5zwk7AUBvNQuCt8TwpV1TYPtnG5uaiZDnDyU7lfbFFoR4QKufOFTnE9-h2rwMZrDZivD0_3TXsBk1K7xGV3GANp_7XBbPBMEdK5nHFpScPwuwfLmT7lwXbP5a2Fu_nnKMzVCvgsRRJO87A",
-      alt: "STEM toys and learning games for kids",
-    },
-  ];
-
-  const { addToCart, toggleWishlist, isInWishlist } = useStorefront();
+  const { addToCart, toggleWishlist, isInWishlist, openCategoryMenu } = useStorefront();
 
   useEffect(() => {
     const slideTimer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+      setHeroSlides((currentList) => {
+        if (currentList.length > 0) {
+          setCurrentSlide((prev) => (prev + 1) % currentList.length);
+        }
+        return currentList;
+      });
     }, 4000);
     return () => clearInterval(slideTimer);
-  }, [HERO_SLIDES.length]);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -177,17 +168,35 @@ export default function HomePage() {
     });
   };
 
+  const [realDeals, setRealDeals] = useState<any[]>([]);
+
   useEffect(() => {
-    fetch("/api/catalog/categories")
+    fetch("/api/categories")
       .then((res) => res.json())
       .then((data) => {
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setCategories(data.data);
         }
       })
-      .catch(() => {
-        // Fallback already in place
-      });
+      .catch(() => {});
+
+    fetch("/api/hero-slides")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setHeroSlides(data.data);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/deals-of-the-day")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setRealDeals(data.data);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const handleCopyCode = (code: string) => {
@@ -199,18 +208,86 @@ export default function HomePage() {
   const padTime = (num: number) => String(num).padStart(2, "0");
 
   return (
-    <div className="min-h-screen bg-[#F6E9C8] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#F6E9C8] text-[#680114] antialiased flex flex-col justify-between font-sans">
       {/* 1. Global Header */}
       <GlobalHeader />
 
       <main className="flex-1 w-full bg-[#F6E9C8]">
-        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 flex flex-col gap-7">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-3 md:py-6 flex flex-col gap-3 sm:gap-5 md:gap-7">
 
-          {/* 2. HERO CAMPAIGN BANNER (Rich Burgundy with Off-Center Circular Portal matching screenshot) */}
+          {/* 2. EXPLORE CATEGORIES / CATEGORY ICON ROW (Real Backend Categories) */}
           <section className="w-full">
-            <div className="relative overflow-hidden rounded-2xl md:rounded-[2.25rem] bg-[#680114] shadow-lg text-[#F6E9C8]">
-              {HERO_SLIDES.map((slide, index) => {
+            <div className="flex items-center justify-between mb-4 px-1">
+              <div>
+                <h2 className="text-lg sm:text-xl md:text-2xl font-serif font-bold tracking-tight text-[#680114]">
+                  Explore Categories
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={openCategoryMenu}
+                className="text-xs text-[#680114] font-bold flex items-center gap-0.5 hover:underline cursor-pointer"
+              >
+                <span>View All</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Mobile View: Dynamic category grid with deep burgundy outline */}
+            <div className="grid grid-cols-5 md:hidden gap-1.5 items-start justify-items-center">
+              {categories.slice(0, 5).map((cat) => {
+                const Icon = getCategoryIcon(cat.icon, cat.name);
+                const targetSlug = cat.slug || String(cat.id);
+                return (
+                  <Link
+                    key={cat.id}
+                    href={`/category/${targetSlug}`}
+                    className="flex flex-col items-center group w-full px-0.5 py-1 transition-transform active:scale-95 text-center"
+                  >
+                    <div className="w-13 h-13 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114]/10 shadow-2xs shrink-0">
+                      <Icon className="w-5.5 h-5.5 text-[#680114] stroke-[2]" />
+                    </div>
+                    <span className="text-[11px] text-[#680114] text-center mt-1.5 line-clamp-2 leading-tight font-serif font-bold group-hover:text-[#680114] transition-colors h-[28px] flex items-start justify-center w-full">
+                      {cat.name}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Desktop View: Full real categories evenly spaced without More button, showing full names */}
+            <div className="hidden md:grid md:grid-cols-7 gap-3 lg:gap-6 items-start justify-items-center w-full">
+              {categories.map((cat) => {
+                const Icon = getCategoryIcon(cat.icon, cat.name);
+                const targetSlug = cat.slug || String(cat.id);
+                return (
+                  <Link
+                    key={cat.id}
+                    href={`/category/${targetSlug}`}
+                    className="flex flex-col items-center group w-full px-1 py-1 transition-transform hover:-translate-y-0.5 text-center"
+                  >
+                    <div className="w-15 h-15 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
+                      <Icon className="w-6.5 h-6.5 text-[#680114] group-hover:text-[#F6E9C8] stroke-[2] transition-colors" />
+                    </div>
+                    <span className="text-xs lg:text-sm text-[#680114] text-center mt-2 font-serif font-bold group-hover:text-[#680114] transition-colors leading-tight line-clamp-2 max-w-[140px]">
+                      {cat.name}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* 3. HERO CAMPAIGN BANNER (Rich Burgundy with Large Inner Image Circle) */}
+          <section className="w-full my-[calc(var(--spacing)*4)] md:my-2.5">
+            <div className="relative rounded-2xl md:rounded-[2.25rem] bg-[#680114] text-[#F6E9C8]">
+              {heroSlides.map((slide, index) => {
                 const isActive = index === currentSlide;
+                const buttonText = slide.button_text || slide.buttonText || "Shop Now";
+                const buttonLink = slide.button_link || slide.buttonLink || "/categories";
+                const imageUrl = slide.image_url || slide.image || "";
+                const altText = slide.alt_text || slide.alt || slide.title;
+
                 return (
                   <div
                     key={slide.id}
@@ -218,36 +295,40 @@ export default function HomePage() {
                     isActive ? "block opacity-100" : "hidden opacity-0"
                     }`}
                   >
-                    <div className="w-full relative flex flex-col md:flex-row items-center justify-between px-5 py-5 sm:px-7 sm:py-6 md:px-12 md:py-7 min-h-[220px] md:min-h-[250px] lg:min-h-[270px] gap-4 md:gap-6">
-                      {/* Left: Text & CTA Content */}
-                      <div className="max-w-md lg:max-w-lg z-10 space-y-2 md:space-y-3 text-center md:text-left">
-                        <span className="inline-block border border-[#DBC599]/50 bg-black/20 backdrop-blur-xs text-[#F6E9C8] text-[9px] md:text-[10px] px-2.5 py-0.5 md:px-3 md:py-0.5 rounded-full tracking-wider uppercase font-semibold">
-                          {slide.badge}
-                        </span>
-                        <h2 className="text-xl sm:text-2xl md:text-4xl lg:text-[42px] text-[#F6E9C8] leading-tight font-serif font-bold tracking-tight">
+                    <div className="w-full relative flex flex-row items-center justify-between px-3.5 py-0 sm:px-6 sm:py-6 md:px-14 md:py-10 h-[143px] md:!h-auto md:!min-h-[310px] lg:!min-h-[340px] gap-2 sm:gap-4 md:gap-8">
+                      {/* Left: Vertically centered container holding badge, titles, subtitle & button */}
+                      <div className="flex-1 min-w-0 max-w-[53%] sm:max-w-[58%] md:max-w-md lg:max-w-xl z-10 flex flex-col justify-center space-y-1 sm:space-y-1.5 md:space-y-4 text-left pl-2.5 sm:pl-4 md:pl-0 h-full md:h-auto md:my-auto -translate-y-[6px] md:translate-y-0">
+                        <div>
+                          <span className="inline-block border border-[#DBC599]/40 bg-black/20 backdrop-blur-xs text-[#F6E9C8] text-[7.5px] sm:text-[8.5px] md:text-[10px] px-1.5 py-0.5 sm:px-2 md:px-3 rounded-full tracking-wider uppercase font-semibold leading-none">
+                            {slide.badge}
+                          </span>
+                        </div>
+                        <h2 className="text-[12.5px] sm:text-lg md:text-4xl lg:text-[44px] text-[#F6E9C8] leading-tight font-serif font-bold tracking-tight line-clamp-1 sm:line-clamp-2 md:line-clamp-none">
                           {slide.title}
                         </h2>
-                        <p className="text-xs md:text-sm text-[#EFE0BC]/90 font-medium max-w-sm line-clamp-2 md:line-clamp-none">
+                        <p className="text-[8px] sm:text-xs md:text-sm text-[#EFE0BC]/85 font-medium max-w-xs line-clamp-2 md:line-clamp-none leading-tight">
                           {slide.subtitle}
                         </p>
-                        <div className="pt-1 md:pt-1.5 flex justify-center md:justify-start">
+                        <div className="pt-0.5 sm:pt-1 md:pt-2 flex justify-start">
                           <Link
-                            href={slide.buttonLink}
-                            className="bg-[#F6E9C8] hover:bg-[#EFE0BC] text-[#680114] text-xs md:text-sm px-4 py-2 md:px-5 md:py-2.5 rounded-xl flex items-center gap-1.5 md:gap-2 active:scale-95 transition-all shadow-sm font-bold cursor-pointer"
+                            href={buttonLink}
+                            className="bg-[#F6E9C8] hover:bg-[#EFE0BC] text-[#680114] text-[8px] sm:text-xs md:text-sm px-2 py-0.5 sm:px-3.5 sm:py-1.5 md:px-6 md:py-3 rounded-md sm:rounded-lg md:rounded-xl flex items-center gap-1 md:gap-2 active:scale-95 transition-all font-bold cursor-pointer whitespace-nowrap shadow-xs leading-none"
                           >
-                            <span>{slide.buttonText}</span>
-                            <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                            <span>{buttonText}</span>
+                            <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 md:w-4 md:h-4" />
                           </Link>
                         </div>
                       </div>
 
-                      {/* Right: Incomplete Circular Portal Image (overflowing top/bottom as in screenshot) */}
-                      <div className="relative flex items-center justify-center shrink-0 w-full md:w-auto mt-2 md:mt-0">
-                        <div className="relative w-44 h-44 sm:w-56 sm:h-56 md:w-72 md:h-72 lg:w-80 lg:h-80 md:-my-12 md:-mr-6 rounded-full border-[8px] sm:border-[10px] md:border-[14px] border-[#F6E9C8] overflow-hidden shadow-2xl bg-[#E8D7B0] shrink-0">
+                      {/* Right: Inner Product Image Circle (Mobile calibrated, Desktop exact locked) */}
+                      <div className="relative flex items-center justify-center shrink-0 z-10 pr-2 sm:pr-3 md:pr-0">
+                        <div
+                          className="relative rounded-full overflow-hidden bg-[#F6E9C8] shrink-0 w-[173px] h-[173px] -my-[50px] border-[7px] md:!w-[470px] md:!h-[470px] md:!-my-[88px] md:!border-[20px] border-[#F6E9C8] border-solid"
+                        >
                           <img
-                            alt={slide.alt}
+                            alt={altText}
                             className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
-                            src={slide.image}
+                            src={imageUrl}
                           />
                         </div>
                       </div>
@@ -256,19 +337,57 @@ export default function HomePage() {
                 );
               })}
 
+              {/* Functional Round Angle Arrows (Desktop exact: 52px height, 11px boundary; Mobile proportional) */}
+              <button
+                type="button"
+                onClick={() => setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length)}
+                aria-label="Previous Slide"
+                className="absolute top-1/2 -translate-y-1/2 z-20 p-0.5 md:p-1 text-[#F6E9C8] hover:text-white hover:scale-110 active:scale-95 transition-all cursor-pointer group left-[4px] sm:left-[8px] md:!left-[11px]"
+              >
+                <svg
+                  viewBox="0 0 20 52"
+                  className="w-2.5 h-7 sm:w-3.5 sm:h-9 md:!w-[20px] md:!h-[52px] overflow-visible group-hover:-translate-x-0.5 transition-transform"
+                  fill="none"
+                  stroke="#F6E9C8"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="14,3 4,26 14,49" />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentSlide((prev) => (prev + 1) % heroSlides.length)}
+                aria-label="Next Slide"
+                className="absolute top-1/2 -translate-y-1/2 z-20 p-0.5 md:p-1 text-[#F6E9C8] hover:text-white hover:scale-110 active:scale-95 transition-all cursor-pointer group right-[4px] sm:right-[8px] md:!right-[11px]"
+              >
+                <svg
+                  viewBox="0 0 20 52"
+                  className="w-2.5 h-7 sm:w-3.5 sm:h-9 md:!w-[20px] md:!h-[52px] overflow-visible group-hover:translate-x-0.5 transition-transform"
+                  fill="none"
+                  stroke="#F6E9C8"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="4,3 14,26 4,49" />
+                </svg>
+              </button>
 
               {/* Slider Dots Indicator */}
-              <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-20">
-                {HERO_SLIDES.map((slide, idx) => (
+              <div className="absolute bottom-2 md:bottom-3 left-[31%] -translate-x-1/2 md:left-1/2 md:-translate-x-1/2 flex items-center gap-1 md:gap-1.5 z-20">
+                {heroSlides.map((slide, idx) => (
                   <button
                     key={slide.id}
                     type="button"
                     onClick={() => setCurrentSlide(idx)}
                     aria-label={`Go to slide ${idx + 1}`}
-                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                    className={`h-1 md:h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                       idx === currentSlide
-                        ? "w-6 bg-[#C51B26]"
-                        : "w-1.5 bg-white/40 hover:bg-white/70"
+                        ? "w-4 md:w-5 bg-[#C51B26]"
+                        : "w-1 md:w-1.5 bg-white/40 hover:bg-white/70"
                     }`}
                   />
                 ))}
@@ -276,261 +395,201 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* 3. EXPLORE CATEGORIES / CATEGORY ICON ROW (Deep burgundy outline circular icons) */}
-          <section className="w-full">
-            <div className="flex items-center justify-between mb-4 px-1">
-              <div>
-                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#2C1810]">
-                  Explore Categories
-                </h2>
-              </div>
-              <Link
-                href="/categories"
-                className="text-xs text-[#680114] font-bold flex items-center gap-0.5 hover:underline"
-              >
-                <span>View All</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            {/* Mobile View: 5 categories with deep burgundy outline */}
-            <div className="grid grid-cols-5 md:hidden gap-2 items-center justify-items-center">
-              {categories.slice(0, 5).map((cat) => {
-                const Icon = CATEGORY_ICONS[cat.slug] || Utensils;
-                return (
-                  <Link
-                    key={cat.slug}
-                    href={`/category/${cat.slug}`}
-                    className="flex flex-col items-center group w-full p-1 transition-transform active:scale-95"
-                  >
-                    <div className="w-13 h-13 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114]/10 shadow-2xs">
-                      <Icon className="w-5.5 h-5.5 text-[#680114] stroke-[2]" />
-                    </div>
-                    <span className="text-[11px] text-[#2C1810] text-center mt-1.5 line-clamp-1 font-semibold group-hover:text-[#680114] transition-colors">
-                      {cat.name}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-
-            {/* Desktop View: Full 9 categories with deep burgundy outline matching reference */}
-            <div className="hidden md:grid md:grid-cols-9 gap-4 items-center justify-items-center">
-              {categories.slice(0, 8).map((cat) => {
-                const Icon = CATEGORY_ICONS[cat.slug] || Utensils;
-                return (
-                  <Link
-                    key={cat.slug}
-                    href={`/category/${cat.slug}`}
-                    className="flex flex-col items-center group w-full p-1 transition-transform hover:-translate-y-0.5"
-                  >
-                    <div className="w-14 h-14 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
-                      <Icon className="w-6 h-6 text-[#680114] group-hover:text-[#F6E9C8] stroke-[2] transition-colors" />
-                    </div>
-                    <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-semibold group-hover:text-[#680114] transition-colors">
-                      {cat.name}
-                    </span>
-                  </Link>
-                );
-              })}
-
-              {/* More / All Categories Icon with deep burgundy outline */}
-              <Link
-                href="/categories"
-                className="flex flex-col items-center group w-full p-1 transition-transform hover:-translate-y-0.5"
-              >
-                <div className="w-14 h-14 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
-                  <div className="grid grid-cols-2 gap-1 p-2">
-                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
-                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
-                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
-                    <span className="w-1.5 h-1.5 border-1.5 border-[#680114] group-hover:border-[#F6E9C8] rounded-xs" />
-                  </div>
-                </div>
-                <span className="text-xs text-[#2C1810] text-center mt-2 line-clamp-1 font-semibold group-hover:text-[#680114] transition-colors">
-                  More
-                </span>
-              </Link>
-            </div>
-          </section>
-
           {/* 4. DEALS OF THE DAY (Swipeable Carousel) */}
-          <ProductCarouselSection
-            id="deals"
-            icon="⚡"
-            title="Deals of the Day"
-            subtitle="Handpicked limited-time discounts with 2-hour express doorstep delivery"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114]"
-            badge={
-              <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 text-[11px] font-bold shadow-2xs">
-                <Clock className="w-3 h-3 text-[#680114]" />
-                <span>
-                  Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
-                </span>
-              </div>
-            }
-            actionText="All Deals"
-            actionHref="/categories"
-            products={DEMO_PRODUCTS.slice(0, 10)}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={handleToggleWishlist}
-            isInWishlist={isInWishlist}
-          />
+          {realDeals.length > 0 ? (
+            <ProductCarouselSection
+              id="deals"
+              icon={<Zap className="w-5 h-5 sm:w-6 sm:h-6 text-[#680114] fill-[#680114]" />}
+              title={
+                <>
+                  <span className="inline sm:hidden">Deals</span>
+                  <span className="hidden sm:inline">Deals of the Day</span>
+                </>
+              }
+              bgClass="bg-[#F6E9C8] border-0"
+              badge={
+                <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full inline-flex items-center gap-1 sm:gap-1.5 text-[9.5px] sm:text-[11px] font-bold shadow-2xs leading-none translate-y-[1px] sm:translate-y-0.5 self-center">
+                  <Clock className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-[#680114] shrink-0" />
+                  <span className="font-sans font-semibold">
+                    <span className="inline sm:hidden">
+                      {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
+                    </span>
+                    <span className="hidden sm:inline">
+                      Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
+                    </span>
+                  </span>
+                </div>
+              }
+              actionText="All Deals"
+              actionHref="/categories"
+              products={realDeals.map((deal) => ({
+                id: String(deal.item_id || deal.id),
+                slug: String(deal.item_uid || deal.item_id || deal.id),
+                title: deal.item_name || "Special Deal Product",
+                brand: "Wondersale Deal",
+                category: "Deals",
+                categorySlug: "deals",
+                mrpPaise: Math.round(Number(deal.deal_mrp || 0) * 100),
+                sellingPricePaise: Math.round(Number(deal.deal_selling_price || 0) * 100),
+                rating: 4.8,
+                ratingCount: 42,
+                imageUrl:
+                  deal.item_image_url ||
+                  "https://lh3.googleusercontent.com/aida-public/AB6AXuAhqSUbvjWIHdKh4q59CJUJS1hL6VB-lIzmuz4ymqGpn6bv10LY8_6LoBntAmGTXnlkbF6nkFAISR8eNu3FwJRUOk-yILX4H97lZh_Aa-_csb7sGvNzAYrQPabKzqWi8U-NwDOR5mLwnJbTKBZvg8fYU2AABQdkyrxgIRGAtOs7EYrZUIvVphSMRnPUIANe6zdspgV9vQhALj26WMg40h98txzkPku5Q3FrXvK7zKpVRFNTBHFCWQY3qg",
+                inStock: Boolean(deal.item_in_stock),
+                stockCount: deal.item_quantity || 10,
+                badge: deal.custom_badge || (deal.discount_percentage ? `${Math.round(deal.discount_percentage)}% OFF` : "Deal of the Day"),
+                description: "Limited-time Deal of the Day promotion directly from Bhopal store.",
+                variants: [{ capacity: "Standard", pricePaise: Math.round(Number(deal.deal_selling_price || 0) * 100), note: `${deal.item_quantity || 0} in stock` }],
+                specs: [{ label: "Condition", value: "Brand New" }],
+                reviews: [],
+              }))}
+              onAddToCart={handleAddToCart}
+              onToggleWishlist={handleToggleWishlist}
+              isInWishlist={isInWishlist}
+            />
+          ) : (
+            <ProductCarouselSection
+              id="deals"
+              icon={<Zap className="w-5 h-5 sm:w-6 sm:h-6 text-[#680114] fill-[#680114]" />}
+              title={
+                <>
+                  <span className="inline sm:hidden">Deals</span>
+                  <span className="hidden sm:inline">Deals of the Day</span>
+                </>
+              }
+              bgClass="bg-[#F6E9C8] border-0"
+              badge={
+                <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full inline-flex items-center gap-1 sm:gap-1.5 text-[9.5px] sm:text-[11px] font-bold shadow-2xs leading-none translate-y-[1px] sm:translate-y-0.5 self-center">
+                  <Clock className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-[#680114] shrink-0" />
+                  <span className="font-sans font-semibold">
+                    <span className="inline sm:hidden">
+                      {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
+                    </span>
+                    <span className="hidden sm:inline">
+                      Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
+                    </span>
+                  </span>
+                </div>
+              }
+              actionText="All Deals"
+              actionHref="/categories"
+              products={DEMO_PRODUCTS.slice(0, 10)}
+              onAddToCart={handleAddToCart}
+              onToggleWishlist={handleToggleWishlist}
+              isInWishlist={isInWishlist}
+            />
+          )}
 
           {/* 5. SHOP BY CATEGORY */}
           <section className="w-full">
             <div className="flex items-center justify-between mb-4 px-1">
-              <h2 className="text-xl md:text-2xl text-[#2C1810] font-serif font-bold tracking-tight">Shop By Category</h2>
-              <Link
-                href="/categories"
-                className="text-xs text-[#680114] font-bold flex items-center hover:underline"
+              <h2 className="text-xl sm:text-2xl md:text-3xl text-[#680114] font-serif font-bold tracking-tight">Shop By Category</h2>
+              <button
+                type="button"
+                onClick={openCategoryMenu}
+                className="text-xs text-[#680114] font-bold flex items-center hover:underline cursor-pointer"
               >
                 <span>See All</span>
                 <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
+              </button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
               {/* Cat 1 */}
               <Link
                 href="/category/kitchen-appliances"
-                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
+                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Cookware & Dining category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9w2vUJKQkRNV1FUIkncrCapIM725jmL-G4rr-BgEIijGnUcOrUwaQD6BVKw5Wwm79xdLoqRaszlezpJ6H077FxVzakFF0vorXx2dP9LcnV_XTIB28W8uOjt7leYjhJLvPd3y6r6ILeVDWkiI1B_g4xcK5YTPfatiZw5jxpqIryrhTFz9qAfvAcSJDv6gx0qXKWohElzV1EN6zRF-LyYxA5jqnpUqI-QVPYQd3rEoKUgYoKnMiYvcR1Q"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
                     Up to 60% Off
                   </span>
                 </div>
-                <div className="p-3">
-                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Cookware &amp; Dining</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">Non-stick, Pots &amp; Bowls</p>
+                <div className="p-2 sm:p-3">
+                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Cookware &amp; Dining</h3>
+                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">Non-stick, Pots &amp; Bowls</p>
                 </div>
               </Link>
 
               {/* Cat 2 */}
               <Link
                 href="/category/electronics-audio"
-                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
+                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Smart Gadgets category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmYpYYgOcAqx8zW2hmXeF5lgJgFB03SDzmr2JqIRTMHSAiVxdL6sT3FHPc0SksAwcHJpP7gU0ZIE0sIMBL09f5SMbTusBEsD9UiZ_RaP_5P011JBecJ5kiCwZhnDbXVDWDjNHAtCn89uJPFG_MLAisZbg6Mlwx1xvQ2lcL6SSVSFwjk6AQlMHafVHoReK5vHXJG1fBOmocUh8qif0vg8W-B4DNRIP5dYNbvzEfKB5QpWc2mjFGViG81g"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
                     Min 40% Off
                   </span>
                 </div>
-                <div className="p-3">
-                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Smart Gadgets</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">Wearables &amp; Audio</p>
+                <div className="p-2 sm:p-3">
+                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Smart Gadgets</h3>
+                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">Wearables &amp; Audio</p>
                 </div>
               </Link>
 
               {/* Cat 3 */}
               <Link
                 href="/category/toys-games"
-                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
+                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Kids & Toys category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuD37ApjZxEPIH29J5O9A8EdaspEO4NB2MUkfTComCU8qol45FjqL0wKJQpVbJlIH-Ao1xen1ITW4rTgqN8enPGkxEj0C7jcuEenBanwxcoC5zwk7AUBvNQuCt8TwpV1TYPtnG5uaiZDnDyU7lfbFFoR4QKufOFTnE9-h2rwMZrDZivD0_3TXsBk1K7xGV3GANp_7XBbPBMEdK5nHFpScPwuwfLmT7lwXbP5a2Fu_nnKMzVCvgsRRJO87A"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
                     Under ₹499
                   </span>
                 </div>
-                <div className="p-3">
-                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Kids &amp; Toys</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">STEM &amp; Board Games</p>
+                <div className="p-2 sm:p-3">
+                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Kids &amp; Toys</h3>
+                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">STEM &amp; Board Games</p>
                 </div>
               </Link>
 
               {/* Cat 4 */}
               <Link
                 href="/category/sunglasses-accessories"
-                className="bg-[#F6E9C8] rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
               >
-                <div className="h-36 w-full relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
+                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
                   <img
                     alt="Eyewear & Style category"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     src="https://lh3.googleusercontent.com/aida-public/AB6AXuCN1i80jVIbv2fEfKtFphirGBNs7n1uTfhjkqSC55XNFR0q_EHw_Lcgemw4XRLroqdEzkHa5yVjBULXzb36Npq3ES7DbpDDjtx4LUqx4bEFvmBLIOgs_rcceU4dmH5xuuec1JEAPGiCm0IMPl0oroYkEVn4wgJNY2bcc7i5X1PO-p7lC1pQgLCGm9I-ZvVdxvDU4dKBQ9uPVTg-0weRw3nrORWDNlDCdpi8SDYR95X29Wys8m44hxsEVQ"
                   />
-                  <span className="absolute bottom-2 left-2 bg-[#680114] text-[#F6E9C8] text-xs px-2.5 py-0.5 rounded-full shadow-2xs font-bold">
+                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
                     Buy 1 Get 1
                   </span>
                 </div>
-                <div className="p-3">
-                  <h3 className="text-sm md:text-base text-[#2C1810] font-serif font-bold">Eyewear &amp; Style</h3>
-                  <p className="text-xs text-[#735A4A] mt-0.5 font-sans">UV400 Polarized</p>
+                <div className="p-2 sm:p-3">
+                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Eyewear &amp; Style</h3>
+                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">UV400 Polarized</p>
                 </div>
               </Link>
             </div>
           </section>
 
-          {/* 6. PARTNER BANK OFFER BANNER */}
-          <section className="w-full">
-            <div className="bg-gradient-to-r from-[#3E010C] via-[#520210] to-[#680114] text-[#F6E9C8] rounded-2xl p-6 md:p-7 shadow-md flex items-center justify-between relative overflow-hidden border-2 border-[#680114]">
-              <CreditCard className="w-36 h-36 text-white/5 absolute -right-6 -bottom-6 select-none pointer-events-none" />
-              <div className="z-10 max-w-2xl space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-5 h-5 text-[#EFE0BC]" />
-                  <span className="text-xs uppercase tracking-wider text-[#EFE0BC] font-bold font-sans">
-                    Partner Bank Offer
-                  </span>
-                </div>
-                <h3 className="text-xl md:text-2xl text-[#F6E9C8] leading-tight font-serif font-bold">
-                  Instant 10% Off on HDFC &amp; ICICI Cards
-                </h3>
-                <p className="text-sm text-[#EFE0BC]/90">
-                  Applicable on cart value above ₹1,499. Use code at checkout.
-                </p>
-                <div className="pt-2">
-                  <button
-                    className="inline-flex items-center gap-2 bg-[#F6E9C8] text-[#680114] px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-2xs hover:bg-[#EFE0BC] transition-colors cursor-pointer border-2 border-[#680114]"
-                    onClick={() => handleCopyCode("WONDERFEST")}
-                    type="button"
-                  >
-                    <span className="tracking-wider">CODE: WONDERFEST</span>
-                    {copiedCoupon === "WONDERFEST" ? (
-                      <Check className="w-4 h-4 text-emerald-600" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-[#680114]" />
-                    )}
-                  </button>
-                  {copiedCoupon === "WONDERFEST" && (
-                    <span className="ml-2 text-xs font-bold text-amber-200">Copied!</span>
-                  )}
-                </div>
-              </div>
-              <div className="z-10 hidden sm:flex flex-col items-center justify-center p-3">
-                <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-[#EFE0BC]/20">
-                  <Tag className="w-8 h-8 text-[#EFE0BC]" />
-                </div>
-              </div>
-            </div>
-          </section>
+
 
           {/* 7. BEST SELLERS */}
           <ProductCarouselSection
             id="best-sellers"
             icon={<TrendingUp className="w-5 h-5 text-[#680114]" />}
             title="Best Sellers"
-            subtitle="Most loved and highest ordered products from our superstore"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
-            badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#680114] bg-[#FAEBEF] px-2 py-0.5 rounded-full border border-[#F4D3D8]">
-                Updated Hourly
-              </span>
-            }
+            bgClass="bg-[#F6E9C8] border-0"
+            badge={null}
             actionText="View Top 50"
             actionHref="/categories"
             products={DEMO_PRODUCTS.slice(0, 10)}
@@ -539,18 +598,13 @@ export default function HomePage() {
             isInWishlist={isInWishlist}
           />
 
-          {/* 8. FRESH IN STORE */}
+          {/* 8. NEW ARRIVALS */}
           <ProductCarouselSection
-            id="fresh-in-store"
-            icon="✨"
-            title="Fresh In Store"
-            subtitle="Just unboxed new season arrivals with guaranteed fast delivery"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
-            badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                New Arrivals
-              </span>
-            }
+            id="new-arrivals"
+            icon={<Sparkles className="w-5 h-5 text-[#680114]" />}
+            title="New Arrivals"
+            bgClass="bg-[#F6E9C8] border-0"
+            badge={null}
             actionText="View Catalog"
             actionHref="/categories"
             products={DEMO_PRODUCTS.slice(10, 20)}
@@ -559,229 +613,33 @@ export default function HomePage() {
             isInWishlist={isInWishlist}
           />
 
-          {/* 9. KITCHEN & DINING MUST-HAVES */}
-          <ProductCarouselSection
-            id="kitchen-dining"
-            icon="🍳"
-            title="Kitchen & Dining Must-Haves"
-            subtitle="Pressure cookers, mixer grinders, air fryers & hard anodized cookware"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
-            badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                Up to 45% Off
-              </span>
-            }
-            actionText={`Explore (${DEMO_PRODUCTS.filter((p) => p.categorySlug === "kitchen-appliances").length}+)`}
-            actionHref="/category/kitchen-appliances"
-            products={DEMO_PRODUCTS.filter((p) => p.categorySlug === "kitchen-appliances")}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={handleToggleWishlist}
-            isInWishlist={isInWishlist}
-          />
-
-          {/* 10. SMART GADGETS & AUDIO HIGHLIGHTS */}
-          <ProductCarouselSection
-            id="smart-gadgets"
-            icon="🎧"
-            title="Smart Audio & Tech Gadgets"
-            subtitle="Wireless headphones, fast car mounts, smartwatch calling & speakers"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
-            badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                Top Rated Audio
-              </span>
-            }
-            actionText={`View All (${DEMO_PRODUCTS.filter((p) => p.categorySlug === "electronics-audio").length}+)`}
-            actionHref="/category/electronics-audio"
-            products={DEMO_PRODUCTS.filter((p) => p.categorySlug === "electronics-audio")}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={handleToggleWishlist}
-            isInWishlist={isInWishlist}
-          />
-
-          {/* 11. DAILY ESSENTIALS & PANTRY FAVORITES */}
-          <ProductCarouselSection
-            id="gourmet-pantry"
-            icon="🛒"
-            title="Daily Essentials & Gourmet Pantry"
-            subtitle="Artisan roasted coffee, California almonds, mountain honey & cold-pressed oils"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
-            badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                100% Genuine
-              </span>
-            }
-            actionText={`Shop Pantry (${DEMO_PRODUCTS.filter((p) => p.categorySlug === "packaged-food-snacks").length}+)`}
-            actionHref="/category/packaged-food-snacks"
-            products={DEMO_PRODUCTS.filter((p) => p.categorySlug === "packaged-food-snacks")}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={handleToggleWishlist}
-            isInWishlist={isInWishlist}
-          />
-
-          {/* 12. TOYS, GAMES & KIDS CORNER */}
-          <ProductCarouselSection
-            id="toys-games"
-            icon="🎲"
-            title="Toys, STEM & Family Games"
-            subtitle="Montessori puzzles, RC monster trucks, board games & speed cubes"
-            bgClass="bg-[#F6E9C8] border-2 border-[#680114] shadow-xs"
-            badge={
-              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-800 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
-                Kids &amp; Family
-              </span>
-            }
-            actionText={`View Toys (${DEMO_PRODUCTS.filter((p) => p.categorySlug === "toys-games").length}+)`}
-            actionHref="/category/toys-games"
-            products={DEMO_PRODUCTS.filter((p) => p.categorySlug === "toys-games")}
-            onAddToCart={handleAddToCart}
-            onToggleWishlist={handleToggleWishlist}
-            isInWishlist={isInWishlist}
-          />
-
-
-
-          {/* 10. MOBILE FOOTER ACCORDION & TRUST INFO (< md screens) */}
-          <section className="md:hidden w-full bg-[#F6E9C8] rounded-2xl p-4 space-y-2 border-2 border-[#680114]">
-            {/* Accordion 1: About Wondersale */}
-            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
-              <button
-                type="button"
-                className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
-                onClick={() => {
-                  const el = document.getElementById("mobile-acc-about");
-                  el?.classList.toggle("hidden");
-                }}
-              >
-                <span>About Wondersale</span>
-                <ChevronRight className="w-4 h-4 text-[#735A4A]" />
-              </button>
-              <div
-                id="mobile-acc-about"
-                className="hidden px-4 pb-3 pt-1 text-[#735A4A] text-xs leading-relaxed"
-              >
-                Wondersale is India&apos;s fastest growing multi-category digital superstore. We bring genuine lifestyle, home, electronics, and kitchen goods right to your doorstep with guaranteed savings.
-              </div>
-            </div>
-
-            {/* Accordion 2: Help & Support */}
-            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
-              <button
-                type="button"
-                className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
-                onClick={() => {
-                  const el = document.getElementById("mobile-acc-help");
-                  el?.classList.toggle("hidden");
-                }}
-              >
-                <span>Customer Help &amp; FAQs</span>
-                <ChevronRight className="w-4 h-4 text-[#735A4A]" />
-              </button>
-              <div
-                id="mobile-acc-help"
-                className="hidden px-4 pb-3 pt-1 text-[#735A4A] text-xs space-y-1.5"
-              >
-                <p><Link href="/orders" className="hover:text-[#7A0C16]">Track Ongoing Shipment</Link></p>
-                <p><Link href="/returns" className="hover:text-[#7A0C16]">Initiate a Return or Exchange</Link></p>
-                <p><Link href="/shipping" className="hover:text-[#7A0C16]">Shipping Rates &amp; Delivery Policies</Link></p>
-              </div>
-            </div>
-
-            {/* Accordion 3: Policies */}
-            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
-              <button
-                type="button"
-                className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
-                onClick={() => {
-                  const el = document.getElementById("mobile-acc-policy");
-                  el?.classList.toggle("hidden");
-                }}
-              >
-                <span>Terms &amp; Privacy Policies</span>
-                <ChevronRight className="w-4 h-4 text-[#735A4A]" />
-              </button>
-              <div
-                id="mobile-acc-policy"
-                className="hidden px-4 pb-3 pt-1 text-[#735A4A] text-xs space-y-1.5"
-              >
-                <p><Link href="/privacy" className="hover:text-[#7A0C16]">Privacy Policy</Link></p>
-                <p><Link href="/terms" className="hover:text-[#7A0C16]">Terms of Service</Link></p>
-                <p><Link href="/security" className="hover:text-[#7A0C16]">Security &amp; Compliance Standards</Link></p>
-              </div>
-            </div>
-
-            {/* Accordion 4: Contact */}
-            <div className="bg-[#EFE0BC] rounded-xl overflow-hidden shadow-2xs border border-[#680114]/50">
-              <button
-                type="button"
-                className="w-full px-4 py-3 flex items-center justify-between text-left text-xs font-bold text-[#2C1810]"
-                onClick={() => {
-                  const el = document.getElementById("mobile-acc-contact");
-                  el?.classList.toggle("hidden");
-                }}
-              >
-                <span>Contact &amp; Grievance</span>
-                <ChevronRight className="w-4 h-4 text-[#735A4A]" />
-              </button>
-              <div
-                id="mobile-acc-contact"
-                className="hidden px-4 pb-3 pt-1 text-[#735A4A] text-xs space-y-1"
-              >
-                <p>24x7 Support Hotline: 1800-419-8900</p>
-                <p>Email: care@wondersale.in</p>
-                <p>Headquarters: Connaught Place, New Delhi, India</p>
-              </div>
-            </div>
-
-            {/* Payment Partner Badges */}
-            <div className="pt-3 flex flex-col items-center">
-              <span className="text-[10px] text-[#735A4A] uppercase tracking-wider mb-2 font-semibold">
-                100% Secure Payment Partners
-              </span>
-              <div className="flex items-center justify-center gap-2">
-                <div className="px-2.5 py-1 bg-[#FAF3E0] rounded-md shadow-2xs border border-[#EADFC7]">
-                  <span className="text-[10px] font-bold text-[#2C1810]">UPI</span>
-                </div>
-                <div className="px-2.5 py-1 bg-[#FAF3E0] rounded-md shadow-2xs border border-[#EADFC7]">
-                  <span className="text-[10px] font-bold text-[#7A0C16]">RuPay</span>
-                </div>
-                <div className="px-2.5 py-1 bg-[#FAF3E0] rounded-md shadow-2xs border border-[#EADFC7]">
-                  <span className="text-[10px] font-bold text-[#2C1810]">VISA</span>
-                </div>
-                <div className="px-2.5 py-1 bg-[#FAF3E0] rounded-md shadow-2xs border border-[#EADFC7]">
-                  <span className="text-[10px] font-bold text-[#2C1810]">Mastercard</span>
-                </div>
-              </div>
-              <p className="text-[10px] text-[#735A4A] mt-3">
-                © 2025 Wondersale Retail Private Limited
-              </p>
-            </div>
-          </section>
-
         </div>
       </main>
 
-      {/* Instant Add-to-Cart Toast Notification */}
+      {/* Instant Add-to-Cart Toast Notification (Fully Responsive) */}
       {addedItemNotification && (
-        <div className="fixed bottom-20 md:bottom-6 right-4 z-50 bg-[#2C1810] text-[#FDF8EE] text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200 border border-[#D5C4A1]">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-medium">Added to cart:</span>
-          <span className="font-bold text-[#EADFC7] max-w-xs truncate">
-            {addedItemNotification}
-          </span>
+        <div className="fixed bottom-[72px] md:bottom-6 left-3 right-3 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-[#42060B]/95 backdrop-blur-md text-[#F6E9C8] text-xs px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl shadow-xl flex items-center justify-between gap-2.5 animate-in fade-in slide-in-from-bottom-2 duration-200 border border-[#7A0C16]">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+            <div className="min-w-0">
+              <span className="text-[#D8B4B8] text-[11px] sm:text-xs">Added: </span>
+              <span className="font-bold text-[#F6E9C8] text-[11px] sm:text-xs truncate inline-block max-w-[150px] sm:max-w-[210px] align-bottom">
+                {addedItemNotification}
+              </span>
+            </div>
+          </div>
           <Link
             href="/cart"
-            className="ml-2 bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-xs"
+            className="shrink-0 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] border border-[#DFCBA0]/30 font-serif font-bold px-3 py-1.5 rounded-lg text-xs transition-colors shadow-2xs whitespace-nowrap flex items-center gap-1 leading-normal"
           >
-            View Cart →
+            <span>View Cart</span>
+            <ChevronRight className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
           </Link>
         </div>
       )}
 
-      {/* Global Footer (Desktop Viewports) */}
-      <div className="hidden md:block">
-        <StorefrontFooter />
-      </div>
+      {/* Global Storefront Footer */}
+      <StorefrontFooter />
 
       {/* Sticky Bottom Navigation Bar (Mobile Viewports Only) */}
       <BottomTabBar />

@@ -38,7 +38,7 @@ export default function TermsPage() {
 
       <main className="flex-1 px-3.5 py-3 space-y-3.5 text-xs text-neutral-700 leading-relaxed">
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">1. Commercial Terms &amp; Scope</h2>
+          <h2 className="font-bold text-sm text-[#680114]">1. Commercial Terms &amp; Scope</h2>
           <p>
             These Terms of Service govern the retail purchase and delivery of products through the
             Wondersale storefront, operated by <strong>Wondersale Retail Private Limited</strong>.
@@ -50,7 +50,7 @@ export default function TermsPage() {
         </section>
 
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">2. Pricing, GST &amp; Currency</h2>
+          <h2 className="font-bold text-sm text-[#680114]">2. Pricing, GST &amp; Currency</h2>
           <p>
             All listed prices are strictly in <strong>Indian Rupees (INR)</strong> and computed with{" "}
             <strong>integer paise precision</strong>. All retail product prices are inclusive of
@@ -63,7 +63,7 @@ export default function TermsPage() {
         </section>
 
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">
+          <h2 className="font-bold text-sm text-[#680114]">
             3. Hyperlocal Delivery &amp; Handover
           </h2>
           <p>
@@ -78,7 +78,7 @@ export default function TermsPage() {
         </section>
 
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">
+          <h2 className="font-bold text-sm text-[#680114]">
             4. Jurisdiction &amp; Dispute Resolution
           </h2>
           <p>

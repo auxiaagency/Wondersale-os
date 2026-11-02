@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import { Heart } from "lucide-react";
 import { formatPrice, calculateDiscountPercentage } from "@/lib/format";
 
 export interface ProductCardProps {
@@ -64,28 +65,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          {express2Hr && (
-            <div className="flex items-center justify-end mb-0.5">
-              <span className="text-[9px] font-bold text-[#680114] bg-[#FAEBEF] px-1.5 py-0.5 rounded">
-                ⚡ 2-Hr
-              </span>
-            </div>
-          )}
-          {brand && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-[#735A4A] block truncate">
-              {brand}
-            </span>
-          )}
           {slug ? (
             <Link href={`/product/${slug}`} className="hover:text-[#680114] transition-colors">
-              <h4 className="text-xs font-semibold text-[#2C1810] truncate mb-1">{title}</h4>
+              <h4 className="text-xs font-semibold text-[#680114] truncate mb-1">{title}</h4>
             </Link>
           ) : (
-            <h4 className="text-xs font-semibold text-[#2C1810] truncate mb-1">{title}</h4>
+            <h4 className="text-xs font-semibold text-[#680114] truncate mb-1">{title}</h4>
           )}
           <div className="flex items-center justify-between mt-1">
             <div>
-              <span className="text-xs font-extrabold text-[#2C1810]">
+              <span className="text-xs font-extrabold text-[#680114]">
                 {formatPrice(sellingPricePaise)}
               </span>
               {discount > 0 && (
@@ -114,29 +103,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Default: Vertical Grid Card
   return (
     <div
-      className={`w-full bg-[#F6E9C8] rounded-xl border-2 border-[#680114] p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group ${
-        !inStock ? "opacity-75" : ""
+      className={`w-full bg-[#F6E9C8] rounded-xl border-2 p-1.5 sm:p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group overflow-hidden ${
+        !inStock
+          ? "border-[#680114]/40 bg-[#EDE4CE]"
+          : "border-[#680114]"
       }`}
     >
-      <div>
-        {/* Product Image Frame with Overlaid Badges to save vertical height */}
-        <div className="w-full aspect-square bg-[#F6E9C8] rounded-lg flex items-center justify-center overflow-hidden mb-1.5 relative border border-[#680114]/20">
-          {/* Top Left Discount Tag */}
+      <div className="flex flex-col flex-1">
+        {/* Product Image Frame */}
+        <div className={`w-full aspect-square rounded-lg flex items-center justify-center overflow-hidden relative border ${
+          !inStock
+            ? "bg-[#E6DCC4] border-[#680114]/15"
+            : "bg-[#F6E9C8] border-[#680114]/20"
+        }`}>
+          {/* Top Left Discount Tag (Mirrors Heart Button: absolute top-1 left-1 sm:top-2 sm:left-2) */}
           {discount > 0 && inStock ? (
-            <span className="absolute top-1 left-1 bg-[#680114] text-[#F6E9C8] text-[8px] font-extrabold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
-              {discount}% OFF
-            </span>
+            <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10 flex items-center">
+              <span className="h-3.5 sm:h-6 px-1 sm:px-2 bg-[#680114] text-[#F6E9C8] text-[6.5px] sm:text-[9.5px] font-bold rounded-full shadow-xs flex items-center justify-center leading-none tracking-tight">
+                {discount}% OFF
+              </span>
+            </div>
           ) : badge && inStock ? (
-            <span className="absolute top-1 left-1 bg-[#520210] text-[#F6E9C8] text-[8px] font-bold px-1 py-0.5 rounded shadow-2xs z-10 leading-none">
-              {badge}
-            </span>
-          ) : !inStock ? (
-            <span className="absolute top-1 left-1 bg-[#E8D7B0] text-[#735A4A] text-[8px] font-bold px-1 py-0.5 rounded z-10 leading-none">
-              OUT
-            </span>
+            <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10 flex items-center">
+              <span className="h-3.5 sm:h-6 px-1 sm:px-2 bg-[#520210] text-[#F6E9C8] text-[6.5px] sm:text-[9.5px] font-bold rounded-full shadow-xs flex items-center justify-center leading-none tracking-tight">
+                {badge}
+              </span>
+            </div>
           ) : null}
 
-          {/* Top Right Wishlist Button */}
+          {/* Top Right Wishlist Button (Mirrors Discount Tag: absolute top-1 right-1 sm:top-2 sm:right-2) */}
           <button
             type="button"
             onClick={(e) => {
@@ -144,35 +139,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.stopPropagation();
               onToggleWishlist?.(id);
             }}
-            className={`absolute top-1 right-1 w-5 h-5 rounded-full bg-[#F6E9C8] border border-[#680114]/40 flex items-center justify-center transition-all z-10 hover:scale-110 cursor-pointer shadow-2xs ${
-              isWishlisted ? "text-[#680114]" : "text-[#735A4A] hover:text-[#680114]"
-            }`}
+            className="absolute top-1 right-1 sm:top-2 sm:right-2 w-4 h-4 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[#680114] hover:scale-115 active:scale-90 transition-all z-10 cursor-pointer"
             aria-label="Wishlist"
           >
-            <svg
-              className="w-2.5 h-2.5"
-              fill={isWishlisted ? "currentColor" : "none"}
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
+            <Heart
+              className={`w-3 h-3 sm:w-4 sm:h-4 transition-all ${
+                isWishlisted
+                  ? "fill-[#680114] text-[#680114] stroke-[2]"
+                  : "fill-transparent text-[#680114] stroke-[2] hover:fill-[#680114]/20"
+              }`}
+            />
           </button>
 
           {/* Image */}
           {slug ? (
-            <Link href={`/product/${slug}`} className="w-full h-full flex items-center justify-center p-1">
+            <Link
+              href={`/product/${slug}`}
+              draggable={false}
+              className="w-full h-full flex items-center justify-center p-1 select-none"
+            >
               {imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={imageUrl}
                   alt={title}
-                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200"
+                  draggable={false}
+                  className={`w-full h-full object-contain pointer-events-none select-none transition-transform duration-200 ${
+                    !inStock ? "opacity-60 contrast-95" : "group-hover:scale-105"
+                  }`}
                 />
               ) : (
                 <div className="text-[#735A4A] flex flex-col items-center">
@@ -182,50 +176,60 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </Link>
           ) : imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={title} className="w-full h-full object-contain p-1" />
+            <img
+              src={imageUrl}
+              alt={title}
+              draggable={false}
+              className={`w-full h-full object-contain p-1 pointer-events-none select-none ${
+                !inStock ? "opacity-60 contrast-95" : ""
+              }`}
+            />
           ) : (
             <div className="text-[#735A4A] flex flex-col items-center">
               <span className="text-[10px] font-bold">WS</span>
             </div>
           )}
-        </div>
 
-        {/* Brand / Delivery Tag Inline */}
-        <div className="flex items-center justify-between text-[9px] text-[#735A4A] mb-1 leading-none">
-          {brand ? (
-            <span className="font-bold uppercase tracking-wider truncate max-w-[65%]">
-              {brand}
-            </span>
-          ) : <span />}
-          {express2Hr && (
-            <span className="font-semibold text-[#7A0C16] shrink-0">
-              ⚡ 2-Hr
-            </span>
+          {/* Out of Stock Pill Over Bottom Center of Image */}
+          {!inStock && (
+            <div className="absolute inset-x-0 bottom-1 sm:bottom-2 flex justify-center z-15 pointer-events-none px-1 sm:px-2">
+              <span className="bg-[#680114]/90 backdrop-blur-xs text-[#F6E9C8] font-serif font-bold text-[7.5px] sm:text-[10px] tracking-wide px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-md border border-[#F6E9C8]/30">
+                Out of Stock
+              </span>
+            </div>
           )}
         </div>
 
-        {/* Product Title */}
-        {slug ? (
-          <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors block">
-            <h3 className="text-[11px] font-semibold text-[#2C1810] line-clamp-2 leading-tight mb-1.5 min-h-[26px]">
+        {/* Product Title: Visually balanced spacing between image bottom and price/button row */}
+        <div className="pt-1.5 sm:pt-2 pb-1 sm:pb-1.5 flex items-center min-h-[30px] sm:min-h-[34px]">
+          {slug ? (
+            <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors w-full">
+              <h3 className={`text-[10px] sm:text-[11px] font-semibold line-clamp-2 leading-tight ${
+                !inStock ? "text-[#735A4A]" : "text-[#680114]"
+              }`}>
+                {title}
+              </h3>
+            </Link>
+          ) : (
+            <h3 className={`text-[10px] sm:text-[11px] font-semibold line-clamp-2 leading-tight w-full ${
+              !inStock ? "text-[#735A4A]" : "text-[#680114]"
+            }`}>
               {title}
             </h3>
-          </Link>
-        ) : (
-          <h3 className="text-[11px] font-semibold text-[#2C1810] line-clamp-2 leading-tight mb-1.5 min-h-[26px]">
-            {title}
-          </h3>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Bottom Row: Price & Inline Add Button */}
-      <div className="flex items-center justify-between pt-1 border-t border-[#EADFC7]/70 gap-1 mt-auto">
-        <div className="flex flex-col min-w-0">
-          <span className="text-xs font-extrabold text-[#2C1810] leading-none">
+      {/* Bottom Row: Price (Larger) + Horizontal Cut MRP (Smaller on the right) & Inline Add Button */}
+      <div className="flex items-center justify-between pt-0.5 sm:pt-1 gap-1 sm:gap-1.5 mt-auto">
+        <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0 flex-wrap">
+          <span className={`text-[11px] sm:text-[15px] font-black leading-none ${
+            !inStock ? "text-[#680114]/60" : "text-[#680114]"
+          }`}>
             {formatPrice(sellingPricePaise)}
           </span>
           {discount > 0 && (
-            <span className="text-[9px] text-[#735A4A] line-through mt-0.5 leading-none">
+            <span className="text-[8px] sm:text-[11px] font-medium text-[#735A4A] line-through leading-none opacity-80">
               {formatPrice(mrpPaise)}
             </span>
           )}
@@ -235,7 +239,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             type="button"
             onClick={() => onAddToCart?.(id)}
-            className="h-6 px-2 bg-[#5A0A10] hover:bg-[#7A0C16] text-[#FDF8EE] text-[10px] font-bold rounded-md flex items-center justify-center shadow-xs transition-colors cursor-pointer shrink-0"
+            className="h-5 sm:h-6 px-1.5 sm:px-2.5 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-[8.5px] sm:text-[10px] font-bold rounded-md flex items-center justify-center shadow-xs transition-colors cursor-pointer shrink-0"
           >
             + Add
           </button>
@@ -243,9 +247,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             type="button"
             disabled
-            className="h-6 px-1.5 bg-[#F4ECDC] text-[#735A4A] text-[9px] font-medium rounded-md flex items-center justify-center cursor-not-allowed border border-[#EADFC7] shrink-0"
+            className="h-5 sm:h-6 px-1 sm:px-2 bg-[#680114]/10 text-[#680114]/50 text-[7.5px] sm:text-[9px] font-bold rounded-md flex items-center justify-center cursor-not-allowed border border-[#680114]/20 shrink-0"
           >
-            Out
+            Unavailable
           </button>
         )}
       </div>

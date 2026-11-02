@@ -94,8 +94,8 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
     ratingCount: 5412,
     imageUrl:
       "https://images.unsplash.com/photo-1570222094114-d054a817e56b?auto=format&fit=crop&w=600&q=80",
-    inStock: true,
-    stockCount: 15,
+    inStock: false,
+    stockCount: 0,
     bestsellerRank: "#1 in Mixer Grinders Bhopal",
     description:
       "Tough 750W Turbo motor mixer grinder with advanced air ventilation and 3 leak-proof stainless steel jars for heavy Indian grinding.",
@@ -211,8 +211,8 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
     ratingCount: 612,
     imageUrl:
       "https://lh3.googleusercontent.com/aida-public/AB6AXuAUf7GZJO5V10wKbLQQ77X8o_qloUQ9lIlF6KNkhNr3rXfyaUweBmf__L4SyJLA4j24vSDEuWOjt1W3w3vFcg-re8Un4nRCX4vHEy2WHblhfVARISFc6LHis0M7Ru7lq3_GknRCw02XMqgGyLb6i00bgwqDJCKipCcFd6qrTD6EknHiPHBxAEk8KmhXrFBqfJv3DswnYBkL3ge5x5VmXUWmprhs2pXvqj_CsLcY3nnmv_Ua17sAU5JV-A",
-    inStock: true,
-    stockCount: 18,
+    inStock: false,
+    stockCount: 0,
     bestsellerRank: "#1 in Oil-Free Fryers",
     description: "90% less oil healthy cooking with 360-degree high speed air circulation and non-stick basket.",
     variants: [{ capacity: "4.5 Litre Black", pricePaise: 389900, note: "8 Smart Presets" }],

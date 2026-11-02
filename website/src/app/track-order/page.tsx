@@ -207,7 +207,7 @@ function TrackOrderContent() {
                   value={orderInput}
                   onChange={(e) => setOrderInput(e.target.value)}
                   placeholder="e.g. WS-20261016-6870"
-                  className="w-full bg-neutral-50 text-neutral-900 text-xs font-semibold pl-3 pr-16 py-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-[#D91E2A]"
+                  className="w-full bg-neutral-50 text-[#680114] text-xs font-semibold pl-3 pr-16 py-2 rounded-lg border border-neutral-300 focus:outline-hidden focus:border-[#D91E2A]"
                 />
                 <button
                   type="submit"
@@ -297,7 +297,7 @@ function TrackOrderContent() {
               <div className="relative z-10 flex items-center justify-center my-auto">
                 <div className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-full shadow-md border border-red-200">
                   <span className="w-2 h-2 rounded-full bg-[#D91E2A] animate-ping"></span>
-                  <span className="text-xs font-bold text-neutral-900 flex items-center gap-1">
+                  <span className="text-xs font-bold text-[#680114] flex items-center gap-1">
                     <Zap className="h-3.5 w-3.5 text-[#D91E2A] fill-current" />
                     <span>
                       {isBhopal ? "Express Rider on Route" : "In Flight with Courier"}
@@ -331,7 +331,7 @@ function TrackOrderContent() {
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs font-bold text-neutral-900">
+                  <h3 className="text-xs font-bold text-[#680114]">
                     {isBhopal ? "Mukesh S." : "Wondersale Express Fleet"}
                   </h3>
                   <span className="text-[9px] font-bold bg-red-50 text-[#D91E2A] px-1.5 py-0.2 rounded border border-red-100">
@@ -371,7 +371,7 @@ function TrackOrderContent() {
           {/* Secure Handover OTP Box */}
           <div className="bg-red-50/60 rounded-lg p-2.5 border border-red-100 flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-1 text-xs font-bold text-neutral-900">
+              <div className="flex items-center gap-1 text-xs font-bold text-[#680114]">
                 <Lock className="h-3.5 w-3.5 text-[#D91E2A]" />
                 <span>Handover Delivery OTP</span>
               </div>
@@ -390,7 +390,7 @@ function TrackOrderContent() {
         {/* Detailed Timeline */}
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200">
           <div className="flex items-center justify-between mb-3 pb-2 border-b border-neutral-100">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-900">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-[#680114]">
               Timeline &amp; Milestones
             </h3>
             <span className="text-[10px] font-semibold text-neutral-400">
@@ -404,7 +404,7 @@ function TrackOrderContent() {
                 <Check className="h-3 w-3 stroke-[3]" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-bold text-neutral-900">Order Placed</span>
+                <span className="text-xs font-bold text-[#680114]">Order Placed</span>
                 <span className="text-[10px] text-neutral-400">01:15 PM</span>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
@@ -417,7 +417,7 @@ function TrackOrderContent() {
                 <Check className="h-3 w-3 stroke-[3]" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-bold text-neutral-900">
+                <span className="text-xs font-bold text-[#680114]">
                   Order Confirmed &amp; Packed
                 </span>
                 <span className="text-[10px] text-neutral-400">01:30 PM</span>
@@ -432,7 +432,7 @@ function TrackOrderContent() {
                 <Check className="h-3 w-3 stroke-[3]" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-bold text-neutral-900">Dispatched with Rider</span>
+                <span className="text-xs font-bold text-[#680114]">Dispatched with Rider</span>
                 <span className="text-[10px] text-neutral-400">01:50 PM</span>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
@@ -475,7 +475,7 @@ function TrackOrderContent() {
           <div className="flex items-center justify-between pb-2 mb-3 border-b border-neutral-100">
             <div className="flex items-center gap-1.5">
               <ShoppingBag className="h-4 w-4 text-[#D91E2A]" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-900">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-[#680114]">
                 Items in Delivery ({items.length})
               </h3>
             </div>
@@ -489,11 +489,11 @@ function TrackOrderContent() {
                   {item.variantTitle || "Item"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-bold text-neutral-900 truncate">
+                  <h4 className="text-xs font-bold text-[#680114] truncate">
                     {item.productName}
                   </h4>
                   <p className="text-[10px] text-neutral-500">Qty: {item.quantity}</p>
-                  <div className="text-xs font-bold text-neutral-900 mt-0.5">
+                  <div className="text-xs font-bold text-[#680114] mt-0.5">
                     {formatPrice(item.pricePaise)}
                   </div>
                 </div>
@@ -512,7 +512,7 @@ function TrackOrderContent() {
                 -{formatPrice(discountPaise + Math.max(0, totalMrpPaise - itemsSellingPaise))}
               </span>
             </div>
-            <div className="flex justify-between items-baseline pt-2 border-t border-neutral-200 font-bold text-sm text-neutral-900">
+            <div className="flex justify-between items-baseline pt-2 border-t border-neutral-200 font-bold text-sm text-[#680114]">
               <span>Total Paid</span>
               <span className="text-base text-[#D91E2A] font-black">
                 {formatPrice(grandTotalPaise)}

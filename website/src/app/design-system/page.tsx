@@ -29,7 +29,7 @@ export default function DesignSystemPage() {
   const [wishlisted, setWishlisted] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+    <div className="min-h-screen bg-slate-50 text-[#680114] pb-20">
       {/* Top Banner */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 px-4 py-3 shadow-xs">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -46,7 +46,7 @@ export default function DesignSystemPage() {
         {/* Section 1: Buttons */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#680114]">
               1. Buttons & Touch Action Targets (≥44px)
             </h2>
             <p className="text-xs text-slate-500">
@@ -75,7 +75,7 @@ export default function DesignSystemPage() {
         {/* Section 2: Form Inputs */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#680114]">
               2. Form Inputs & Selectors
             </h2>
             <p className="text-xs text-slate-500">
@@ -145,7 +145,7 @@ export default function DesignSystemPage() {
         {/* Section 3: Badges, Chips & Status */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#680114]">
               3. Status Badges & Filter Chips
             </h2>
             <p className="text-xs text-slate-500">
@@ -179,7 +179,7 @@ export default function DesignSystemPage() {
         {/* Section 4: Product Cards */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#680114]">
               4. Product Card Variants
             </h2>
             <p className="text-xs text-slate-500">
@@ -241,7 +241,7 @@ export default function DesignSystemPage() {
         {/* Section 5: Order Timeline & Price Breakdown */}
         <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="border-b border-slate-100 pb-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#680114]">
               5. Commerce Details: Timeline & Breakdown
             </h2>
             <p className="text-xs text-slate-500">

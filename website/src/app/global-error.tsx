@@ -19,7 +19,7 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-neutral-50 flex items-center justify-center p-4 font-sans text-neutral-900">
+      <body className="min-h-screen bg-neutral-50 flex items-center justify-center p-4 font-sans text-[#680114]">
         <div className="w-full max-w-md bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm text-center">
           <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4 font-bold text-xl">
             !

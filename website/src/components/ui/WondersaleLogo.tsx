@@ -32,23 +32,22 @@ export const WondersaleLogo: React.FC<WondersaleLogoProps> = ({
 }) => {
   const isDark = variant === "dark";
 
-  // Dimension mapping calibrated directly to the official Wondersale brandlockup:
-  // Icon aspect ratio is 400x300 (4:3), and the font cap height aligns precisely with the icon top and bottom
+  // Dimension mapping calibrated with tighter spacing and prominent logo badge
   const dimensions = {
-    sm: { imgW: 38, imgH: 28, title: "text-[22px]", gap: "gap-2" },
-    md: { imgW: 48, imgH: 36, title: "text-[28px]", gap: "gap-2.5" },
-    lg: { imgW: 60, imgH: 45, title: "text-[36px]", gap: "gap-3" },
+    sm: { imgW: 56, imgH: 42, title: "text-[22px]", gap: "gap-1.5" },
+    md: { imgW: 78, imgH: 58, title: "text-[28px]", gap: "gap-2" },
+    lg: { imgW: 96, imgH: 72, title: "text-[36px]", gap: "gap-2.5" },
   }[size];
 
   const content = (
-    <div className={`inline-flex items-center ${dimensions.gap} group select-none ${className}`}>
-      {/* Brand Icon Badge with original Logo Graphic */}
+    <div className={`inline-flex items-center ${dimensions.gap} select-none ${className}`}>
+      {/* Brand Icon Badge - Shifted slightly up with tighter text proximity */}
       <div
-        className="relative shrink-0 flex items-center justify-center transition-transform group-hover:scale-105 duration-200"
+        className="relative shrink-0 flex items-center justify-center -translate-y-0.5"
         style={{ width: dimensions.imgW, height: dimensions.imgH }}
       >
         <Image
-          src="/logo.png"
+          src={isDark ? "/logo-cream-badge.png" : "/logo.png"}
           alt="Wondersale Brand Logo"
           width={dimensions.imgW * 2}
           height={dimensions.imgH * 2}
@@ -57,15 +56,15 @@ export const WondersaleLogo: React.FC<WondersaleLogoProps> = ({
         />
       </div>
 
-      {/* Brand Wordmark */}
+      {/* Brand Wordmark - Clean brand cream #F6E9C8 */}
       <div className="flex flex-col justify-center leading-none">
         <span
-          className={`font-sans font-black tracking-[-0.03em] uppercase leading-none transition-colors ${
+          className={`font-sans font-black tracking-[-0.03em] uppercase leading-none ${
             dimensions.title
           } ${
             isDark
-              ? "text-[#FDF8EE] group-hover:text-amber-200"
-              : "text-[#5A0A10] group-hover:text-[#7A0C16]"
+              ? "text-[#F6E9C8]"
+              : "text-[#5A0A10]"
           }`}
           style={{ letterSpacing: "-0.02em" }}
         >

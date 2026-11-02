@@ -79,6 +79,12 @@ interface StorefrontContextType {
   saveDeliveryAddress: (address: UserDeliveryAddress) => void;
   hasValidDeliveryAddress: () => boolean;
 
+  // Category Tree Navigation Modal/Drawer
+  isCategoryMenuOpen: boolean;
+  openCategoryMenu: () => void;
+  closeCategoryMenu: () => void;
+  toggleCategoryMenu: () => void;
+
   // Hydration readiness
   isHydrated: boolean;
 }
@@ -100,6 +106,11 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [location, setLocation] = useState<DeliveryLocation>(DEFAULT_LOCATION);
   const [deliveryAddress, setDeliveryAddress] = useState<UserDeliveryAddress | null>(null);
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+
+  const openCategoryMenu = () => setIsCategoryMenuOpen(true);
+  const closeCategoryMenu = () => setIsCategoryMenuOpen(false);
+  const toggleCategoryMenu = () => setIsCategoryMenuOpen((prev) => !prev);
 
   // Load from localStorage only after client mounts
   useEffect(() => {
@@ -305,6 +316,10 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
         deliveryAddress,
         saveDeliveryAddress,
         hasValidDeliveryAddress,
+        isCategoryMenuOpen,
+        openCategoryMenu,
+        closeCategoryMenu,
+        toggleCategoryMenu,
         isHydrated,
       }}
     >

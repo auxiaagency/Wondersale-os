@@ -194,7 +194,7 @@ function SearchContent() {
                 setShowSuggestions(true);
               }}
               placeholder="Search for cookers, brands..."
-              className="w-full bg-transparent p-0 text-sm font-medium text-neutral-900 placeholder:text-neutral-500 focus:outline-none border-none ring-0"
+              className="w-full bg-transparent p-0 text-sm font-medium text-[#680114] placeholder:text-neutral-500 focus:outline-none border-none ring-0"
               autoFocus={!initialQuery}
             />
 
@@ -252,7 +252,7 @@ function SearchContent() {
         <div className="flex items-center justify-between px-4 py-1.5 bg-neutral-100 text-xs text-neutral-600 border-t border-neutral-200">
           <div className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
             <MapPin className="h-3.5 w-3.5 text-[#D91E2A] shrink-0" />
-            <span className="font-medium text-neutral-900">
+            <span className="font-medium text-[#680114]">
               Deliver to{" "}
               <span className="font-bold">
                 {location.city} {location.pincode}
@@ -306,7 +306,7 @@ function SearchContent() {
                     ) : (
                       <SearchIcon className="h-4 w-4 text-neutral-400 group-hover:text-[#D91E2A]" />
                     )}
-                    <p className="text-xs text-neutral-900 font-medium">
+                    <p className="text-xs text-[#680114] font-medium">
                       <span>{item.title}</span>{" "}
                       <span className="text-[11px] text-neutral-500 font-normal">
                         ({item.subtitle})
@@ -400,7 +400,7 @@ function SearchContent() {
         <section className="sticky top-[95px] z-30 bg-white shadow-xs">
           <div className="flex items-baseline justify-between px-4 pt-2.5 pb-1">
             <div>
-              <h1 className="text-xs font-bold text-neutral-900 tracking-tight">
+              <h1 className="text-xs font-bold text-[#680114] tracking-tight">
                 {activeQuery ? (
                   <>
                     Showing {filteredProducts.length} results for{" "}
@@ -571,7 +571,7 @@ function SearchContent() {
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-[#D91E2A] mb-3">
                 <SearchX className="h-6 w-6" />
               </div>
-              <h3 className="text-sm font-bold text-neutral-900">
+              <h3 className="text-sm font-bold text-[#680114]">
                 No products found for &ldquo;{activeQuery}&rdquo;
               </h3>
               <p className="text-xs text-neutral-600 max-w-xs mx-auto mt-1 mb-4 leading-relaxed">
@@ -599,7 +599,7 @@ function SearchContent() {
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-[#D91E2A] mb-2">
               <SearchIcon className="h-5 w-5" />
             </div>
-            <h3 className="text-xs font-bold text-neutral-900">Looking for something else?</h3>
+            <h3 className="text-xs font-bold text-[#680114]">Looking for something else?</h3>
             <p className="text-[11px] text-neutral-600 max-w-xs mx-auto mt-1 mb-3">
               Explore our complete retail superstore warehouse catalog by department.
             </p>
@@ -619,7 +619,7 @@ function SearchContent() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white rounded-t-2xl p-4 shadow-2xl animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-neutral-200">
-              <h2 className="text-sm font-bold text-neutral-900">Sort Products By</h2>
+              <h2 className="text-sm font-bold text-[#680114]">Sort Products By</h2>
               <button
                 onClick={() => setIsSortOpen(false)}
                 className="p-1 text-neutral-400 hover:text-neutral-700"

@@ -43,7 +43,7 @@ export default function WishlistPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#FDF8EE] text-[#680114] antialiased flex flex-col justify-between font-sans">
       {/* 1. Global Header (Exact same header as Home Page & Categories) */}
       <GlobalHeader />
 
@@ -55,7 +55,7 @@ export default function WishlistPage() {
               Home
             </Link>
             <ChevronRight className="w-3.5 h-3.5 text-[#735A4A]" />
-            <span className="text-[#2C1810] font-bold">
+            <span className="text-[#680114] font-bold">
               My Wishlist ({items.length} {items.length === 1 ? "item" : "items"})
             </span>
           </nav>
@@ -68,19 +68,19 @@ export default function WishlistPage() {
           <button
             onClick={() => router.back()}
             aria-label="Go back"
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-[#F4ECDC] text-[#2C1810] hover:bg-[#EADFC7] transition-transform active:scale-90"
+            className="w-9 h-9 rounded-full flex items-center justify-center bg-[#F4ECDC] text-[#680114] hover:bg-[#EADFC7] transition-transform active:scale-90"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="font-bold text-base text-[#2C1810] leading-tight font-serif">My Wishlist</h1>
+            <h1 className="font-bold text-base text-[#680114] leading-tight font-serif">My Wishlist</h1>
             <p className="text-[11px] text-[#735A4A]">{items.length} Saved Items</p>
           </div>
         </div>
 
         <Link
           href="/cart"
-          className="relative p-2 rounded-full hover:bg-[#F4ECDC] text-[#2C1810] transition-transform active:scale-95"
+          className="relative p-2 rounded-full hover:bg-[#F4ECDC] text-[#680114] transition-transform active:scale-95"
         >
           <ShoppingBag className="h-5 w-5" />
           {isHydrated && cartCount > 0 && (
@@ -96,7 +96,7 @@ export default function WishlistPage() {
         {/* Section Header (Desktop only) */}
         <div className="hidden md:flex items-center justify-between pb-2 border-b border-[#EADFC7]">
           <div>
-            <h1 className="text-2xl font-bold text-[#2C1810] font-serif">
+            <h1 className="text-2xl font-bold text-[#680114] font-serif">
               My Saved Wishlist
             </h1>
             <p className="text-xs text-[#735A4A] mt-1">
@@ -136,7 +136,7 @@ export default function WishlistPage() {
             <div className="w-20 h-20 rounded-full bg-[#FAF3E0] text-[#7A0C16] border border-[#EADFC7] flex items-center justify-center mx-auto mb-4 shadow-inner">
               <Heart className="h-10 w-10 stroke-[1.8]" />
             </div>
-            <h2 className="text-xl md:text-2xl font-bold text-[#2C1810] font-serif">
+            <h2 className="text-xl md:text-2xl font-bold text-[#680114] font-serif">
               Your Wishlist is Empty
             </h2>
             <p className="text-xs md:text-sm text-[#735A4A] max-w-md mx-auto mt-2 mb-6 leading-relaxed">
@@ -152,7 +152,7 @@ export default function WishlistPage() {
               </Link>
               <Link
                 href="/categories"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#FAF3E0] border border-[#EADFC7] hover:bg-[#F4ECDC] px-6 py-3 text-xs md:text-sm font-bold text-[#2C1810] transition-colors"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#FAF3E0] border border-[#EADFC7] hover:bg-[#F4ECDC] px-6 py-3 text-xs md:text-sm font-bold text-[#680114] transition-colors"
               >
                 <span>All Departments</span>
               </Link>

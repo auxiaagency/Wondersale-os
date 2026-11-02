@@ -34,7 +34,7 @@ export default function AccountPage() {
   const { location } = useStorefront();
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] antialiased flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#FDF8EE] text-[#680114] antialiased flex flex-col justify-between font-sans">
       {/* 1. Desktop Global Header */}
       <div className="hidden md:block">
         <GlobalHeader />
@@ -66,7 +66,7 @@ export default function AccountPage() {
         </div>
 
         <div className="flex items-center justify-between pt-1">
-          <h1 className="font-bold text-lg text-[#2C1810] tracking-tight font-serif">My Account</h1>
+          <h1 className="font-bold text-lg text-[#680114] tracking-tight font-serif">My Account</h1>
           <div className="flex items-center gap-1 text-[11px] font-medium text-[#735A4A] bg-[#FAF3E0] px-2.5 py-0.5 rounded-full border border-[#EADFC7]">
             <MapPin className="h-3 w-3 text-[#7A0C16]" />
             <span>Active Account</span>
@@ -92,7 +92,7 @@ export default function AccountPage() {
             {/* Details */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-1">
-                <h2 className="font-bold text-base text-[#2C1810] font-serif truncate">Rohit Verma</h2>
+                <h2 className="font-bold text-base text-[#680114] font-serif truncate">Rohit Verma</h2>
                 <button className="text-xs font-semibold text-[#7A0C16] hover:underline flex items-center gap-0.5">
                   Edit <Edit2 className="h-3 w-3" />
                 </button>
@@ -120,7 +120,7 @@ export default function AccountPage() {
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-amber-500 font-bold text-sm">⭐</span>
-                <span className="text-xs font-bold text-neutral-900 tracking-tight">
+                <span className="text-xs font-bold text-[#680114] tracking-tight">
                   Wondersale Club Gold
                 </span>
               </div>
@@ -159,7 +159,7 @@ export default function AccountPage() {
               </span>
             </div>
             <div className="mt-2.5">
-              <div className="font-bold text-xs text-neutral-900">My Orders</div>
+              <div className="font-bold text-xs text-[#680114]">My Orders</div>
               <div className="text-[11px] text-neutral-500">Track shipments &amp; history</div>
             </div>
           </Link>
@@ -178,7 +178,7 @@ export default function AccountPage() {
               </span>
             </div>
             <div className="mt-2.5">
-              <div className="font-bold text-xs text-neutral-900">Wishlist</div>
+              <div className="font-bold text-xs text-[#680114]">Wishlist</div>
               <div className="text-[11px] text-neutral-500">Saved for later</div>
             </div>
           </Link>
@@ -194,7 +194,7 @@ export default function AccountPage() {
               </span>
             </div>
             <div className="mt-2.5">
-              <div className="font-bold text-xs text-neutral-900 truncate">
+              <div className="font-bold text-xs text-[#680114] truncate">
                 {location.locality || location.city} ({location.pincode})
               </div>
               <div className="text-[11px] text-neutral-500">
@@ -216,7 +216,7 @@ export default function AccountPage() {
               </span>
             </div>
             <div className="mt-2.5">
-              <div className="font-bold text-xs text-neutral-900">₹350 Credits</div>
+              <div className="font-bold text-xs text-[#680114]">₹350 Credits</div>
               <div className="text-[11px] text-neutral-500">Wondersale Pay Balance</div>
             </div>
           </div>
@@ -230,7 +230,7 @@ export default function AccountPage() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D91E2A] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#D91E2A]"></span>
               </span>
-              <span className="font-bold text-xs text-neutral-900 tracking-tight">
+              <span className="font-bold text-xs text-[#680114] tracking-tight">
                 Active Delivery
               </span>
               <span className="text-[11px] font-medium text-neutral-500">#WS-ORD-8921</span>
@@ -242,7 +242,7 @@ export default function AccountPage() {
 
           {/* Description */}
           <div className="py-3">
-            <p className="text-xs font-semibold text-neutral-900 truncate">
+            <p className="text-xs font-semibold text-[#680114] truncate">
               Prestige 5L Cooker + Bajaj Electric Kettle
             </p>
             <p className="text-[11px] text-[#D91E2A] font-bold mt-0.5">Expected Today by 4:30 PM</p>
@@ -261,7 +261,7 @@ export default function AccountPage() {
                 <div className="w-5 h-5 rounded-full bg-[#D91E2A] text-white flex items-center justify-center text-[10px] font-bold">
                   ✓
                 </div>
-                <span className="text-[9px] font-semibold text-neutral-900 mt-1">Confirmed</span>
+                <span className="text-[9px] font-semibold text-[#680114] mt-1">Confirmed</span>
               </div>
               <div className="relative z-10 flex flex-col items-center">
                 <div className="w-5 h-5 rounded-full bg-[#D91E2A] text-white flex items-center justify-center text-[10px] font-bold ring-2 ring-red-100">
@@ -304,7 +304,7 @@ export default function AccountPage() {
                 <Building className="h-4 w-4" />
               </div>
               <div>
-                <h3 className="font-bold text-xs text-neutral-900">Retail Member Desk</h3>
+                <h3 className="font-bold text-xs text-[#680114]">Retail Member Desk</h3>
                 <p className="text-[10px] text-neutral-500">Exclusive Store Privileges</p>
               </div>
             </div>
@@ -334,7 +334,7 @@ export default function AccountPage() {
             <div className="flex items-center gap-3">
               <Home className="h-4 w-4 text-neutral-500" />
               <div>
-                <div className="text-xs font-semibold text-neutral-900">Saved Addresses</div>
+                <div className="text-xs font-semibold text-[#680114]">Saved Addresses</div>
                 <div className="text-[10px] text-neutral-500">
                   Manage primary and office delivery addresses
                 </div>
@@ -347,7 +347,7 @@ export default function AccountPage() {
             <div className="flex items-center gap-3">
               <CreditCard className="h-4 w-4 text-neutral-500" />
               <div>
-                <div className="text-xs font-semibold text-neutral-900">
+                <div className="text-xs font-semibold text-[#680114]">
                   Payment Methods &amp; UPI
                 </div>
                 <div className="text-[10px] text-neutral-500">
@@ -362,7 +362,7 @@ export default function AccountPage() {
             <div className="flex items-center gap-3">
               <Globe className="h-4 w-4 text-neutral-500" />
               <div>
-                <div className="text-xs font-semibold text-neutral-900">App Language</div>
+                <div className="text-xs font-semibold text-[#680114]">App Language</div>
                 <div className="text-[10px] text-neutral-500">
                   English (हिंदी / Hindi available)
                 </div>
@@ -378,7 +378,7 @@ export default function AccountPage() {
             <div className="flex items-center gap-3">
               <Zap className="h-4 w-4 text-neutral-500" />
               <div>
-                <div className="text-xs font-semibold text-neutral-900">
+                <div className="text-xs font-semibold text-[#680114]">
                   Shipping &amp; Delivery Coverage
                 </div>
                 <div className="text-[10px] text-neutral-500">
@@ -396,7 +396,7 @@ export default function AccountPage() {
             <div className="flex items-center gap-3">
               <Building className="h-4 w-4 text-neutral-500" />
               <div>
-                <div className="text-xs font-semibold text-neutral-900">
+                <div className="text-xs font-semibold text-[#680114]">
                   Returns &amp; Replacement
                 </div>
                 <div className="text-[10px] text-neutral-500">
@@ -414,7 +414,7 @@ export default function AccountPage() {
             <div className="flex items-center gap-3">
               <Phone className="h-4 w-4 text-neutral-500" />
               <div>
-                <div className="text-xs font-semibold text-neutral-900">
+                <div className="text-xs font-semibold text-[#680114]">
                   Help &amp; 24/7 Support
                 </div>
                 <div className="text-[10px] text-neutral-500">Call Support Desk: 0755-4209999</div>
@@ -427,7 +427,15 @@ export default function AccountPage() {
         {/* LOG OUT BUTTON */}
         <div className="pt-1 pb-4">
           <button
-            onClick={() => router.push("/login")}
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("wondersale_token");
+                localStorage.removeItem("token");
+                localStorage.removeItem("wondersale_user");
+                window.dispatchEvent(new Event("wondersale_auth_change"));
+              }
+              router.push("/login");
+            }}
             className="w-full py-2.5 px-4 rounded-lg border border-red-200 text-[#D91E2A] bg-red-50/50 hover:bg-red-100/50 active:scale-98 transition-all font-semibold text-xs flex items-center justify-center gap-2"
           >
             <LogOut className="h-4 w-4" />

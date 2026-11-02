@@ -69,14 +69,14 @@ export default function ReturnsPolicyPage() {
 
         {/* Category Eligibility Matrix */}
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200 space-y-2.5">
-          <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-900">
+          <h3 className="font-bold text-xs uppercase tracking-wider text-[#680114]">
             Category Replacement Window
           </h3>
 
           <div className="space-y-2 text-xs">
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
-                <span className="font-bold text-neutral-900 block">
+                <span className="font-bold text-[#680114] block">
                   Kitchen &amp; Home Appliances
                 </span>
                 <span className="text-[10px] text-neutral-500">
@@ -90,7 +90,7 @@ export default function ReturnsPolicyPage() {
 
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
-                <span className="font-bold text-neutral-900 block">Electronics &amp; Audio</span>
+                <span className="font-bold text-[#680114] block">Electronics &amp; Audio</span>
                 <span className="text-[10px] text-neutral-500">
                   Headphones, Wall Clocks, Gadgets
                 </span>
@@ -102,7 +102,7 @@ export default function ReturnsPolicyPage() {
 
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
-                <span className="font-bold text-neutral-900 block">Toys &amp; Games</span>
+                <span className="font-bold text-[#680114] block">Toys &amp; Games</span>
                 <span className="text-[10px] text-neutral-500">Educational Toys, Board Games</span>
               </div>
               <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
@@ -112,7 +112,7 @@ export default function ReturnsPolicyPage() {
 
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
-                <span className="font-bold text-neutral-900 block">Packaged Food &amp; Snacks</span>
+                <span className="font-bold text-[#680114] block">Packaged Food &amp; Snacks</span>
                 <span className="text-[10px] text-neutral-500">Hygiene &amp; Consumables</span>
               </div>
               <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
@@ -124,7 +124,7 @@ export default function ReturnsPolicyPage() {
 
         {/* 3 Step Return Process */}
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200">
-          <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-900 mb-3">
+          <h3 className="font-bold text-xs uppercase tracking-wider text-[#680114] mb-3">
             How It Works (3 Simple Steps)
           </h3>
 
@@ -134,7 +134,7 @@ export default function ReturnsPolicyPage() {
                 1
               </div>
               <div>
-                <strong className="text-neutral-900 block">Initiate via App or Helpline</strong>
+                <strong className="text-[#680114] block">Initiate via App or Helpline</strong>
                 <p className="text-[11px] text-neutral-600 mt-0.5">
                   Go to{" "}
                   <Link href="/account" className="text-[#D91E2A] font-semibold underline">
@@ -150,7 +150,7 @@ export default function ReturnsPolicyPage() {
                 2
               </div>
               <div>
-                <strong className="text-neutral-900 block">Quick Doorstep Verification</strong>
+                <strong className="text-[#680114] block">Quick Doorstep Verification</strong>
                 <p className="text-[11px] text-neutral-600 mt-0.5">
                   Our rider verifies the original box, brand MRP tags, and intact manufacturer
                   accessories.
@@ -163,7 +163,7 @@ export default function ReturnsPolicyPage() {
                 3
               </div>
               <div>
-                <strong className="text-neutral-900 block">Instant Swap or Refund</strong>
+                <strong className="text-[#680114] block">Instant Swap or Refund</strong>
                 <p className="text-[11px] text-neutral-600 mt-0.5">
                   Fresh unit handed over immediately, or UPI refund credited to your source account
                   within 24–48 hours.
@@ -177,7 +177,7 @@ export default function ReturnsPolicyPage() {
         <section className="bg-red-50/50 rounded-xl p-3 border border-red-200 text-xs">
           <div className="flex items-center gap-2 mb-1">
             <Store className="h-4 w-4 text-[#D91E2A]" />
-            <strong className="text-neutral-900">Prefer Instant In-Store Exchange?</strong>
+            <strong className="text-[#680114]">Prefer Instant In-Store Exchange?</strong>
           </div>
           <p className="text-[11px] text-neutral-600 leading-relaxed">
             Visit any Wondersale Retail Superstore with your tax invoice for

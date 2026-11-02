@@ -43,7 +43,7 @@ export const MobileNumberInput: React.FC<MobileNumberInputProps> = ({
           value={value}
           onChange={handleChange}
           maxLength={10}
-          className="flex-1 px-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none"
+          className="flex-1 px-3 text-xs text-[#680114] placeholder-slate-400 focus:outline-none"
           {...props}
         />
       </div>

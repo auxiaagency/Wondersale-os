@@ -193,11 +193,11 @@ function OrderConfirmationContent() {
               </div>
             </div>
 
-            <h1 className="text-xl font-extrabold text-neutral-900 tracking-tight">
+            <h1 className="text-xl font-extrabold text-[#680114] tracking-tight">
               Order Placed Successfully!
             </h1>
             <p className="text-xs text-neutral-600 mt-1.5 leading-relaxed max-w-[300px]">
-              Thank you <span className="font-semibold text-neutral-900">{recipientName}</span>!
+              Thank you <span className="font-semibold text-[#680114]">{recipientName}</span>!
               Your order has been routed to{" "}
               <span className="font-semibold text-[#D91E2A]">
                 Wondersale Central Fulfillment Hub
@@ -217,7 +217,7 @@ function OrderConfirmationContent() {
                 </span>
                 <div className="text-left">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold text-neutral-900">
+                    <span className="text-[11px] font-bold text-[#680114]">
                       {isBhopal ? "Today within 2 Hours" : "Estimated in 3-5 Business Days"}
                     </span>
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -239,7 +239,7 @@ function OrderConfirmationContent() {
         {/* 3. ORDER TRACKING TIMELINE */}
         <section className="bg-white rounded-2xl p-4 border border-neutral-200 shadow-xs">
           <div className="flex items-center justify-between mb-3.5">
-            <h2 className="text-sm font-bold text-neutral-900 flex items-center gap-1.5">
+            <h2 className="text-sm font-bold text-[#680114] flex items-center gap-1.5">
               <Zap className="h-4 w-4 text-[#D91E2A]" />
               Live Order Tracking
             </h2>
@@ -255,7 +255,7 @@ function OrderConfirmationContent() {
                 <Check className="h-3 w-3 stroke-[3]" />
               </div>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-xs font-bold text-neutral-900">Order Confirmed</h3>
+                <h3 className="text-xs font-bold text-[#680114]">Order Confirmed</h3>
                 <time className="text-[10px] font-medium text-neutral-400">Just now</time>
               </div>
               <p className="text-[11px] text-neutral-500 mt-0.5">
@@ -337,14 +337,14 @@ function OrderConfirmationContent() {
               WS
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-xs font-bold text-neutral-900 truncate">
+              <h3 className="text-xs font-bold text-[#680114] truncate">
                 Wondersale Express Fleet
               </h3>
               <p className="text-[10px] text-neutral-500 truncate">
                 Tracked Dispatch Partner
               </p>
               <div className="flex items-center gap-1 mt-0.5">
-                <span className="text-[11px] font-bold text-neutral-900">4.8 ★</span>
+                <span className="text-[11px] font-bold text-[#680114]">4.8 ★</span>
                 <span className="text-[10px] text-neutral-400">(1,240+ verified deliveries)</span>
               </div>
             </div>
@@ -391,7 +391,7 @@ function OrderConfirmationContent() {
         {/* 5. ORDER ITEMS SUMMARY */}
         <section className="bg-white rounded-2xl p-4 border border-neutral-200 shadow-xs">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-neutral-900 flex items-center gap-1.5">
+            <h2 className="text-sm font-bold text-[#680114] flex items-center gap-1.5">
               <ShoppingBag className="h-4 w-4 text-[#D91E2A]" />
               Items in Order ({items.length} {items.length === 1 ? "item" : "items"})
             </h2>
@@ -417,11 +417,11 @@ function OrderConfirmationContent() {
                       Qty: {item.quantity}
                     </span>
                   </div>
-                  <h3 className="text-xs font-semibold text-neutral-900 truncate mt-0.5">
+                  <h3 className="text-xs font-semibold text-[#680114] truncate mt-0.5">
                     {item.productName}
                   </h3>
                   <div className="flex items-baseline gap-2 mt-0.5">
-                    <span className="text-xs font-extrabold text-neutral-900">
+                    <span className="text-xs font-extrabold text-[#680114]">
                       {formatPrice(item.pricePaise)}
                     </span>
                     {item.mrpPaise > item.pricePaise && (
@@ -439,7 +439,7 @@ function OrderConfirmationContent() {
           <div className="mt-4 pt-3.5 border-t border-neutral-100 space-y-1.5 text-xs">
             <div className="flex justify-between text-neutral-600">
               <span>Items Total (MRP)</span>
-              <span className="font-medium text-neutral-900">{formatPrice(totalMrpPaise)}</span>
+              <span className="font-medium text-[#680114]">{formatPrice(totalMrpPaise)}</span>
             </div>
             {productDiscountPaise > 0 && (
               <div className="flex justify-between text-emerald-700">
@@ -472,7 +472,7 @@ function OrderConfirmationContent() {
             </div>
             <div className="pt-2 border-t border-neutral-200 flex justify-between items-baseline font-bold">
               <div className="flex flex-col">
-                <span className="text-sm text-neutral-900">Total Paid</span>
+                <span className="text-sm text-[#680114]">Total Paid</span>
                 <span className="text-[10px] font-semibold text-emerald-700 flex items-center gap-1">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Instant UPI Payment Verified
@@ -502,7 +502,7 @@ function OrderConfirmationContent() {
               Home
             </span>
           </div>
-          <p className="text-xs font-bold text-neutral-900">{recipientName}</p>
+          <p className="text-xs font-bold text-[#680114]">{recipientName}</p>
           <p className="text-xs text-neutral-600 mt-0.5 leading-relaxed">{deliveryAddressLine}</p>
           <div className="flex items-center gap-2 mt-1.5 text-xs text-neutral-500">
             <span>{recipientMobile}</span>

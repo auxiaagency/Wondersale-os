@@ -82,7 +82,7 @@ export default function ShippingPolicyPage() {
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200">
           <div className="flex items-center gap-2 mb-2">
             <MapPin className="h-4 w-4 text-[#D91E2A]" />
-            <h2 className="text-xs font-bold text-neutral-900">
+            <h2 className="text-xs font-bold text-[#680114]">
               Check Delivery Speed in Your Area
             </h2>
           </div>
@@ -97,7 +97,7 @@ export default function ShippingPolicyPage() {
               value={pincodeInput}
               onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, ""))}
               placeholder="e.g. 462001 or 110001"
-              className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold tracking-wider text-neutral-900 focus:outline-hidden focus:border-[#D91E2A]"
+              className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold tracking-wider text-[#680114] focus:outline-hidden focus:border-[#D91E2A]"
             />
             <button
               type="submit"
@@ -155,7 +155,7 @@ export default function ShippingPolicyPage() {
                 <div className="w-6 h-6 rounded-md bg-[#D91E2A] text-white flex items-center justify-center">
                   <Zap className="h-3.5 w-3.5 fill-current" />
                 </div>
-                <h3 className="text-xs font-bold text-neutral-900">Hyperlocal 2-Hour Express</h3>
+                <h3 className="text-xs font-bold text-[#680114]">Hyperlocal 2-Hour Express</h3>
               </div>
               <span className="text-[10px] font-bold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
                 Express Zone
@@ -174,7 +174,7 @@ export default function ShippingPolicyPage() {
                 <div className="w-6 h-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center">
                   <Clock className="h-3.5 w-3.5" />
                 </div>
-                <h3 className="text-xs font-bold text-neutral-900">Scheduled Evening Delivery</h3>
+                <h3 className="text-xs font-bold text-[#680114]">Scheduled Evening Delivery</h3>
               </div>
               <span className="text-[10px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
                 6:00 PM – 9:00 PM
@@ -193,7 +193,7 @@ export default function ShippingPolicyPage() {
                 <div className="w-6 h-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center">
                   <Truck className="h-3.5 w-3.5" />
                 </div>
-                <h3 className="text-xs font-bold text-neutral-900">Standard Pan-India Shipping</h3>
+                <h3 className="text-xs font-bold text-[#680114]">Standard Pan-India Shipping</h3>
               </div>
               <span className="text-[10px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
                 3–5 Business Days
@@ -208,7 +208,7 @@ export default function ShippingPolicyPage() {
 
         {/* Free Delivery Thresholds Breakdown */}
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200">
-          <h2 className="text-xs font-bold text-neutral-900 mb-2">Free Delivery Thresholds</h2>
+          <h2 className="text-xs font-bold text-[#680114] mb-2">Free Delivery Thresholds</h2>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-neutral-50 rounded-lg p-2.5 border border-neutral-200 text-center">
               <span className="text-[10px] font-bold text-neutral-500 uppercase block">
@@ -233,7 +233,7 @@ export default function ShippingPolicyPage() {
 
         {/* Security & COD Policies */}
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200 space-y-2.5 text-xs text-neutral-600">
-          <h2 className="font-bold text-xs text-neutral-900">Order Security &amp; Payment Rules</h2>
+          <h2 className="font-bold text-xs text-[#680114]">Order Security &amp; Payment Rules</h2>
           <div className="flex items-start gap-2">
             <ShieldCheck className="h-4 w-4 text-[#D91E2A] shrink-0 mt-0.5" />
             <p>

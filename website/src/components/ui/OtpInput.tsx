@@ -50,10 +50,10 @@ export const OtpInput: React.FC<OtpInputProps> = ({ length = 6, value, onChange,
             onKeyDown={(e) => handleKeyDown(idx, e)}
             className={`w-11 h-12 text-center font-bold text-base rounded-lg border transition-all focus:outline-none focus:ring-1 ${
               error
-                ? "border-[#D91E2A] bg-red-50/40 text-slate-900 focus:ring-[#D91E2A]"
+                ? "border-[#D91E2A] bg-red-50/40 text-[#680114] focus:ring-[#D91E2A]"
                 : digit
-                  ? "border-[#D91E2A] bg-red-50/20 text-slate-900 focus:ring-[#D91E2A]"
-                  : "border-slate-300 bg-white text-slate-900 focus:border-[#D91E2A] focus:ring-[#D91E2A]"
+                  ? "border-[#D91E2A] bg-red-50/20 text-[#680114] focus:ring-[#D91E2A]"
+                  : "border-slate-300 bg-white text-[#680114] focus:border-[#D91E2A] focus:ring-[#D91E2A]"
             }`}
           />
         ))}

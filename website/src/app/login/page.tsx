@@ -92,6 +92,13 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("wondersale_token", data.data?.token || "ws_session_token_placeholder");
+          if (data.data?.user) {
+            localStorage.setItem("wondersale_user", JSON.stringify(data.data.user));
+          }
+          window.dispatchEvent(new Event("wondersale_auth_change"));
+        }
         router.push("/account");
       } else {
         setErrorMsg(data.error?.message || "Invalid OTP code");
@@ -137,7 +144,7 @@ export default function LoginPage() {
               Retail Superstore
             </span>
           </div>
-          <h1 className="font-extrabold text-[22px] tracking-tight text-neutral-900 leading-snug mb-1.5">
+          <h1 className="font-extrabold text-[22px] tracking-tight text-[#680114] leading-snug mb-1.5">
             Sign In / Register
           </h1>
           <p className="text-xs text-neutral-600 leading-relaxed mb-3">
@@ -167,7 +174,7 @@ export default function LoginPage() {
           {/* Step 1: Mobile Input Container */}
           <div className="bg-white border border-neutral-200 rounded-2xl p-3.5 shadow-xs">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-neutral-900 block">
+              <label className="text-xs font-semibold text-[#680114] block">
                 Enter Mobile Number
               </label>
               <span className="text-[10px] text-neutral-400 font-medium">
@@ -176,7 +183,7 @@ export default function LoginPage() {
             </div>
             <form onSubmit={handleSendOtp} className="flex items-center gap-2">
               {/* Country Code */}
-              <div className="flex items-center gap-1.5 px-2.5 py-2.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-semibold text-neutral-900 shrink-0">
+              <div className="flex items-center gap-1.5 px-2.5 py-2.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-semibold text-[#680114] shrink-0">
                 <span>🇮🇳</span>
                 <span>+91</span>
               </div>
@@ -188,14 +195,14 @@ export default function LoginPage() {
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="Enter 10-digit number"
-                  className="w-full bg-transparent p-0 text-sm font-semibold tracking-wide text-neutral-900 focus:outline-none border-none ring-0"
+                  className="w-full bg-transparent p-0 text-sm font-semibold tracking-wide text-[#680114] focus:outline-none border-none ring-0"
                 />
                 {phoneNumber && (
                   <button
                     type="button"
                     onClick={() => setPhoneNumber("")}
                     aria-label="Clear field"
-                    className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-200 text-neutral-600 hover:text-neutral-900"
+                    className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-200 text-neutral-600 hover:text-[#680114]"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -210,7 +217,7 @@ export default function LoginPage() {
             <div className="bg-gradient-to-b from-neutral-50 to-white border-2 border-red-200 rounded-2xl p-4 shadow-xs relative">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex flex-col">
-                  <span className="text-xs font-bold text-neutral-900">
+                  <span className="text-xs font-bold text-[#680114]">
                     Enter 6-digit OTP sent to
                   </span>
                   <span className="text-xs font-semibold text-[#D91E2A] mt-0.5 tracking-wide">
@@ -237,7 +244,7 @@ export default function LoginPage() {
                     maxLength={1}
                     value={digit}
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    className={`w-11 h-12 text-center rounded-xl font-bold text-lg text-neutral-900 border transition-all ${
+                    className={`w-11 h-12 text-center rounded-xl font-bold text-lg text-[#680114] border transition-all ${
                       idx === 4 && !digit
                         ? "border-2 border-[#D91E2A] ring-2 ring-red-100 bg-white"
                         : "border-neutral-300 bg-white"

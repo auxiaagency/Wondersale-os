@@ -8,11 +8,11 @@ import { useStorefront } from "@/context/StorefrontContext";
 
 export const BottomTabBar: React.FC = () => {
   const pathname = usePathname();
-  const { cartCount, isHydrated } = useStorefront();
+  const { cartCount, isHydrated, toggleCategoryMenu, isCategoryMenuOpen } = useStorefront();
 
   const navItems = [
     { label: "Home", href: "/", icon: Home },
-    { label: "Categories", href: "/categories", icon: Grid },
+    { label: "Categories", href: "#categories-menu", icon: Grid, isMenuTrigger: true },
     { label: "Search", href: "/search", icon: Search },
     { label: "Cart", href: "/cart", icon: ShoppingBag, count: isHydrated ? cartCount : 0 },
     { label: "Account", href: "/account", icon: User },
@@ -25,8 +25,41 @@ export const BottomTabBar: React.FC = () => {
     >
       <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = item.isMenuTrigger ? isCategoryMenuOpen : pathname === item.href;
           const Icon = item.icon;
+
+          if (item.isMenuTrigger) {
+            return (
+              <button
+                key={item.label}
+                type="button"
+                onClick={toggleCategoryMenu}
+                className={`flex flex-col items-center justify-center flex-1 h-full transition-all relative min-w-[44px] cursor-pointer ${
+                  isActive
+                    ? "text-[#FDF8EE] font-extrabold"
+                    : "text-[#EADFC7]/85 hover:text-[#FDF8EE] font-bold"
+                }`}
+              >
+                <div className="relative flex items-center justify-center">
+                  <Icon
+                    className={`w-5 h-5 transition-transform ${
+                      isActive ? "stroke-[2.8] scale-110 text-[#FDF8EE]" : "stroke-[2.4] text-[#EADFC7]"
+                    }`}
+                  />
+                </div>
+                <span
+                  className={`text-[10px] mt-1 leading-tight tracking-wide ${
+                    isActive ? "text-[#FDF8EE] font-extrabold" : "text-[#EADFC7] font-bold"
+                  }`}
+                >
+                  {item.label}
+                </span>
+                {isActive && (
+                  <span className="w-1.5 h-1.5 bg-[#FEC501] rounded-full mt-0.5 shadow-xs" />
+                )}
+              </button>
+            );
+          }
 
           return (
             <Link
@@ -45,8 +78,8 @@ export const BottomTabBar: React.FC = () => {
                   }`}
                 />
                 {item.count !== undefined && item.count > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-[#FEC501] text-[#5A0A10] text-[10px] font-black min-w-[16px] h-[16px] rounded-full flex items-center justify-center px-1 shadow-sm border border-[#5A0A10]">
-                    {item.count}
+                  <span className="absolute -top-1.5 -right-2 bg-[#F6E9C8] text-[#680114] text-[9.5px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 shadow-xs border border-[#680114] leading-none">
+                    {item.count > 99 ? "99+" : item.count}
                   </span>
                 )}
               </div>

@@ -62,6 +62,7 @@ export const metadata: Metadata = {
 };
 
 import { StorefrontProvider } from "@/context/StorefrontContext";
+import { CategoryTreeMenuModal } from "@/components/navigation/CategoryTreeMenuModal";
 
 export default function RootLayout({
   children,
@@ -83,8 +84,11 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600;1,700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
-      <body className="min-h-screen bg-[#F6E9C8] text-[#2C1810] antialiased selection:bg-[#680114]/20 selection:text-[#680114]">
-        <StorefrontProvider>{children}</StorefrontProvider>
+      <body className="min-h-screen bg-[#F6E9C8] text-[#680114] antialiased selection:bg-[#680114]/20 selection:text-[#680114]">
+        <StorefrontProvider>
+          {children}
+          <CategoryTreeMenuModal />
+        </StorefrontProvider>
       </body>
     </html>
   );

@@ -320,7 +320,7 @@ export default function CartPage() {
       {/* ======================================================== */}
       {/* DESKTOP VIEWPORT LAYOUT (>= md, Full Width Responsive)   */}
       {/* ======================================================== */}
-      <div className="hidden md:flex min-h-screen flex-col bg-[#FDF8EE] text-[#2C1810] font-sans">
+      <div className="hidden md:flex min-h-screen flex-col bg-[#FDF8EE] text-[#680114] font-sans">
         <GlobalHeader />
 
         {/* Desktop Breadcrumbs */}
@@ -331,7 +331,7 @@ export default function CartPage() {
                 Home
               </Link>
               <ChevronRight className="w-3.5 h-3.5 text-[#735A4A]" />
-              <span className="text-[#2C1810] font-bold">Shopping Cart ({totalQuantity} items)</span>
+              <span className="text-[#680114] font-bold">Shopping Cart ({totalQuantity} items)</span>
             </nav>
           </div>
         </div>
@@ -345,7 +345,7 @@ export default function CartPage() {
                 {/* 1. Header & Location Bar */}
                 <div className="bg-[#FFFFFF] p-5 rounded-3xl shadow-xs border border-[#EADFC7] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div>
-                    <h1 className="text-xl font-bold text-[#2C1810] font-serif">
+                    <h1 className="text-xl font-bold text-[#680114] font-serif">
                       Your Cart ({totalQuantity} {totalQuantity === 1 ? "item" : "items"})
                     </h1>
                     <p className="text-xs text-[#735A4A] mt-0.5">
@@ -356,7 +356,7 @@ export default function CartPage() {
                     <MapPin className="w-4 h-4 text-[#7A0C16] shrink-0" />
                     <div>
                       <span className="text-[#735A4A]">Deliver to: </span>
-                      <strong className="text-[#2C1810] font-bold">
+                      <strong className="text-[#680114] font-bold">
                         {location.city} {location.pincode}
                         {location.locality ? ` (${location.locality})` : ""}
                       </strong>
@@ -383,7 +383,7 @@ export default function CartPage() {
                         <Zap className="w-4 h-4 fill-current" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-[#2C1810]">
+                        <p className="text-xs font-bold text-[#680114]">
                           {neededForFreeExpressPaise > 0 ? (
                             <>
                               Add{" "}
@@ -474,7 +474,7 @@ export default function CartPage() {
                               href={item.slug ? `/product/${item.slug}` : "#"}
                               className="hover:text-[#7A0C16] transition-colors"
                             >
-                              <h2 className="text-sm font-bold text-[#2C1810] leading-snug">
+                              <h2 className="text-sm font-bold text-[#680114] leading-snug">
                                 {item.title}
                               </h2>
                             </Link>
@@ -504,7 +504,7 @@ export default function CartPage() {
                           {/* Price & Quantity Controls */}
                           <div className="mt-4 pt-3 border-t border-[#EADFC7] flex items-center justify-between">
                             <div className="flex items-baseline gap-2">
-                              <span className="text-base font-extrabold text-[#2C1810]">
+                              <span className="text-base font-extrabold text-[#680114]">
                                 {formatPrice(item.sellingPricePaise * item.quantity)}
                               </span>
                               <span className="text-xs text-[#735A4A] line-through">
@@ -525,7 +525,7 @@ export default function CartPage() {
                                 >
                                   <Minus className="w-3.5 h-3.5" />
                                 </button>
-                                <span className="w-10 text-center text-xs font-bold text-[#2C1810]">
+                                <span className="w-10 text-center text-xs font-bold text-[#680114]">
                                   {item.quantity}
                                 </span>
                                 <button
@@ -547,7 +547,7 @@ export default function CartPage() {
 
                 {/* 4. Delivery Preferences */}
                 <div className="bg-[#FFFFFF] p-5 rounded-3xl shadow-xs border border-[#EADFC7] space-y-3">
-                  <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wider flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wider flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#7A0C16]" />
                     Delivery Preference for {location.city} ({location.pincode})
                   </h3>
@@ -564,7 +564,7 @@ export default function CartPage() {
                           }`}
                         >
                           <div className="flex items-start justify-between">
-                            <span className="text-xs font-bold text-[#2C1810]">⚡ 2-Hour Express</span>
+                            <span className="text-xs font-bold text-[#680114]">⚡ 2-Hour Express</span>
                             <span className="text-[10px] font-bold bg-[#5A0A10] text-[#FDF8EE] px-2 py-0.5 rounded-full">
                               FREE
                             </span>
@@ -583,7 +583,7 @@ export default function CartPage() {
                           }`}
                         >
                           <div className="flex items-start justify-between">
-                            <span className="text-xs font-bold text-[#2C1810]">Today Evening</span>
+                            <span className="text-xs font-bold text-[#680114]">Today Evening</span>
                             <span className="text-[10px] font-bold text-[#1E824C] bg-[#FAF3E0] border border-[#EADFC7] px-2 py-0.5 rounded-full">
                               FREE
                             </span>
@@ -600,7 +600,7 @@ export default function CartPage() {
                           }`}
                         >
                           <div className="flex items-start justify-between">
-                            <span className="text-xs font-bold text-[#2C1810]">Tomorrow Morning</span>
+                            <span className="text-xs font-bold text-[#680114]">Tomorrow Morning</span>
                             <span className="text-[10px] font-bold text-[#1E824C] bg-[#FAF3E0] border border-[#EADFC7] px-2 py-0.5 rounded-full">
                               FREE
                             </span>
@@ -611,7 +611,7 @@ export default function CartPage() {
                     ) : (
                       <div className="col-span-3 p-4 rounded-2xl border-2 border-[#7A0C16] bg-[#FAF3E0]">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#2C1810]">
+                          <span className="text-xs font-bold text-[#680114]">
                             Standard Nationwide Shipping (BlueDart / Delhivery)
                           </span>
                           <span className="text-xs font-bold text-[#1E824C] bg-[#FAF3E0] border border-[#EADFC7] px-2 py-0.5 rounded">
@@ -634,7 +634,7 @@ export default function CartPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-1.5">
                       <Ticket className="w-4 h-4 text-[#7A0C16]" />
-                      <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wide">
+                      <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wide">
                         Offers &amp; Coupons
                       </h3>
                     </div>
@@ -649,7 +649,7 @@ export default function CartPage() {
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                       placeholder="Enter coupon code"
-                      className="flex-1 px-3 py-2 text-xs font-semibold uppercase tracking-wider rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:outline-none focus:border-[#7A0C16] focus:bg-[#FFFFFF]"
+                      className="flex-1 px-3 py-2 text-xs font-semibold uppercase tracking-wider rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:outline-none focus:border-[#7A0C16] focus:bg-[#FFFFFF]"
                     />
                     <button
                       type="submit"
@@ -683,14 +683,14 @@ export default function CartPage() {
 
                 {/* 2. Bill Summary Card */}
                 <div className="bg-[#FFFFFF] p-6 rounded-3xl shadow-xs border border-[#EADFC7] space-y-4">
-                  <h3 className="text-sm font-bold text-[#2C1810] uppercase tracking-wide pb-2 border-b border-[#EADFC7] font-serif">
+                  <h3 className="text-sm font-bold text-[#680114] uppercase tracking-wide pb-2 border-b border-[#EADFC7] font-serif">
                     Order Summary
                   </h3>
 
                   <div className="space-y-2.5 text-xs">
                     <div className="flex justify-between text-[#735A4A]">
                       <span>Total MRP</span>
-                      <span className="font-semibold text-[#2C1810]">{formatPrice(totalMrpPaise)}</span>
+                      <span className="font-semibold text-[#680114]">{formatPrice(totalMrpPaise)}</span>
                     </div>
                     <div className="flex justify-between text-[#735A4A]">
                       <span>Product Discount</span>
@@ -719,10 +719,10 @@ export default function CartPage() {
                   <div className="border-t border-dashed border-[#EADFC7] pt-3">
                     <div className="flex justify-between items-baseline">
                       <div>
-                        <span className="text-sm font-bold text-[#2C1810]">Total Payable</span>
+                        <span className="text-sm font-bold text-[#680114]">Total Payable</span>
                         <p className="text-[10px] text-[#735A4A]">Inclusive of all GST</p>
                       </div>
-                      <span className="text-2xl font-black text-[#2C1810]">
+                      <span className="text-2xl font-black text-[#680114]">
                         {formatPrice(totalPayablePaise)}
                       </span>
                     </div>
@@ -765,8 +765,8 @@ export default function CartPage() {
                       </button>
                     </div>
                     {deliveryAddress ? (
-                      <div className="text-xs text-[#2C1810]">
-                        <p className="font-bold text-[#2C1810]">
+                      <div className="text-xs text-[#680114]">
+                        <p className="font-bold text-[#680114]">
                           {deliveryAddress.fullName}{" "}
                           <span className="font-mono text-[#735A4A] font-normal">
                             (+91 {deliveryAddress.mobile})
@@ -801,17 +801,17 @@ export default function CartPage() {
                 <div className="bg-[#FFFFFF] p-5 rounded-3xl shadow-xs border border-[#EADFC7] grid grid-cols-3 gap-3 text-center">
                   <div>
                     <ShieldCheck className="w-5 h-5 text-[#7A0C16] mx-auto" />
-                    <p className="text-[11px] font-bold text-[#2C1810] mt-1">100% Genuine</p>
+                    <p className="text-[11px] font-bold text-[#680114] mt-1">100% Genuine</p>
                     <p className="text-[10px] text-[#735A4A]">Direct Store Warranty</p>
                   </div>
                   <div>
                     <RefreshCw className="w-5 h-5 text-[#7A0C16] mx-auto" />
-                    <p className="text-[11px] font-bold text-[#2C1810] mt-1">7-Day Return</p>
+                    <p className="text-[11px] font-bold text-[#680114] mt-1">7-Day Return</p>
                     <p className="text-[10px] text-[#735A4A]">Easy Doorstep Pickup</p>
                   </div>
                   <div>
                     <Lock className="w-5 h-5 text-[#7A0C16] mx-auto" />
-                    <p className="text-[11px] font-bold text-[#2C1810] mt-1">256-Bit SSL</p>
+                    <p className="text-[11px] font-bold text-[#680114] mt-1">256-Bit SSL</p>
                     <p className="text-[10px] text-[#735A4A]">Secure Payments</p>
                   </div>
                 </div>
@@ -823,7 +823,7 @@ export default function CartPage() {
               <div className="w-20 h-20 rounded-full bg-[#FAF3E0] text-[#7A0C16] flex items-center justify-center mx-auto mb-4 border border-[#EADFC7]">
                 <ShoppingBag className="w-10 h-10" />
               </div>
-              <h2 className="text-xl font-bold text-[#2C1810]">Your Cart is Empty</h2>
+              <h2 className="text-xl font-bold text-[#680114]">Your Cart is Empty</h2>
               <p className="text-xs text-[#735A4A] max-w-md mx-auto mt-2 mb-6">
                 Explore best-selling retail products and get guaranteed express doorstep delivery.
               </p>
@@ -847,7 +847,7 @@ export default function CartPage() {
       {/* ======================================================== */}
       {/* MOBILE VIEWPORT LAYOUT (< md, Clean & Simple Experience) */}
       {/* ======================================================== */}
-      <div className="md:hidden relative mx-auto min-h-screen w-full max-w-[440px] bg-[#FDF8EE] text-[#2C1810] flex flex-col pb-32 font-sans">
+      <div className="md:hidden relative mx-auto min-h-screen w-full max-w-[440px] bg-[#FDF8EE] text-[#680114] flex flex-col pb-32 font-sans">
         {/* 1. CLEAN TOP HEADER */}
         <header className="sticky top-0 z-40 bg-[#FAF3E0] border-b border-[#EADFC7]">
           <div className="px-4 py-3 flex items-center justify-between">
@@ -855,12 +855,12 @@ export default function CartPage() {
               <button
                 onClick={() => router.back()}
                 aria-label="Go back"
-                className="p-1.5 -ml-1.5 rounded-full hover:bg-[#EADFC7] transition-transform active:scale-90 text-[#2C1810] cursor-pointer"
+                className="p-1.5 -ml-1.5 rounded-full hover:bg-[#EADFC7] transition-transform active:scale-90 text-[#680114] cursor-pointer"
               >
                 <ArrowLeft className="h-5 w-5" />
               </button>
               <div>
-                <h1 className="font-extrabold text-base text-[#2C1810] leading-none">
+                <h1 className="font-extrabold text-base text-[#680114] leading-none">
                   Shopping Cart
                 </h1>
                 <p className="text-[11px] text-[#735A4A] mt-0.5">
@@ -888,7 +888,7 @@ export default function CartPage() {
               {/* 2. UNIFIED DELIVERY & ADDRESS CARD */}
               <div className="bg-[#FFFFFF] rounded-2xl p-3.5 shadow-xs border border-[#EADFC7] space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#2C1810]">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#680114]">
                     <MapPin className="h-4 w-4 text-[#7A0C16]" />
                     <span>Delivering to</span>
                   </div>
@@ -918,7 +918,7 @@ export default function CartPage() {
                 {deliveryAddress ? (
                   <div className="bg-[#FAF3E0] border border-[#EADFC7] rounded-xl p-2.5 text-xs">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#2C1810]">
+                      <span className="font-bold text-[#680114]">
                         {deliveryAddress.fullName}
                       </span>
                       <span className="font-mono text-[#735A4A] text-[11px]">
@@ -931,7 +931,7 @@ export default function CartPage() {
                     </p>
                     <div className="flex items-center justify-between mt-1 text-[11px] text-[#735A4A]">
                       <span>{deliveryAddress.city}, {deliveryAddress.pincode}</span>
-                      <span className="text-[10px] font-bold uppercase bg-[#EADFC7] px-1.5 py-0.5 rounded text-[#2C1810]">
+                      <span className="text-[10px] font-bold uppercase bg-[#EADFC7] px-1.5 py-0.5 rounded text-[#680114]">
                         {deliveryAddress.addressType}
                       </span>
                     </div>
@@ -943,7 +943,7 @@ export default function CartPage() {
                   >
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#7A0C16] animate-pulse"></span>
-                      <span className="font-medium text-[#2C1810]">
+                      <span className="font-medium text-[#680114]">
                         Please add your delivery address
                       </span>
                     </div>
@@ -991,7 +991,7 @@ export default function CartPage() {
                       <div className="flex-1 min-w-0 flex flex-col justify-between">
                         <div>
                           <div className="flex items-start justify-between gap-1">
-                            <h2 className="text-xs font-bold text-[#2C1810] leading-snug line-clamp-2">
+                            <h2 className="text-xs font-bold text-[#680114] leading-snug line-clamp-2">
                               {item.title}
                             </h2>
                             <button
@@ -1012,7 +1012,7 @@ export default function CartPage() {
                         {/* Price & Quantity in one clean row */}
                         <div className="mt-2 flex items-center justify-between">
                           <div className="flex items-baseline gap-1.5">
-                            <span className="text-sm font-black text-[#2C1810]">
+                            <span className="text-sm font-black text-[#680114]">
                               {formatPrice(item.sellingPricePaise)}
                             </span>
                             {item.mrpPaise > item.sellingPricePaise && (
@@ -1031,7 +1031,7 @@ export default function CartPage() {
                             >
                               <Minus className="h-3 w-3" />
                             </button>
-                            <span className="w-7 text-center text-xs font-bold text-[#2C1810]">
+                            <span className="w-7 text-center text-xs font-bold text-[#680114]">
                               {item.quantity}
                             </span>
                             <button
@@ -1058,7 +1058,7 @@ export default function CartPage() {
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                       placeholder="Enter promo coupon"
-                      className="w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:outline-none focus:ring-1 focus:ring-[#7A0C16] focus:bg-[#FFFFFF]"
+                      className="w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:outline-none focus:ring-1 focus:ring-[#7A0C16] focus:bg-[#FFFFFF]"
                     />
                   </div>
                   <button
@@ -1087,13 +1087,13 @@ export default function CartPage() {
 
               {/* 5. CLEAN PRICE BREAKDOWN */}
               <div className="bg-[#FFFFFF] rounded-2xl p-4 shadow-xs border border-[#EADFC7] space-y-2">
-                <h3 className="text-xs font-bold text-[#2C1810] uppercase tracking-wide">
+                <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wide">
                   Bill Details
                 </h3>
                 <div className="space-y-1.5 text-xs text-[#735A4A] pt-1">
                   <div className="flex justify-between">
                     <span>Items Total</span>
-                    <span className="font-semibold text-[#2C1810]">{formatPrice(totalSellingPaise)}</span>
+                    <span className="font-semibold text-[#680114]">{formatPrice(totalSellingPaise)}</span>
                   </div>
                   {isCouponApplied && (
                     <div className="flex justify-between text-[#7A0C16]">
@@ -1105,7 +1105,7 @@ export default function CartPage() {
                     <span>Delivery Fee</span>
                     <span className="font-bold text-[#1E824C]">FREE</span>
                   </div>
-                  <div className="border-t border-[#EADFC7] pt-2 mt-1 flex justify-between items-baseline font-bold text-[#2C1810]">
+                  <div className="border-t border-[#EADFC7] pt-2 mt-1 flex justify-between items-baseline font-bold text-[#680114]">
                     <span className="text-sm">Total Payable</span>
                     <span className="text-lg font-black">{formatPrice(totalPayablePaise)}</span>
                   </div>
@@ -1124,15 +1124,15 @@ export default function CartPage() {
               <div className="grid grid-cols-3 gap-2 text-center py-1">
                 <div className="bg-[#FFFFFF] p-2 rounded-xl border border-[#EADFC7] text-center">
                   <ShieldCheck className="h-4 w-4 text-[#7A0C16] mx-auto" />
-                  <p className="text-[10px] font-bold text-[#2C1810] mt-0.5">100% Genuine</p>
+                  <p className="text-[10px] font-bold text-[#680114] mt-0.5">100% Genuine</p>
                 </div>
                 <div className="bg-[#FFFFFF] p-2 rounded-xl border border-[#EADFC7] text-center">
                   <RefreshCw className="h-4 w-4 text-[#7A0C16] mx-auto" />
-                  <p className="text-[10px] font-bold text-[#2C1810] mt-0.5">7-Day Return</p>
+                  <p className="text-[10px] font-bold text-[#680114] mt-0.5">7-Day Return</p>
                 </div>
                 <div className="bg-[#FFFFFF] p-2 rounded-xl border border-[#EADFC7] text-center">
                   <Zap className="h-4 w-4 text-[#7A0C16] fill-current mx-auto" />
-                  <p className="text-[10px] font-bold text-[#2C1810] mt-0.5">UPI Instant</p>
+                  <p className="text-[10px] font-bold text-[#680114] mt-0.5">UPI Instant</p>
                 </div>
               </div>
             </>
@@ -1142,7 +1142,7 @@ export default function CartPage() {
               <div className="w-16 h-16 rounded-full bg-[#FAF3E0] text-[#7A0C16] flex items-center justify-center mx-auto mb-3 border border-[#EADFC7]">
                 <Store className="h-8 w-8" />
               </div>
-              <h2 className="text-base font-bold text-[#2C1810]">Your Cart is Empty</h2>
+              <h2 className="text-base font-bold text-[#680114]">Your Cart is Empty</h2>
               <p className="text-xs text-[#735A4A] max-w-xs mx-auto mt-1 mb-4">
                 Explore deals across our catalog and get instant express doorstep delivery.
               </p>
@@ -1164,7 +1164,7 @@ export default function CartPage() {
                 <p className="text-[10px] uppercase font-bold text-[#735A4A] tracking-wider">
                   Total
                 </p>
-                <p className="text-lg font-black text-[#2C1810] leading-none">
+                <p className="text-lg font-black text-[#680114] leading-none">
                   {formatPrice(totalPayablePaise)}
                 </p>
               </div>
@@ -1218,7 +1218,7 @@ export default function CartPage() {
               {/* Recipient Full Name & Phone Number */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                  <label className="block text-xs font-bold text-[#680114] mb-1">
                     Recipient Full Name <span className="text-[#7A0C16]">*</span>
                   </label>
                   <input
@@ -1227,11 +1227,11 @@ export default function CartPage() {
                     placeholder="e.g. Rahul Sharma"
                     value={addressForm.fullName}
                     onChange={(e) => setAddressForm({ ...addressForm, fullName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                  <label className="block text-xs font-bold text-[#680114] mb-1">
                     10-Digit Mobile Number <span className="text-[#7A0C16]">*</span>
                   </label>
                   <div className="flex">
@@ -1250,7 +1250,7 @@ export default function CartPage() {
                           mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
                         })
                       }
-                      className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden font-mono"
+                      className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden font-mono"
                     />
                   </div>
                 </div>
@@ -1276,14 +1276,14 @@ export default function CartPage() {
                         alternatePhone: e.target.value.replace(/\D/g, "").slice(0, 10),
                       })
                     }
-                    className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden font-mono"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden font-mono"
                   />
                 </div>
               </div>
 
               {/* Flat / House No / Building */}
               <div>
-                <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                <label className="block text-xs font-bold text-[#680114] mb-1">
                   Flat, House No., Building, Apartment <span className="text-[#7A0C16]">*</span>
                 </label>
                 <input
@@ -1292,13 +1292,13 @@ export default function CartPage() {
                   placeholder="e.g. Flat 402, Signature Heights"
                   value={addressForm.houseFlatNo}
                   onChange={(e) => setAddressForm({ ...addressForm, houseFlatNo: e.target.value })}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
                 />
               </div>
 
               {/* Street Address / Area / Colony */}
               <div>
-                <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                <label className="block text-xs font-bold text-[#680114] mb-1">
                   Street Address, Area, Sector, Colony <span className="text-[#7A0C16]">*</span>
                 </label>
                 <input
@@ -1307,7 +1307,7 @@ export default function CartPage() {
                   placeholder="e.g. 10 No. Market, Arera Colony"
                   value={addressForm.streetArea}
                   onChange={(e) => setAddressForm({ ...addressForm, streetArea: e.target.value })}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
                 />
               </div>
 
@@ -1322,11 +1322,11 @@ export default function CartPage() {
                     placeholder="e.g. Near Habibganj Station"
                     value={addressForm.landmark || ""}
                     onChange={(e) => setAddressForm({ ...addressForm, landmark: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                  <label className="block text-xs font-bold text-[#680114] mb-1">
                     6-Digit Pincode <span className="text-[#7A0C16]">*</span>
                   </label>
                   <input
@@ -1341,7 +1341,7 @@ export default function CartPage() {
                         pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
                       })
                     }
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden font-mono tracking-wider"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden font-mono tracking-wider"
                   />
                 </div>
               </div>
@@ -1349,7 +1349,7 @@ export default function CartPage() {
               {/* City and State */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                  <label className="block text-xs font-bold text-[#680114] mb-1">
                     City <span className="text-[#7A0C16]">*</span>
                   </label>
                   <input
@@ -1358,11 +1358,11 @@ export default function CartPage() {
                     placeholder="Bhopal"
                     value={addressForm.city}
                     onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#2C1810] mb-1">
+                  <label className="block text-xs font-bold text-[#680114] mb-1">
                     State <span className="text-[#7A0C16]">*</span>
                   </label>
                   <input
@@ -1371,14 +1371,14 @@ export default function CartPage() {
                     placeholder="Madhya Pradesh"
                     value={addressForm.state}
                     onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#EADFC7] bg-[#FAF3E0] text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:ring-1 focus:ring-[#7A0C16] outline-hidden"
                   />
                 </div>
               </div>
 
               {/* Address Type Tag */}
               <div>
-                <label className="block text-xs font-bold text-[#2C1810] mb-2">
+                <label className="block text-xs font-bold text-[#680114] mb-2">
                   Address Type
                 </label>
                 <div className="flex gap-2">
@@ -1410,7 +1410,7 @@ export default function CartPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddressModal(false)}
-                  className="px-4 py-2.5 text-xs font-bold text-[#735A4A] hover:text-[#2C1810] rounded-xl hover:bg-[#FAF3E0] transition-colors cursor-pointer"
+                  className="px-4 py-2.5 text-xs font-bold text-[#735A4A] hover:text-[#680114] rounded-xl hover:bg-[#FAF3E0] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1433,7 +1433,7 @@ export default function CartPage() {
           <div className="w-full max-w-md bg-[#FFFFFF] rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-[#EADFC7] animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-[#EADFC7]">
               <div>
-                <h3 className="text-sm font-bold text-[#2C1810]">Choose Payment Method</h3>
+                <h3 className="text-sm font-bold text-[#680114]">Choose Payment Method</h3>
                 <p className="text-[11px] text-[#735A4A]">
                   Payable: {formatPrice(totalPayablePaise)} ({location.city})
                 </p>
@@ -1441,7 +1441,7 @@ export default function CartPage() {
               <button
                 type="button"
                 onClick={() => setShowCheckoutModal(false)}
-                className="text-[#735A4A] hover:text-[#2C1810] p-1.5 rounded-xl hover:bg-[#FAF3E0] transition-colors cursor-pointer"
+                className="text-[#735A4A] hover:text-[#680114] p-1.5 rounded-xl hover:bg-[#FAF3E0] transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -1451,7 +1451,7 @@ export default function CartPage() {
               <div className="p-3 bg-[#FAF3E0] border border-[#EADFC7] rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Zap className="w-4 h-4 text-[#7A0C16] fill-current" />
-                  <span className="text-xs font-bold text-[#2C1810]">Payment Method: UPI Only</span>
+                  <span className="text-xs font-bold text-[#680114]">Payment Method: UPI Only</span>
                 </div>
                 <span className="text-[10px] font-extrabold uppercase bg-[#5A0A10] text-[#FDF8EE] px-2 py-0.5 rounded-full">
                   Instant Verification
@@ -1472,7 +1472,7 @@ export default function CartPage() {
                     Pe
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#2C1810]">PhonePe UPI</p>
+                    <p className="text-xs font-bold text-[#680114]">PhonePe UPI</p>
                     <p className="text-[10px] text-[#1E824C] font-semibold">
                       Fast 1-click payment via PhonePe app
                     </p>
@@ -1501,7 +1501,7 @@ export default function CartPage() {
                     GPay
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#2C1810]">Google Pay (GPay)</p>
+                    <p className="text-xs font-bold text-[#680114]">Google Pay (GPay)</p>
                     <p className="text-[10px] text-[#735A4A]">Pay directly from Google Pay UPI</p>
                   </div>
                 </div>
@@ -1528,7 +1528,7 @@ export default function CartPage() {
                     Paytm
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#2C1810]">Paytm UPI / Wallet</p>
+                    <p className="text-xs font-bold text-[#680114]">Paytm UPI / Wallet</p>
                     <p className="text-[10px] text-[#735A4A]">Instant UPI payment handle</p>
                   </div>
                 </div>
@@ -1555,7 +1555,7 @@ export default function CartPage() {
                     QR
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-[#2C1810]">Scan Any UPI QR Code</p>
+                    <p className="text-xs font-bold text-[#680114]">Scan Any UPI QR Code</p>
                     <p className="text-[10px] text-[#735A4A]">BHIM / CRED / Any Bank App</p>
                   </div>
                 </div>
@@ -1602,12 +1602,12 @@ export default function CartPage() {
             <div className="flex items-center justify-between pb-3 border-b border-[#EADFC7]">
               <div className="flex items-center space-x-2">
                 <MapPin className="h-5 w-5 text-[#7A0C16]" />
-                <h3 className="text-sm font-bold text-[#2C1810]">Check Delivery Pincode</h3>
+                <h3 className="text-sm font-bold text-[#680114]">Check Delivery Pincode</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowPincodeModal(false)}
-                className="text-[#735A4A] hover:text-[#2C1810] p-1.5 rounded-xl hover:bg-[#FAF3E0] transition-colors cursor-pointer"
+                className="text-[#735A4A] hover:text-[#680114] p-1.5 rounded-xl hover:bg-[#FAF3E0] transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -1625,7 +1625,7 @@ export default function CartPage() {
                     value={pincodeInput}
                     onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, ""))}
                     placeholder="e.g. 462001 or 110001"
-                    className="flex-1 rounded-xl border border-[#EADFC7] bg-[#FAF3E0] px-3 py-2 text-sm font-semibold tracking-wider text-[#2C1810] focus:border-[#7A0C16] focus:bg-white focus:outline-hidden"
+                    className="flex-1 rounded-xl border border-[#EADFC7] bg-[#FAF3E0] px-3 py-2 text-sm font-semibold tracking-wider text-[#680114] focus:border-[#7A0C16] focus:bg-white focus:outline-hidden"
                   />
                   <button
                     type="submit"

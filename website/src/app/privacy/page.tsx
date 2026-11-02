@@ -40,7 +40,7 @@ export default function PrivacyPage() {
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
           <div className="flex items-center gap-2 text-emerald-700">
             <ShieldCheck className="h-4 w-4" />
-            <h2 className="font-bold text-sm text-neutral-900">DPDP Act 2023 Compliance</h2>
+            <h2 className="font-bold text-sm text-[#680114]">DPDP Act 2023 Compliance</h2>
           </div>
           <p>
             Wondersale strictly complies with India&apos;s{" "}
@@ -51,7 +51,7 @@ export default function PrivacyPage() {
         </section>
 
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">1. Data We Collect</h2>
+          <h2 className="font-bold text-sm text-[#680114]">1. Data We Collect</h2>
           <ul className="list-disc pl-4 space-y-1 text-[11px]">
             <li>
               10-digit mobile phone numbers for OTP authentication and delivery rider communication.
@@ -62,7 +62,7 @@ export default function PrivacyPage() {
         </section>
 
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">2. Security &amp; Encryption</h2>
+          <h2 className="font-bold text-sm text-[#680114]">2. Security &amp; Encryption</h2>
           <p>
             Payment transactions are processed through <strong>Razorpay</strong> over 256-bit SSL
             encrypted connections. Wondersale does not store complete card numbers, CVVs, or UPI
@@ -71,7 +71,7 @@ export default function PrivacyPage() {
         </section>
 
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
-          <h2 className="font-bold text-sm text-neutral-900">3. Data Grievance Redressal</h2>
+          <h2 className="font-bold text-sm text-[#680114]">3. Data Grievance Redressal</h2>
           <p>
             To request data deletion or raise privacy concerns, contact our designated Grievance
             Officer at:

@@ -141,3 +141,132 @@ class WebsiteOrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity}x {self.item_name} @ {self.unit_price}"
+
+
+class HeroSlide(models.Model):
+    """
+    Hero banner slides displayed on the public storefront home page.
+    Fully editable from the Website Management module in Wondersale OS.
+    """
+    badge = models.CharField(max_length=100, default="Special Offer", help_text="Small pill badge text")
+    title = models.CharField(max_length=255, help_text="Primary bold heading")
+    subtitle = models.CharField(max_length=255, blank=True, default="", help_text="Subheading or discount promo text")
+    button_text = models.CharField(max_length=100, default="Shop Now")
+    button_link = models.CharField(max_length=255, default="/categories", help_text="Target URL or category path")
+    image_url = models.TextField(help_text="Direct URL to product or banner image")
+    alt_text = models.CharField(max_length=255, blank=True, default="", help_text="Accessibility alt description")
+    display_order = models.PositiveIntegerField(default=0, help_text="Slide display order sequence")
+    is_active = models.BooleanField(default=True, help_text="Whether this slide is shown on website")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        verbose_name = 'Hero Slide'
+        verbose_name_plural = 'Hero Slides'
+
+    def __str__(self):
+        return f"Slide #{self.display_order}: {self.title} ({'Active' if self.is_active else 'Hidden'})"
+
+
+class DealOfTheDay(models.Model):
+    """
+    Deals of the Day promotions with temporary promotional MRP and Selling Price.
+    When active:
+    - Item's selling_price and mrp in Inventory are set to promotional values.
+    - Previous selling_price and mrp are preserved in original_selling_price and original_mrp.
+    - When deleted or when ends_at passes, the item's original prices are restored to inventory.
+    """
+    item = models.OneToOneField(
+        'inventory.Item',
+        on_delete=models.CASCADE,
+        related_name='deal_of_the_day',
+        help_text="Inventory item on promotion."
+    )
+    deal_selling_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Special promotional selling price during the deal."
+    )
+    deal_mrp = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Promotional reference MRP during the deal."
+    )
+    discount_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Calculated discount percentage based on deal_mrp and deal_selling_price."
+    )
+    original_selling_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Normal inventory selling price to revert to when deal ends."
+    )
+    original_mrp = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Normal inventory MRP to revert to when deal ends."
+    )
+    starts_at = models.DateTimeField(
+        default=timezone.now,
+        help_text="Deal start timestamp."
+    )
+    ends_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Deal expiry timestamp. If reached, deal automatically expires and prices revert."
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Whether this deal is currently active on the store."
+    )
+    custom_badge = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Optional custom badge like 'Deal of the Day' or 'Flash Sale'."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Deal of the Day'
+        verbose_name_plural = 'Deals of the Day'
+
+    def __str__(self):
+        return f"Deal: {self.item.name} @ ₹{self.deal_selling_price} (MRP: ₹{self.deal_mrp})"
+
+    def calculate_discount(self):
+        """Calculates percentage discount: round(((deal_mrp - deal_selling_price) / deal_mrp) * 100)."""
+        if self.deal_mrp and self.deal_mrp > 0 and self.deal_selling_price is not None:
+            diff = self.deal_mrp - self.deal_selling_price
+            if diff > 0:
+                pct = (diff / self.deal_mrp) * Decimal('100.00')
+                return round(pct, 2)
+        return Decimal('0.00')
+
+    def is_expired(self):
+        if self.ends_at and timezone.now() >= self.ends_at:
+            return True
+        return False
+
+    def revert_item_prices(self):
+        """Restores the associated Item's selling_price and mrp back to normal inventory values."""
+        item = self.item
+        updated = False
+        if item.selling_price != self.original_selling_price:
+            item.selling_price = self.original_selling_price
+            updated = True
+        if item.mrp != self.original_mrp:
+            item.mrp = self.original_mrp
+            updated = True
+        if updated:
+            item.save(update_fields=['selling_price', 'mrp'])
+

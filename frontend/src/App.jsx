@@ -110,7 +110,7 @@ export default function App() {
   const validViews = [
     'launcher', 'inventory', 'staff', 'settings', 'suppliers', 'employee_management',
     'billing', 'customers', ...(stakeholdersActive ? ['stakeholders'] : []),
-    'accounting', 'dashboard', 'assets', 'employee_portal',
+    'accounting', 'dashboard', 'assets', 'employee_portal', 'website',
   ];
 
   // Helper to extract requested view from URL (pathname or hash)

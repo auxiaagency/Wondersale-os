@@ -206,7 +206,7 @@ function CategoryContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#2C1810] pb-20 font-sans">
+    <div className="min-h-screen bg-[#FDF8EE] text-[#680114] pb-20 font-sans">
       {/* Consistent Global Desktop Navigation */}
       <GlobalHeader />
 
@@ -216,13 +216,13 @@ function CategoryContent() {
           <div className="flex items-center gap-2.5">
             <Link
               href="/"
-              className="p-1.5 -ml-1 text-[#2C1810] hover:text-[#7A0C16] rounded-full hover:bg-[#EADFC7] transition-colors"
+              className="p-1.5 -ml-1 text-[#680114] hover:text-[#7A0C16] rounded-full hover:bg-[#EADFC7] transition-colors"
               aria-label="Back to Home"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <h1 className="font-serif font-bold text-lg md:text-2xl text-[#2C1810] leading-tight">
+              <h1 className="font-serif font-bold text-lg md:text-2xl text-[#680114] leading-tight">
                 {title}
               </h1>
               <span className="text-[11px] text-[#735A4A] font-sans font-medium">
@@ -240,7 +240,7 @@ function CategoryContent() {
               {/* Sort Dropdown Trigger */}
               <button
                 onClick={() => setShowSortSheet(true)}
-                className="h-8 px-3 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] font-medium text-[#2C1810] flex items-center gap-1.5 shadow-2xs hover:border-[#7A0C16] cursor-pointer"
+                className="h-8 px-3 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] font-medium text-[#680114] flex items-center gap-1.5 shadow-2xs hover:border-[#7A0C16] cursor-pointer"
               >
                 <ArrowUpDown className="w-3.5 h-3.5 text-[#735A4A]" />
                 <span>Sort: {sortLabelMap[selectedSort] || "Popularity"}</span>
@@ -249,7 +249,7 @@ function CategoryContent() {
               {/* Filter Drawer Trigger */}
               <button
                 onClick={() => setShowFilterSheet(true)}
-                className="h-8 px-3 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] font-medium text-[#2C1810] flex items-center gap-1.5 shadow-2xs hover:border-[#7A0C16] cursor-pointer"
+                className="h-8 px-3 rounded-lg border border-[#EADFC7] bg-[#FDF8EE] font-medium text-[#680114] flex items-center gap-1.5 shadow-2xs hover:border-[#7A0C16] cursor-pointer"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-[#735A4A]" />
                 <span>Filters ({selectedBrands.length + (maxPrice < 10000 ? 1 : 0)})</span>
@@ -398,7 +398,7 @@ function CategoryContent() {
           <div className="w-full max-w-md bg-white rounded-t-2xl p-4 shadow-2xl animate-in slide-in-from-bottom duration-200">
             <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-3" />
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-sm text-slate-900">Sort Products By</h3>
+              <h3 className="font-bold text-sm text-[#680114]">Sort Products By</h3>
               <button
                 onClick={() => setShowSortSheet(false)}
                 className="p-1 text-slate-400 hover:text-slate-700"
@@ -443,7 +443,7 @@ function CategoryContent() {
             <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mt-2" />
             <div className="p-4 flex items-center justify-between border-b border-slate-100">
               <div>
-                <h3 className="font-bold text-sm text-slate-900">Filter Products</h3>
+                <h3 className="font-bold text-sm text-[#680114]">Filter Products</h3>
                 <span className="text-[11px] text-slate-500">{products.length} products found</span>
               </div>
               <button
@@ -457,7 +457,7 @@ function CategoryContent() {
             <div className="p-4 space-y-5 overflow-y-auto flex-1">
               {/* Brand Filter */}
               <div>
-                <span className="text-xs font-bold text-slate-900 block mb-2">Verified Brands</span>
+                <span className="text-xs font-bold text-[#680114] block mb-2">Verified Brands</span>
                 <div className="space-y-2">
                   {["Philips", "Prestige", "Bajaj", "Havells", "boAt", "Milton", "Titan"].map(
                     (brand) => (
@@ -481,7 +481,7 @@ function CategoryContent() {
               {/* Price Filter */}
               <div>
                 <div className="flex justify-between items-center text-xs mb-1">
-                  <span className="font-bold text-slate-900">Max Price (₹)</span>
+                  <span className="font-bold text-[#680114]">Max Price (₹)</span>
                   <span className="font-bold text-[#D91E2A]">Under ₹{maxPrice}</span>
                 </div>
                 <input

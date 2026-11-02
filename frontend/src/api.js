@@ -3680,6 +3680,114 @@ export async function toggleItemWebsiteListing(itemId, isListed) {
   return res.json();
 }
 
+// HERO SLIDES MANAGEMENT
+export async function fetchHeroSlides() {
+  const res = await fetch(`/api/website/admin/hero-slides/`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to fetch hero slides'));
+  }
+  return res.json();
+}
+
+export async function createHeroSlide(slideData) {
+  const res = await fetch(`/api/website/admin/hero-slides/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(slideData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to create hero slide'));
+  }
+  return res.json();
+}
+
+export async function updateHeroSlide(slideId, slideData) {
+  const res = await fetch(`/api/website/admin/hero-slides/${slideId}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(slideData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update hero slide'));
+  }
+  return res.json();
+}
+
+export async function deleteHeroSlide(slideId) {
+  const res = await fetch(`/api/website/admin/hero-slides/${slideId}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(await parseApiError(res, 'Failed to delete hero slide'));
+  }
+  return true;
+}
+
+export async function uploadHeroSlideImage(file) {
+  const fd = new FormData();
+  fd.append('image', file);
+  const res = await fetch('/api/website/admin/hero-slides/upload/', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: fd,
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to upload hero slide image'));
+  }
+  return res.json();
+}
+
+// DEALS OF THE DAY MANAGEMENT
+export async function fetchDealsOfTheDay() {
+  const res = await fetch(`/api/website/admin/deals-of-the-day/`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to fetch deals of the day'));
+  }
+  return res.json();
+}
+
+export async function createDealOfTheDay(dealData) {
+  const res = await fetch(`/api/website/admin/deals-of-the-day/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(dealData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to create deal of the day'));
+  }
+  return res.json();
+}
+
+export async function updateDealOfTheDay(dealId, dealData) {
+  const res = await fetch(`/api/website/admin/deals-of-the-day/${dealId}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(dealData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update deal of the day'));
+  }
+  return res.json();
+}
+
+export async function deleteDealOfTheDay(dealId) {
+  const res = await fetch(`/api/website/admin/deals-of-the-day/${dealId}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(await parseApiError(res, 'Failed to remove deal of the day'));
+  }
+  return true;
+}
+
+
+
 
 
 
