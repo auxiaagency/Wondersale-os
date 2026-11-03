@@ -270,7 +270,7 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
           <div
             key={item.id}
             onDragStart={(e) => e.preventDefault()}
-            className="w-[calc((100vw-56px)/3.35)] min-w-[100px] max-w-[135px] sm:w-[175px] sm:max-w-none md:w-[190px] lg:w-[195px] shrink-0 snap-start flex flex-col select-none"
+            className="w-[102px] xs:w-[110px] sm:w-[175px] md:w-[190px] lg:w-[195px] shrink-0 snap-start flex flex-col select-none"
           >
             <ProductCard
               id={item.id}

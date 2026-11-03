@@ -130,6 +130,10 @@ export default function ItemDetailModal({
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Active Deal Confirmation Modal state
+  const [showDealConfirmModal, setShowDealConfirmModal] = useState(false);
+  const [pendingSavePayload, setPendingSavePayload] = useState(null);
+
   // AI Description & Name Generator State
   const [generatingAI, setGeneratingAI] = useState(false);
   const [generatingAIName, setGeneratingAIName] = useState(false);
@@ -376,6 +380,20 @@ export default function ItemDetailModal({
     }
   };
 
+  const executeSave = async (payloadToSave) => {
+    setSaving(true);
+    try {
+      const updated = await updateItem(item.id, payloadToSave);
+      onUpdateItem?.(updated);
+      setFeedbackMsg('Product details updated successfully!');
+      setTimeout(() => setFeedbackMsg(''), 3000);
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to update item');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveDetails = async (e) => {
     e?.preventDefault();
     setErrorMsg('');
@@ -422,41 +440,46 @@ export default function ItemDetailModal({
       }
     }
 
-    setSaving(true);
+    const newSell = parseFloat(sellingPrice);
+    const newMrpVal = mrp ? parseFloat(mrp) : null;
 
-    try {
-      const payload = {
-        name: name.trim(),
-        supplier: supplierId || null,
-        hsn_code: hsnCodeId || null,
-        section: isSectionRestricted && currentUser?.section ? currentUser.section : (sectionId || null),
-        cost_price: parseFloat(costPrice),
-        selling_price: parseFloat(sellingPrice),
-        mrp: mrp ? parseFloat(mrp) : null,
-        quantity: parseInt(quantity, 10),
-        location_section: locationSection.trim(),
-        expiry_date: expiryDate || null,
-        weight: weight ? parseFloat(weight) : null,
-        length: length ? parseFloat(length) : null,
-        width: width ? parseFloat(width) : null,
-        height: height ? parseFloat(height) : null,
-        description: description.trim(),
-        subcategories: selectedSubcatIds,
-        primary_subcategory: primarySubcatId,
-        store: storeId,
-        has_variants: Boolean(hasVariants),
-        variants: hasVariants ? designVariants.map((v) => ({ name: v.name.trim(), quantity: parseInt(v.quantity, 10) || 0, image_id: v.image_id })) : [],
-      };
+    const payload = {
+      name: name.trim(),
+      supplier: supplierId || null,
+      hsn_code: hsnCodeId || null,
+      section: isSectionRestricted && currentUser?.section ? currentUser.section : (sectionId || null),
+      cost_price: parseFloat(costPrice),
+      selling_price: newSell,
+      mrp: newMrpVal,
+      quantity: parseInt(quantity, 10),
+      location_section: locationSection.trim(),
+      expiry_date: expiryDate || null,
+      weight: weight ? parseFloat(weight) : null,
+      length: length ? parseFloat(length) : null,
+      width: width ? parseFloat(width) : null,
+      height: height ? parseFloat(height) : null,
+      description: description.trim(),
+      subcategories: selectedSubcatIds,
+      primary_subcategory: primarySubcatId,
+      store: storeId,
+      has_variants: Boolean(hasVariants),
+      variants: hasVariants ? designVariants.map((v) => ({ name: v.name.trim(), quantity: parseInt(v.quantity, 10) || 0, image_id: v.image_id })) : [],
+    };
 
-      const updated = await updateItem(item.id, payload);
-      onUpdateItem?.(updated);
-      setFeedbackMsg('Product details updated successfully!');
-      setTimeout(() => setFeedbackMsg(''), 3000);
-    } catch (err) {
-      setErrorMsg(err.message || 'Failed to update item');
-    } finally {
-      setSaving(false);
+    // Check if item has an active deal and price changed from original standard price
+    if (item?.active_deal) {
+      const origSell = parseFloat(item.active_deal.original_selling_price);
+      const origMrp = item.active_deal.original_mrp ? parseFloat(item.active_deal.original_mrp) : null;
+      const isPriceModified = (newSell !== origSell) || (newMrpVal !== origMrp);
+
+      if (isPriceModified) {
+        setPendingSavePayload(payload);
+        setShowDealConfirmModal(true);
+        return;
+      }
     }
+
+    await executeSave(payload);
   };
 
   const handleFileUpload = (e) => {
@@ -1030,6 +1053,42 @@ export default function ItemDetailModal({
                 )}
               </div>
             </div>
+
+            {/* Active Deal Banner */}
+            {item?.active_deal && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.08) 100%)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                borderRadius: 'var(--radius-md)',
+                padding: '10px 14px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{
+                    background: '#F59E0B',
+                    color: '#000000',
+                    fontSize: '0.7rem',
+                    fontWeight: 800,
+                    padding: '2px 7px',
+                    borderRadius: '4px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em'
+                  }}>
+                    Deal Active
+                  </span>
+                  <span style={{ fontSize: '0.84rem', color: '#FCD34D', fontWeight: 600 }}>
+                    Promotional Price: ₹{item.active_deal.deal_selling_price} (MRP: ₹{item.active_deal.deal_mrp || item.active_deal.deal_selling_price})
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.74rem', color: 'rgba(253, 230, 138, 0.8)' }}>
+                  Standard base price will revert to edited values when deal expires.
+                </span>
+              </div>
+            )}
 
             {/* Pricing Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '16px' }}>
@@ -2061,6 +2120,170 @@ export default function ItemDetailModal({
           }
         }}
       />
+    )}
+
+    {/* Active Deal Price Modification Confirmation Modal */}
+    {showDealConfirmModal && (
+      <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => { setShowDealConfirmModal(false); setPendingSavePayload(null); }}>
+        <div
+          className="modal-content"
+          style={{
+            maxWidth: '480px',
+            width: '100%',
+            padding: 0,
+            overflow: 'hidden',
+            border: '1px solid var(--border-color)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div
+            style={{
+              padding: '18px 24px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'rgba(245, 158, 11, 0.08)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(245, 158, 11, 0.18)',
+                  color: '#D97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Product is on Active Deal!
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: '#D97706', margin: '2px 0 0 0', fontWeight: 600 }}>
+                  Deal of the Day Promotion Active
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowDealConfirmModal(false);
+                setPendingSavePayload(null);
+              }}
+              className="btn btn-secondary btn-icon"
+              style={{ width: '30px', height: '30px', padding: 0 }}
+            >
+              <X size={15} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding: '20px 24px' }}>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.5 }}>
+              <strong style={{ color: 'var(--text-primary)' }}>{item.name}</strong> is currently on sale in{' '}
+              <strong style={{ color: '#D97706' }}>Deals of the Day</strong> at{' '}
+              <strong style={{ color: '#059669' }}>₹{item.active_deal?.deal_selling_price}</strong>{' '}
+              {item.active_deal?.deal_mrp ? <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', fontSize: '0.8rem' }}>(MRP ₹{item.active_deal.deal_mrp})</span> : null}.
+            </p>
+
+            <div
+              style={{
+                background: 'var(--bg-surface-hover)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 14px',
+                fontSize: '0.82rem',
+                marginBottom: '14px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                <span>Pre-deal Normal Price:</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{item.active_deal?.original_selling_price}</span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  paddingTop: '6px',
+                  borderTop: '1px dashed var(--border-subtle)',
+                  fontWeight: 600,
+                }}
+              >
+                <span style={{ color: '#D97706' }}>New Standard Price:</span>
+                <span style={{ color: '#D97706', fontWeight: 700 }}>₹{pendingSavePayload?.selling_price}</span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: '0.78rem',
+                color: 'var(--text-muted)',
+                lineHeight: 1.5,
+                background: 'rgba(245, 158, 11, 0.06)',
+                border: '1px solid rgba(245, 158, 11, 0.15)',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-md)',
+              }}
+            >
+              💡 When the deal ends, the price will automatically revert to <strong style={{ color: 'var(--text-primary)' }}>₹{pendingSavePayload?.selling_price}</strong> instead of the old pre-deal price.
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              padding: '14px 24px',
+              borderTop: '1px solid var(--border-subtle)',
+              background: 'var(--bg-surface-hover)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '10px',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setShowDealConfirmModal(false);
+                setPendingSavePayload(null);
+              }}
+              className="btn btn-secondary"
+              style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+            >
+              Cancel Edit
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const payloadToRun = pendingSavePayload;
+                setShowDealConfirmModal(false);
+                setPendingSavePayload(null);
+                if (payloadToRun) {
+                  await executeSave(payloadToRun);
+                }
+              }}
+              className="btn btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)',
+                borderColor: '#B45309',
+                padding: '8px 18px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+              }}
+            >
+              Confirm &amp; Save
+            </button>
+          </div>
+        </div>
+      </div>
     )}
   </>
   );

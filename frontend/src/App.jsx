@@ -1309,7 +1309,11 @@ export default function App() {
                       setInventorySubTab('product_detail');
                     });
                 }}
-                onEditItem={(item) => setActiveDetailItem(item)}
+                onEditItem={(item) => {
+                  fetchItem(item.id)
+                    .then((fresh) => setActiveDetailItem(fresh || item))
+                    .catch(() => setActiveDetailItem(item));
+                }}
                 onPrintBarcode={(item) => setActiveBarcodeItem(item)}
                 onOpenImageModal={(item) => setActiveImageItem(item)}
                 onQuickAdjust={(item) => setActiveStockItem(item)}

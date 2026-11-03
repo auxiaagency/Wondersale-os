@@ -532,7 +532,7 @@ class OptionalPageNumberPagination(PageNumberPagination):
 
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.select_related(
-        'store', 'supplier', 'section', 'hsn_code', 'primary_subcategory', 'primary_subcategory__category'
+        'store', 'supplier', 'section', 'hsn_code', 'primary_subcategory', 'primary_subcategory__category', 'deal_of_the_day'
     ).prefetch_related(
         'subcategories', 'subcategories__category', 'images', 'design_variants', 'design_variants__image'
     ).all()
@@ -1131,6 +1131,13 @@ class ItemViewSet(viewsets.ModelViewSet):
                 order=item.images.count() + idx
             )
             created_images.append(image_instance)
+
+        # If item has valid weight (> 0) and is not yet listed on website, auto-list it now!
+        if not item.is_listed_on_website and item.weight and item.weight > Decimal('0.00'):
+            from django.utils import timezone
+            item.is_listed_on_website = True
+            item.listed_on_website_at = timezone.now()
+            item.save(update_fields=['is_listed_on_website', 'listed_on_website_at', 'updated_at'])
 
         return Response(
             ItemImageSerializer(created_images, many=True, context={'request': request}).data,

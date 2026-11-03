@@ -654,6 +654,12 @@ class Item(models.Model):
         db_index=True,
         help_text="Flag indicating whether this item is published/listed on the online website."
     )
+    listed_on_website_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Timestamp when the item was first published or made eligible and active on the website."
+    )
     has_variants = models.BooleanField(
         default=False,
         db_index=True,
@@ -782,12 +788,16 @@ class Item(models.Model):
 
         if not is_new:
             try:
-                orig = Item.objects.only('cost_price', 'selling_price', 'mrp').get(pk=self.pk)
+                orig = Item.objects.only('cost_price', 'selling_price', 'mrp', 'is_listed_on_website').get(pk=self.pk)
                 old_cost = orig.cost_price
                 old_sell = orig.selling_price
                 old_mrp = orig.mrp
             except Item.DoesNotExist:
                 pass
+
+        if self.is_listed_on_website and not self.listed_on_website_at:
+            from django.utils import timezone
+            self.listed_on_website_at = timezone.now()
 
         super().save(*args, **kwargs)
 

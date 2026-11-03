@@ -5,6 +5,8 @@ __pycache__/
 *.pyd
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3-shm
+db.sqlite3-wal
 media/
 scratch/
 venv/

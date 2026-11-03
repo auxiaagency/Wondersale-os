@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
@@ -62,6 +62,58 @@ export interface HeroSlideItem {
   alt?: string;
 }
 
+export interface ShopByCategoryCardItem {
+  id: number | string;
+  title: string;
+  subtitle: string;
+  badge?: string;
+  image_url: string;
+  category_id?: number | null;
+  category_name?: string | null;
+  link_url?: string;
+  display_order?: number;
+  is_active?: boolean;
+}
+
+const DEFAULT_SHOP_CATEGORY_CARDS: ShopByCategoryCardItem[] = [
+  {
+    id: 1,
+    title: "Cookware & Dining",
+    subtitle: "Non-stick, Pots & Bowls",
+    badge: "Up to 60% Off",
+    link_url: "/category/kitchen-appliances",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuA9w2vUJKQkRNV1FUIkncrCapIM725jmL-G4rr-BgEIijGnUcOrUwaQD6BVKw5Wwm79xdLoqRaszlezpJ6H077FxVzakFF0vorXx2dP9LcnV_XTIB28W8uOjt7leYjhJLvPd3y6r6ILeVDWkiI1B_g4xcK5YTPfatiZw5jxpqIryrhTFz9qAfvAcSJDv6gx0qXKWohElzV1EN6zRF-LyYxA5jqnpUqI-QVPYQd3rEoKUgYoKnMiYvcR1Q",
+  },
+  {
+    id: 2,
+    title: "Smart Gadgets",
+    subtitle: "Wearables & Audio",
+    badge: "Min 40% Off",
+    link_url: "/category/electronics-audio",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuDmYpYYgOcAqx8zW2hmXeF5lgJgFB03SDzmr2JqIRTMHSAiVxdL6sT3FHPc0SksAwcHJpP7gU0ZIE0sIMBL09f5SMbTusBEsD9UiZ_RaP_5P011JBecJ5kiCwZhnDbXVDWDjNHAtCn89uJPFG_MLAisZbg6Mlwx1xvQ2lcL6SSVSFwjk6AQlMHafVHoReK5vHXJG1fBOmocUh8qif0vg8W-B4DNRIP5dYNbvzEfKB5QpWc2mjFGViG81g",
+  },
+  {
+    id: 3,
+    title: "Kids & Toys",
+    subtitle: "STEM & Board Games",
+    badge: "Under ₹499",
+    link_url: "/category/toys-games",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuD37ApjZxEPIH29J5O9A8EdaspEO4NB2MUkfTComCU8qol45FjqL0wKJQpVbJlIH-Ao1xen1ITW4rTgqN8enPGkxEj0C7jcuEenBanwxcoC5zwk7AUBvNQuCt8TwpV1TYPtnG5uaiZDnDyU7lfbFFoR4QKufOFTnE9-h2rwMZrDZivD0_3TXsBk1K7xGV3GANp_7XBbPBMEdK5nHFpScPwuwfLmT7lwXbP5a2Fu_nnKMzVCvgsRRJO87A",
+  },
+  {
+    id: 4,
+    title: "Eyewear & Style",
+    subtitle: "UV400 Polarized",
+    badge: "Buy 1 Get 1",
+    link_url: "/category/sunglasses-accessories",
+    image_url:
+      "https://lh3.googleusercontent.com/aida-public/AB6AXuCN1i80jVIbv2fEfKtFphirGBNs7n1uTfhjkqSC55XNFR0q_EHw_Lcgemw4XRLroqdEzkHa5yVjBULXzb36Npq3ES7DbpDDjtx4LUqx4bEFvmBLIOgs_rcceU4dmH5xuuec1JEAPGiCm0IMPl0oroYkEVn4wgJNY2bcc7i5X1PO-p7lC1pQgLCGm9I-ZvVdxvDU4dKBQ9uPVTg-0weRw3nrORWDNlDCdpi8SDYR95X29Wys8m44hxsEVQ",
+  },
+];
+
 const DEFAULT_HERO_SLIDES: HeroSlideItem[] = [
   {
     id: "slide-1",
@@ -104,37 +156,77 @@ export default function HomePage() {
   const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
   const [addedItemNotification, setAddedItemNotification] = useState<string | null>(null);
 
-  // Live countdown timer state (hours, minutes, seconds)
-  const [timeLeft, setTimeLeft] = useState({ hours: 4, minutes: 18, seconds: 26 });
-
-  // Hero carousel auto-slider state
-  const [currentSlide, setCurrentSlide] = useState(0);
-
-  const { addToCart, toggleWishlist, isInWishlist, openCategoryMenu } = useStorefront();
+  // Live countdown timer state based on Indian Standard Time (IST, UTC+5:30) ending at 23:59:59 daily
+  const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
 
   useEffect(() => {
-    const slideTimer = setInterval(() => {
-      setHeroSlides((currentList) => {
-        if (currentList.length > 0) {
-          setCurrentSlide((prev) => (prev + 1) % currentList.length);
-        }
-        return currentList;
-      });
-    }, 4000);
-    return () => clearInterval(slideTimer);
-  }, []);
+    const getSecondsUntilISTMidnight = () => {
+      const now = new Date();
+      // UTC time in ms + 5.5 hours in ms = Indian Standard Time
+      const istOffsetMs = 5.5 * 60 * 60 * 1000;
+      const istNow = new Date(now.getTime() + istOffsetMs);
+      const istMidnight = new Date(istNow);
+      istMidnight.setUTCHours(23, 59, 59, 999);
+      const diffMs = istMidnight.getTime() - istNow.getTime();
+      const totalSecs = Math.max(0, Math.floor(diffMs / 1000));
+      return {
+        hours: Math.floor(totalSecs / 3600),
+        minutes: Math.floor((totalSecs % 3600) / 60),
+        seconds: totalSecs % 60,
+      };
+    };
 
-  useEffect(() => {
+    setTimeLeft(getSecondsUntilISTMidnight());
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
-        if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
-        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return { hours: 4, minutes: 18, seconds: 26 };
-      });
+      setTimeLeft(getSecondsUntilISTMidnight());
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const isHeroHoveredRef = useRef(false);
+  const heroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { addToCart, toggleWishlist, isInWishlist, openCategoryMenu } = useStorefront();
+
+  const resetHeroTimer = useCallback(() => {
+    if (heroTimerRef.current) clearInterval(heroTimerRef.current);
+    heroTimerRef.current = setInterval(() => {
+      if (isHeroHoveredRef.current) return;
+      setCurrentSlide((prev) => {
+        const count = heroSlides.length;
+        if (count <= 1) return prev;
+        return (prev + 1) % count;
+      });
+    }, 4000);
+  }, [heroSlides.length]);
+
+  const handlePrevSlide = useCallback(() => {
+    const count = heroSlides.length;
+    if (count <= 1) return;
+    setCurrentSlide((prev) => (prev - 1 + count) % count);
+    resetHeroTimer();
+  }, [heroSlides.length, resetHeroTimer]);
+
+  const handleNextSlide = useCallback(() => {
+    const count = heroSlides.length;
+    if (count <= 1) return;
+    setCurrentSlide((prev) => (prev + 1) % count);
+    resetHeroTimer();
+  }, [heroSlides.length, resetHeroTimer]);
+
+  const handleSelectSlide = useCallback((index: number) => {
+    setCurrentSlide(index);
+    resetHeroTimer();
+  }, [resetHeroTimer]);
+
+  useEffect(() => {
+    resetHeroTimer();
+    return () => {
+      if (heroTimerRef.current) clearInterval(heroTimerRef.current);
+    };
+  }, [resetHeroTimer]);
+
+
 
   const handleAddToCart = (item: Partial<DemoProduct> & { id: string; slug: string; title: string; mrpPaise: number; sellingPricePaise: number }) => {
     addToCart({
@@ -169,6 +261,9 @@ export default function HomePage() {
   };
 
   const [realDeals, setRealDeals] = useState<any[]>([]);
+  const [shopCategoryCards, setShopCategoryCards] = useState<ShopByCategoryCardItem[]>(DEFAULT_SHOP_CATEGORY_CARDS);
+  const [bestSellers, setBestSellers] = useState<any[]>([]);
+  const [newArrivals, setNewArrivals] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/categories")
@@ -194,6 +289,33 @@ export default function HomePage() {
       .then((data) => {
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           setRealDeals(data.data);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/shop-by-category")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setShopCategoryCards(data.data);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/best-sellers")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setBestSellers(data.data);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/new-arrivals")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          setNewArrivals(data.data);
         }
       })
       .catch(() => {});
@@ -279,7 +401,13 @@ export default function HomePage() {
           </section>
 
           {/* 3. HERO CAMPAIGN BANNER (Rich Burgundy with Large Inner Image Circle) */}
-          <section className="w-full my-[calc(var(--spacing)*4)] md:my-2.5">
+          <section
+            onMouseEnter={() => { isHeroHoveredRef.current = true; }}
+            onMouseLeave={() => { isHeroHoveredRef.current = false; }}
+            onTouchStart={() => { isHeroHoveredRef.current = true; }}
+            onTouchEnd={() => { isHeroHoveredRef.current = false; }}
+            className="w-full my-[calc(var(--spacing)*4)] md:my-2.5"
+          >
             <div className="relative rounded-2xl md:rounded-[2.25rem] bg-[#680114] text-[#F6E9C8]">
               {heroSlides.map((slide, index) => {
                 const isActive = index === currentSlide;
@@ -340,7 +468,7 @@ export default function HomePage() {
               {/* Functional Round Angle Arrows (Desktop exact: 52px height, 11px boundary; Mobile proportional) */}
               <button
                 type="button"
-                onClick={() => setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length)}
+                onClick={handlePrevSlide}
                 aria-label="Previous Slide"
                 className="absolute top-1/2 -translate-y-1/2 z-20 p-0.5 md:p-1 text-[#F6E9C8] hover:text-white hover:scale-110 active:scale-95 transition-all cursor-pointer group left-[4px] sm:left-[8px] md:!left-[11px]"
               >
@@ -359,7 +487,7 @@ export default function HomePage() {
 
               <button
                 type="button"
-                onClick={() => setCurrentSlide((prev) => (prev + 1) % heroSlides.length)}
+                onClick={handleNextSlide}
                 aria-label="Next Slide"
                 className="absolute top-1/2 -translate-y-1/2 z-20 p-0.5 md:p-1 text-[#F6E9C8] hover:text-white hover:scale-110 active:scale-95 transition-all cursor-pointer group right-[4px] sm:right-[8px] md:!right-[11px]"
               >
@@ -382,7 +510,7 @@ export default function HomePage() {
                   <button
                     key={slide.id}
                     type="button"
-                    onClick={() => setCurrentSlide(idx)}
+                    onClick={() => handleSelectSlide(idx)}
                     aria-label={`Go to slide ${idx + 1}`}
                     className={`h-1 md:h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                       idx === currentSlide
@@ -422,28 +550,34 @@ export default function HomePage() {
               }
               actionText="All Deals"
               actionHref="/categories"
-              products={realDeals.map((deal) => ({
-                id: String(deal.item_id || deal.id),
-                slug: String(deal.item_uid || deal.item_id || deal.id),
-                title: deal.item_name || "Special Deal Product",
-                brand: "Wondersale Deal",
-                category: "Deals",
-                categorySlug: "deals",
-                mrpPaise: Math.round(Number(deal.deal_mrp || 0) * 100),
-                sellingPricePaise: Math.round(Number(deal.deal_selling_price || 0) * 100),
-                rating: 4.8,
-                ratingCount: 42,
-                imageUrl:
-                  deal.item_image_url ||
-                  "https://lh3.googleusercontent.com/aida-public/AB6AXuAhqSUbvjWIHdKh4q59CJUJS1hL6VB-lIzmuz4ymqGpn6bv10LY8_6LoBntAmGTXnlkbF6nkFAISR8eNu3FwJRUOk-yILX4H97lZh_Aa-_csb7sGvNzAYrQPabKzqWi8U-NwDOR5mLwnJbTKBZvg8fYU2AABQdkyrxgIRGAtOs7EYrZUIvVphSMRnPUIANe6zdspgV9vQhALj26WMg40h98txzkPku5Q3FrXvK7zKpVRFNTBHFCWQY3qg",
-                inStock: Boolean(deal.item_in_stock),
-                stockCount: deal.item_quantity || 10,
-                badge: deal.custom_badge || (deal.discount_percentage ? `${Math.round(deal.discount_percentage)}% OFF` : "Deal of the Day"),
-                description: "Limited-time Deal of the Day promotion directly from Bhopal store.",
-                variants: [{ capacity: "Standard", pricePaise: Math.round(Number(deal.deal_selling_price || 0) * 100), note: `${deal.item_quantity || 0} in stock` }],
-                specs: [{ label: "Condition", value: "Brand New" }],
-                reviews: [],
-              }))}
+              products={realDeals.map((deal) => {
+                const dealSp = Number(deal.deal_selling_price || 0);
+                const dealMrp = Number(deal.deal_mrp || dealSp);
+                const discountPct = deal.discount_percentage
+                  ? Math.round(Number(deal.discount_percentage))
+                  : (dealMrp > dealSp ? Math.round(((dealMrp - dealSp) / dealMrp) * 100) : 0);
+
+                return {
+                  id: String(deal.item_id || deal.id),
+                  slug: String(deal.item_uid || deal.item_id || deal.id),
+                  title: deal.item_name || "Special Deal Product",
+                  brand: "Wondersale Deal",
+                  category: "Deals of the Day",
+                  categorySlug: "deals",
+                  mrpPaise: Math.round(dealMrp * 100),
+                  sellingPricePaise: Math.round(dealSp * 100),
+                  rating: 4.8,
+                  ratingCount: 38,
+                  imageUrl: deal.item_image_url || "",
+                  inStock: Boolean(deal.item_in_stock),
+                  stockCount: deal.item_quantity || 10,
+                  badge: deal.custom_badge || (discountPct > 0 ? `${discountPct}% OFF` : "Deal of the Day"),
+                  description: "Limited-time Deal of the Day promotion directly from Bhopal store inventory.",
+                  variants: [{ capacity: "Standard", pricePaise: Math.round(dealSp * 100), note: `${deal.item_quantity || 0} in stock` }],
+                  specs: [{ label: "Condition", value: "Brand New" }],
+                  reviews: [],
+                };
+              })}
               onAddToCart={handleAddToCart}
               onToggleWishlist={handleToggleWishlist}
               isInWishlist={isInWishlist}
@@ -495,89 +629,35 @@ export default function HomePage() {
               </button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
-              {/* Cat 1 */}
-              <Link
-                href="/category/kitchen-appliances"
-                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
-              >
-                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
-                  <img
-                    alt="Cookware & Dining category"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9w2vUJKQkRNV1FUIkncrCapIM725jmL-G4rr-BgEIijGnUcOrUwaQD6BVKw5Wwm79xdLoqRaszlezpJ6H077FxVzakFF0vorXx2dP9LcnV_XTIB28W8uOjt7leYjhJLvPd3y6r6ILeVDWkiI1B_g4xcK5YTPfatiZw5jxpqIryrhTFz9qAfvAcSJDv6gx0qXKWohElzV1EN6zRF-LyYxA5jqnpUqI-QVPYQd3rEoKUgYoKnMiYvcR1Q"
-                  />
-                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
-                    Up to 60% Off
-                  </span>
-                </div>
-                <div className="p-2 sm:p-3">
-                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Cookware &amp; Dining</h3>
-                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">Non-stick, Pots &amp; Bowls</p>
-                </div>
-              </Link>
-
-              {/* Cat 2 */}
-              <Link
-                href="/category/electronics-audio"
-                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
-              >
-                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
-                  <img
-                    alt="Smart Gadgets category"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmYpYYgOcAqx8zW2hmXeF5lgJgFB03SDzmr2JqIRTMHSAiVxdL6sT3FHPc0SksAwcHJpP7gU0ZIE0sIMBL09f5SMbTusBEsD9UiZ_RaP_5P011JBecJ5kiCwZhnDbXVDWDjNHAtCn89uJPFG_MLAisZbg6Mlwx1xvQ2lcL6SSVSFwjk6AQlMHafVHoReK5vHXJG1fBOmocUh8qif0vg8W-B4DNRIP5dYNbvzEfKB5QpWc2mjFGViG81g"
-                  />
-                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
-                    Min 40% Off
-                  </span>
-                </div>
-                <div className="p-2 sm:p-3">
-                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Smart Gadgets</h3>
-                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">Wearables &amp; Audio</p>
-                </div>
-              </Link>
-
-              {/* Cat 3 */}
-              <Link
-                href="/category/toys-games"
-                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
-              >
-                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
-                  <img
-                    alt="Kids & Toys category"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuD37ApjZxEPIH29J5O9A8EdaspEO4NB2MUkfTComCU8qol45FjqL0wKJQpVbJlIH-Ao1xen1ITW4rTgqN8enPGkxEj0C7jcuEenBanwxcoC5zwk7AUBvNQuCt8TwpV1TYPtnG5uaiZDnDyU7lfbFFoR4QKufOFTnE9-h2rwMZrDZivD0_3TXsBk1K7xGV3GANp_7XBbPBMEdK5nHFpScPwuwfLmT7lwXbP5a2Fu_nnKMzVCvgsRRJO87A"
-                  />
-                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
-                    Under ₹499
-                  </span>
-                </div>
-                <div className="p-2 sm:p-3">
-                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Kids &amp; Toys</h3>
-                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">STEM &amp; Board Games</p>
-                </div>
-              </Link>
-
-              {/* Cat 4 */}
-              <Link
-                href="/category/sunglasses-accessories"
-                className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
-              >
-                <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
-                  <img
-                    alt="Eyewear & Style category"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCN1i80jVIbv2fEfKtFphirGBNs7n1uTfhjkqSC55XNFR0q_EHw_Lcgemw4XRLroqdEzkHa5yVjBULXzb36Npq3ES7DbpDDjtx4LUqx4bEFvmBLIOgs_rcceU4dmH5xuuec1JEAPGiCm0IMPl0oroYkEVn4wgJNY2bcc7i5X1PO-p7lC1pQgLCGm9I-ZvVdxvDU4dKBQ9uPVTg-0weRw3nrORWDNlDCdpi8SDYR95X29Wys8m44hxsEVQ"
-                  />
-                  <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
-                    Buy 1 Get 1
-                  </span>
-                </div>
-                <div className="p-2 sm:p-3">
-                  <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">Eyewear &amp; Style</h3>
-                  <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">UV400 Polarized</p>
-                </div>
-              </Link>
+              {(shopCategoryCards && shopCategoryCards.length > 0 ? shopCategoryCards : DEFAULT_SHOP_CATEGORY_CARDS).map((card, idx) => {
+                const targetHref = card.link_url || (card.category_id ? `/categories?selected=${card.category_id}` : '/categories');
+                return (
+                  <Link
+                    key={card.id || `shop-cat-${idx}`}
+                    href={targetHref}
+                    className="bg-[#F6E9C8] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xs flex flex-col justify-between group hover:shadow-md transition-all border-2 border-[#680114]"
+                  >
+                    <div className="w-full aspect-[2/1] sm:aspect-auto sm:h-36 relative overflow-hidden bg-[#F6E9C8] border-b border-[#680114]/30">
+                      <img
+                        alt={`${card.title} category`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        src={card.image_url}
+                      />
+                      {card.badge && (
+                        <span className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2 bg-[#680114] text-[#F6E9C8] text-[9px] sm:text-xs px-2 sm:px-2.5 py-0.5 rounded-full shadow-2xs font-bold leading-none">
+                          {card.badge}
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-2 sm:p-3">
+                      <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">{card.title}</h3>
+                      {card.subtitle && (
+                        <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">{card.subtitle}</p>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </section>
 
@@ -590,9 +670,33 @@ export default function HomePage() {
             title="Best Sellers"
             bgClass="bg-[#F6E9C8] border-0"
             badge={null}
-            actionText="View Top 50"
+            actionText="View Top 25"
             actionHref="/categories"
-            products={DEMO_PRODUCTS.slice(0, 10)}
+            products={
+              bestSellers.length > 0
+                ? bestSellers.slice(0, 25).map((item, idx) => ({
+                    id: String(item.id),
+                    slug: String(item.uid || item.id),
+                    title: item.name,
+                    brand: "Wondersale",
+                    category: item.categories?.[0]?.name || "General",
+                    categorySlug: item.categories?.[0]?.name?.toLowerCase().replace(/\s+/g, "-") || "general",
+                    mrpPaise: Math.round(Number(item.mrp || item.selling_price || 0) * 100),
+                    sellingPricePaise: Math.round(Number(item.selling_price || 0) * 100),
+                    rating: 4.8,
+                    ratingCount: 50 + idx * 7,
+                    imageUrl: item.primary_image_url || (item.images?.[0]?.url) || "",
+                    inStock: Boolean(item.in_stock),
+                    stockCount: item.quantity || 10,
+                    bestsellerRank: `#${idx + 1} Best Seller`,
+                    badge: `#${idx + 1} Best Seller`,
+                    description: item.description || "Top rated customer favourite item directly from our store inventory.",
+                    variants: [{ capacity: "Standard", pricePaise: Math.round(Number(item.selling_price || 0) * 100), note: `${item.quantity || 0} in stock` }],
+                    specs: [{ label: "Condition", value: "Brand New" }],
+                    reviews: [],
+                  }))
+                : DEMO_PRODUCTS.slice(0, 10)
+            }
             onAddToCart={handleAddToCart}
             onToggleWishlist={handleToggleWishlist}
             isInWishlist={isInWishlist}
@@ -607,7 +711,30 @@ export default function HomePage() {
             badge={null}
             actionText="View Catalog"
             actionHref="/categories"
-            products={DEMO_PRODUCTS.slice(10, 20)}
+            products={
+              newArrivals.length > 0
+                ? newArrivals.slice(0, 25).map((item, idx) => ({
+                    id: String(item.id),
+                    slug: String(item.uid || item.id),
+                    title: item.name,
+                    brand: "Wondersale",
+                    category: item.categories?.[0]?.name || "General",
+                    categorySlug: item.categories?.[0]?.name?.toLowerCase().replace(/\s+/g, "-") || "general",
+                    mrpPaise: Math.round(Number(item.mrp || item.selling_price || 0) * 100),
+                    sellingPricePaise: Math.round(Number(item.selling_price || 0) * 100),
+                    rating: 4.9,
+                    ratingCount: 15 + idx * 4,
+                    imageUrl: item.primary_image_url || (item.images?.[0]?.url) || "",
+                    inStock: Boolean(item.in_stock),
+                    stockCount: item.quantity || 10,
+                    badge: "New Arrival",
+                    description: item.description || "Fresh arrival just added to our warehouse catalogue.",
+                    variants: [{ capacity: "Standard", pricePaise: Math.round(Number(item.selling_price || 0) * 100), note: `${item.quantity || 0} in stock` }],
+                    specs: [{ label: "Condition", value: "Fresh Stock" }],
+                    reviews: [],
+                  }))
+                : DEMO_PRODUCTS.slice(10, 20)
+            }
             onAddToCart={handleAddToCart}
             onToggleWishlist={handleToggleWishlist}
             isInWishlist={isInWishlist}

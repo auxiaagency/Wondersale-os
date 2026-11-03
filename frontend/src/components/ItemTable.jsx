@@ -180,6 +180,7 @@ export default function ItemTable({
   const [aiLaunchTargetItems, setAiLaunchTargetItems] = useState([]);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [bulkEditConfirmData, setBulkEditConfirmData] = useState(null); // { changes, count, targetIds }
+  const [dealPriceConfirmBatch, setDealPriceConfirmBatch] = useState(null); // items with active deal whose prices were modified
   const [subcatPickerAnchor, setSubcatPickerAnchor] = useState(null); // { itemId, anchorRect }
   const [activeSubcatViewer, setActiveSubcatViewer] = useState(null); // { itemId, itemName, anchorEl, anchorRect, primarySubcat, allSubcategories }
   const [internalSortBy, setInternalSortBy] = useState('');
@@ -1224,13 +1225,36 @@ export default function ItemTable({
     return false;
   };
 
+  const executeCommitAllEdits = async (itemsToSave) => {
+    setSavingEdits(true);
+    setError('');
+    try {
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < itemsToSave.length; i += BATCH_SIZE) {
+        const batch = itemsToSave.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(({ id, payload }) => updateItem(id, payload)));
+      }
+
+      showFeedback(`Saved changes for ${itemsToSave.length} product(s) successfully.`);
+      setIsEditMode(false);
+      setDirtyItemIds(new Set());
+      setDealPriceConfirmBatch(null);
+      onItemsChanged?.();
+    } catch (err) {
+      setError(err.message || 'Failed to save product changes.');
+    } finally {
+      setSavingEdits(false);
+    }
+  };
+
   // Save All Changes made in Edit Mode (stocks are managed via immutable ledger in StockAdjustmentModal)
   const handleSaveAllEdits = async () => {
-    setSavingEdits(true);
     setError('');
     try {
       // Find candidate items: either marked dirty or whose values actually differ
       const itemsToSave = [];
+      const dealConflicts = [];
+
       for (const item of items) {
         const edited = editBuffer[item.id];
         if (!edited) continue;
@@ -1254,6 +1278,23 @@ export default function ItemTable({
             primary_subcategory: edited.primary_subcategory_id || null,
           };
           itemsToSave.push({ id: item.id, payload });
+
+          // Check if this item has an active deal and price changed from original standard price
+          if (item?.active_deal) {
+            const origSell = parseFloat(item.active_deal.original_selling_price);
+            const origMrp = item.active_deal.original_mrp ? parseFloat(item.active_deal.original_mrp) : null;
+            const newSell = parseFloat(edited.selling_price);
+            const newMrp = edited.mrp === '' ? null : parseFloat(edited.mrp);
+
+            if (newSell !== origSell || newMrp !== origMrp) {
+              dealConflicts.push({
+                item,
+                newSellingPrice: newSell,
+                newMrp: newMrp,
+                deal: item.active_deal,
+              });
+            }
+          }
         }
       }
 
@@ -1264,21 +1305,18 @@ export default function ItemTable({
         return;
       }
 
-      // Execute updates in parallel batches of 5 for blazing speed without overwhelming server
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < itemsToSave.length; i += BATCH_SIZE) {
-        const batch = itemsToSave.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(({ id, payload }) => updateItem(id, payload)));
+      // If any edited items have active deals with price changes, confirm before committing!
+      if (dealConflicts.length > 0) {
+        setDealPriceConfirmBatch({
+          itemsToSave,
+          dealConflicts,
+        });
+        return;
       }
 
-      showFeedback(`Saved changes for ${itemsToSave.length} product(s) successfully.`);
-      setIsEditMode(false);
-      setDirtyItemIds(new Set());
-      onItemsChanged?.();
+      await executeCommitAllEdits(itemsToSave);
     } catch (err) {
       setError(err.message || 'Failed to save product changes.');
-    } finally {
-      setSavingEdits(false);
     }
   };
 
@@ -5119,6 +5157,181 @@ export default function ItemTable({
         onConfirm={handleConfirmAILaunch}
         loading={generatingAI}
       />
+
+      {/* ACTIVE DEAL CONFIRMATION POPUP FOR INLINE EDIT MODE (SINGLE OR MULTI-PRODUCT) */}
+      {dealPriceConfirmBatch && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }} onClick={() => setDealPriceConfirmBatch(null)}>
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: '520px',
+              width: '100%',
+              padding: 0,
+              overflow: 'hidden',
+              border: '1px solid var(--border-color)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'rgba(245, 158, 11, 0.08)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(245, 158, 11, 0.18)',
+                    color: '#D97706',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Active Deal Price Alert
+                  </h3>
+                  <p style={{ fontSize: '0.78rem', color: '#D97706', margin: '2px 0 0 0', fontWeight: 600 }}>
+                    {dealPriceConfirmBatch.dealConflicts.length === 1
+                      ? '1 product has an active Deal of the Day promotion'
+                      : `${dealPriceConfirmBatch.dealConflicts.length} products have active Deal of the Day promotions`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDealPriceConfirmBatch(null)}
+                className="btn btn-secondary btn-icon"
+                style={{ width: '30px', height: '30px', padding: 0 }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 24px' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.5 }}>
+                You modified the base price of item(s) currently featured in <strong style={{ color: 'var(--text-primary)' }}>Deals of the Day</strong>:
+              </p>
+
+              <div
+                style={{
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  marginBottom: '16px',
+                  paddingRight: '4px',
+                }}
+              >
+                {dealPriceConfirmBatch.dealConflicts.map((c) => (
+                  <div
+                    key={c.item.id}
+                    style={{
+                      background: 'var(--bg-surface-hover)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '12px 14px',
+                      fontSize: '0.82rem',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>
+                      {c.item.name}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      <span>Active Deal Promo Price:</span>
+                      <span style={{ fontWeight: 700, color: '#059669' }}>₹{c.deal.deal_selling_price}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                      <span>Pre-deal Normal Price:</span>
+                      <span>₹{c.deal.original_selling_price}</span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        paddingTop: '6px',
+                        borderTop: '1px dashed var(--border-subtle)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span style={{ color: '#D97706' }}>New Standard Reversion Price:</span>
+                      <span style={{ color: '#D97706', fontWeight: 700 }}>₹{c.newSellingPrice}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  fontSize: '0.78rem',
+                  color: 'var(--text-muted)',
+                  lineHeight: 1.5,
+                  background: 'rgba(245, 158, 11, 0.06)',
+                  border: '1px solid rgba(245, 158, 11, 0.15)',
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                💡 <strong>How it works:</strong> The active promotional deal price remains untouched in the store and POS while the deal runs. When the deal ends, the item will automatically revert to your new standard base price.
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                padding: '14px 24px',
+                borderTop: '1px solid var(--border-subtle)',
+                background: 'var(--bg-surface-hover)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '10px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDealPriceConfirmBatch(null)}
+                className="btn btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Cancel Edits
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const batchToRun = dealPriceConfirmBatch.itemsToSave;
+                  setDealPriceConfirmBatch(null);
+                  await executeCommitAllEdits(batchToRun);
+                }}
+                className="btn btn-primary"
+                style={{
+                  background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)',
+                  borderColor: '#B45309',
+                  padding: '8px 18px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                }}
+              >
+                Confirm &amp; Save All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

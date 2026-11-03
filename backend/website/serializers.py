@@ -153,6 +153,30 @@ class HeroSlideSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class ShopByCategoryCardSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True, allow_null=True)
+
+    class Meta:
+        from .models import ShopByCategoryCard
+        model = ShopByCategoryCard
+        fields = [
+            'id',
+            'title',
+            'subtitle',
+            'badge',
+            'image_url',
+            'category',
+            'category_name',
+            'link_url',
+            'display_order',
+            'is_active',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+
 class DealOfTheDaySerializer(serializers.ModelSerializer):
     item_id = serializers.IntegerField(source='item.id', read_only=True)
     item_name = serializers.CharField(source='item.name', read_only=True)
@@ -160,7 +184,10 @@ class DealOfTheDaySerializer(serializers.ModelSerializer):
     item_in_stock = serializers.SerializerMethodField()
     item_quantity = serializers.IntegerField(source='item.quantity', read_only=True)
     item_image_url = serializers.SerializerMethodField()
+    item_weight = serializers.DecimalField(source='item.weight', max_digits=10, decimal_places=2, read_only=True)
     is_expired = serializers.SerializerMethodField()
+    is_complete = serializers.SerializerMethodField()
+    missing_requirements = serializers.SerializerMethodField()
 
     class Meta:
         from .models import DealOfTheDay
@@ -174,6 +201,7 @@ class DealOfTheDaySerializer(serializers.ModelSerializer):
             'item_in_stock',
             'item_quantity',
             'item_image_url',
+            'item_weight',
             'deal_selling_price',
             'deal_mrp',
             'discount_percentage',
@@ -183,6 +211,8 @@ class DealOfTheDaySerializer(serializers.ModelSerializer):
             'ends_at',
             'is_active',
             'is_expired',
+            'is_complete',
+            'missing_requirements',
             'custom_badge',
             'created_at',
             'updated_at',
@@ -202,6 +232,19 @@ class DealOfTheDaySerializer(serializers.ModelSerializer):
     def get_is_expired(self, obj):
         return obj.is_expired()
 
+    def get_is_complete(self, obj):
+        has_img = obj.item.images.exists()
+        has_wt = obj.item.weight is not None and obj.item.weight > Decimal('0.00')
+        return bool(has_img and has_wt)
+
+    def get_missing_requirements(self, obj):
+        missing = []
+        if not obj.item.images.exists():
+            missing.append("image")
+        if obj.item.weight is None or obj.item.weight <= Decimal('0.00'):
+            missing.append("weight")
+        return missing
+
     def get_item_image_url(self, obj):
         img = obj.item.images.filter(is_primary=True).first() or obj.item.images.first()
         if img and img.image:
@@ -210,4 +253,5 @@ class DealOfTheDaySerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(img.image.url)
             return img.image.url
         return None
+
 

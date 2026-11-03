@@ -641,6 +641,7 @@ class ItemSerializer(serializers.ModelSerializer):
     design_variants = ItemVariantSerializer(many=True, read_only=True)
     sibling_variants = serializers.SerializerMethodField()
     variant_count = serializers.SerializerMethodField()
+    active_deal = serializers.SerializerMethodField()
 
     class Meta:
         model = Item
@@ -702,6 +703,7 @@ class ItemSerializer(serializers.ModelSerializer):
             'is_master_variant',
             'sibling_variants',
             'variant_count',
+            'active_deal',
             'images',
             'primary_image_url',
             'created_at',
@@ -711,6 +713,7 @@ class ItemSerializer(serializers.ModelSerializer):
             'id',
             'quantity',
             'effective_mrp',
+            'active_deal',
             'volume_cm3',
             'volumetric_weight_kg',
             'dimensions_display',
@@ -782,6 +785,25 @@ class ItemSerializer(serializers.ModelSerializer):
         if not obj.variant_group_id:
             return 1
         return len(self.get_sibling_variants(obj))
+
+    def get_active_deal(self, obj):
+        try:
+            if hasattr(obj, 'deal_of_the_day'):
+                deal = obj.deal_of_the_day
+                if deal and deal.is_active and not deal.is_expired():
+                    return {
+                        'id': deal.id,
+                        'deal_selling_price': str(deal.deal_selling_price),
+                        'deal_mrp': str(deal.deal_mrp),
+                        'original_selling_price': str(deal.original_selling_price),
+                        'original_mrp': str(deal.original_mrp) if deal.original_mrp else None,
+                        'discount_percentage': str(deal.discount_percentage),
+                        'custom_badge': deal.custom_badge,
+                        'ends_at': deal.ends_at.isoformat() if deal.ends_at else None,
+                    }
+        except Exception:
+            pass
+        return None
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -920,6 +942,12 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         write_only=True,
         help_text="Optional list of colour/design variants with name, quantity, and image_id."
     )
+    keep_active_deal_price = serializers.BooleanField(
+        required=False,
+        default=True,
+        write_only=True,
+        help_text="When true and item has an active deal, updating price changes original reversion price while keeping current deal price active."
+    )
 
     class Meta:
         model = Item
@@ -957,8 +985,10 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
             'needs_new_barcode_printed',
             'has_variants',
             'variants',
+            'keep_active_deal_price',
             'initial_quantity',
             'quantity',
+            'is_listed_on_website',
         ]
         read_only_fields = ['id']
 
@@ -973,6 +1003,49 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(f"Item with UID / Barcode '{cleaned}' already exists in inventory.")
                 return cleaned
         return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # Check mandatory rule for publishing to e-commerce site:
+        # A product MUST have at least one image and a valid weight (> 0) to be listed on website.
+        effective_weight = attrs.get('weight')
+        if effective_weight is None and self.instance:
+            effective_weight = self.instance.weight
+
+        has_valid_weight = effective_weight is not None and effective_weight > Decimal('0.00')
+
+        has_image = False
+        if self.instance and self.instance.images.exists():
+            has_image = True
+
+        is_eligible = has_valid_weight and has_image
+
+        is_listed = attrs.get('is_listed_on_website')
+        if is_listed is None and self.instance:
+            is_listed = self.instance.is_listed_on_website
+
+        # AUTO-LISTING RULE:
+        # If an item meets both criteria (image + valid weight), automatically activate/list it on the website!
+        # If an item lacks either, it cannot be active on the website.
+        if is_eligible:
+            if is_listed is None or (self.instance and not self.instance.is_listed_on_website):
+                attrs['is_listed_on_website'] = True
+        else:
+            if is_listed is True:
+                if not has_valid_weight and not has_image:
+                    raise serializers.ValidationError({
+                        'is_listed_on_website': 'Cannot publish to e-commerce website: This product requires at least one product image and a valid weight (grams).'
+                    })
+                elif not has_image:
+                    raise serializers.ValidationError({
+                        'is_listed_on_website': 'Cannot publish to e-commerce website: This product requires at least one product image.'
+                    })
+                elif not has_valid_weight:
+                    raise serializers.ValidationError({
+                        'is_listed_on_website': 'Cannot publish to e-commerce website: This product requires a valid weight in grams (> 0).'
+                    })
+
+        return attrs
 
     def create(self, validated_data):
         initial_quantity = validated_data.pop('initial_quantity', None)
@@ -1076,6 +1149,40 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         elif not has_vars:
             # Variants disabled: remove existing design variants
             instance.design_variants.all().delete()
+
+        keep_active_deal = validated_data.pop('keep_active_deal_price', True)
+        
+        # Check if item currently has an active, non-expired deal
+        active_deal = None
+        try:
+            if hasattr(instance, 'deal_of_the_day'):
+                d = instance.deal_of_the_day
+                if d and d.is_active and not d.is_expired():
+                    active_deal = d
+        except Exception:
+            pass
+
+        new_selling_price = validated_data.get('selling_price')
+        new_mrp = validated_data.get('mrp')
+
+        if active_deal and keep_active_deal:
+            # User wants to update the standard/reversion price for when the deal ends,
+            # while keeping the promotional price in effect in the inventory & POS right now!
+            deal_changed = False
+            if new_selling_price is not None and new_selling_price != active_deal.original_selling_price:
+                active_deal.original_selling_price = new_selling_price
+                deal_changed = True
+            if new_mrp is not None and new_mrp != active_deal.original_mrp:
+                active_deal.original_mrp = new_mrp
+                deal_changed = True
+            if deal_changed:
+                active_deal.save(update_fields=['original_selling_price', 'original_mrp', 'updated_at'])
+
+            # Preserve promotional price in the inventory table during the active deal
+            if 'selling_price' in validated_data:
+                validated_data['selling_price'] = active_deal.deal_selling_price
+            if 'mrp' in validated_data and active_deal.deal_mrp:
+                validated_data['mrp'] = active_deal.deal_mrp
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

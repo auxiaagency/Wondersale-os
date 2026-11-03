@@ -3786,6 +3786,67 @@ export async function deleteDealOfTheDay(dealId) {
   return true;
 }
 
+// SHOP BY CATEGORY SECTION MANAGEMENT
+export async function fetchShopByCategoryCards() {
+  const res = await fetch(`/api/website/admin/shop-by-category/`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to fetch shop by category cards'));
+  }
+  return res.json();
+}
+
+export async function createShopByCategoryCard(cardData) {
+  const res = await fetch(`/api/website/admin/shop-by-category/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(cardData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to create shop by category card'));
+  }
+  return res.json();
+}
+
+export async function updateShopByCategoryCard(cardId, cardData) {
+  const res = await fetch(`/api/website/admin/shop-by-category/${cardId}/`, {
+    method: 'PATCH',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(cardData),
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to update shop by category card'));
+  }
+  return res.json();
+}
+
+export async function deleteShopByCategoryCard(cardId) {
+  const res = await fetch(`/api/website/admin/shop-by-category/${cardId}/`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(await parseApiError(res, 'Failed to delete shop by category card'));
+  }
+  return true;
+}
+
+export async function uploadShopByCategoryImage(file) {
+  const fd = new FormData();
+  fd.append('image', file);
+  const res = await fetch('/api/website/admin/shop-by-category/upload/', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: fd,
+  });
+  if (!res.ok) {
+    throw new Error(await parseApiError(res, 'Failed to upload category card image'));
+  }
+  return res.json();
+}
+
+
 
 
 

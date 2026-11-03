@@ -70,7 +70,12 @@ class ProductListView(APIView):
     permission_classes = []
 
     def get(self, request):
-        queryset = Item.objects.filter(is_listed_on_website=True).prefetch_related(
+        queryset = Item.objects.filter(
+            is_listed_on_website=True,
+            weight__isnull=False,
+            weight__gt=Decimal('0.00'),
+            images__isnull=False
+        ).prefetch_related(
             'images',
             'subcategories',
             'subcategories__category'
@@ -129,25 +134,125 @@ class ProductListView(APIView):
 class ProductDetailView(APIView):
     """
     Public endpoint for a single product by UID or primary ID.
+    Strictly enforces that product must have images and valid weight to be accessible.
     """
     authentication_classes = []
     permission_classes = []
 
     def get(self, request, identifier):
+        base_qs = Item.objects.filter(
+            is_listed_on_website=True,
+            weight__isnull=False,
+            weight__gt=Decimal('0.00'),
+            images__isnull=False
+        ).distinct()
+
         item = None
         if identifier.isdigit():
-            item = Item.objects.filter(id=int(identifier), is_listed_on_website=True).first()
+            item = base_qs.filter(id=int(identifier)).first()
         if not item:
-            item = Item.objects.filter(uid__iexact=identifier, is_listed_on_website=True).first()
+            item = base_qs.filter(uid__iexact=identifier).first()
 
         if not item:
             return Response(
-                {'detail': 'Product not found or not listed on website.'},
+                {'detail': 'Product not found or not eligible for e-commerce website (requires image and weight).'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
         serializer = PublicItemSerializer(item, context={'request': request})
         return Response(serializer.data)
+
+
+class BestSellerProductsPublicListView(APIView):
+    """
+    Public storefront API returning the top best-selling products calculated from the last 30 days.
+    Leverages the dashboard sales analytics logic (units sold / revenue over rolling 30 days).
+    Limits to at most 25 products.
+    Strictly enforces e-commerce rule: must have at least one image and valid weight (> 0).
+    If a top selling item lacks an image or weight, it is skipped and the next best seller is selected.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        now = timezone.now()
+        start_30d = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+        end_today = now.strftime('%Y-%m-%d')
+
+        # Base eligible items queryset (strictly complete products only)
+        eligible_items_qs = Item.objects.filter(
+            is_listed_on_website=True,
+            weight__isnull=False,
+            weight__gt=Decimal('0.00'),
+            images__isnull=False
+        ).prefetch_related(
+            'images',
+            'subcategories',
+            'subcategories__category'
+        ).select_related('store').distinct()
+
+        eligible_map = {item.id: item for item in eligible_items_qs}
+
+        if not eligible_map:
+            return Response([])
+
+        from inventory.dashboard_services import get_dashboard_analytics
+
+        # 1. Fetch rolling last 30 days dashboard sales analytics
+        analytics = get_dashboard_analytics(start_date=start_30d, end_date=end_today)
+        best_selling_data = analytics.get('best_selling_products', [])
+
+        ordered_items = []
+        seen_ids = set()
+
+        # Iterate through best selling ranking. Incomplete products are automatically skipped.
+        for record in best_selling_data:
+            item_id = record.get('item_id')
+            if item_id and item_id in eligible_map and item_id not in seen_ids:
+                ordered_items.append(eligible_map[item_id])
+                seen_ids.add(item_id)
+                if len(ordered_items) >= 25:
+                    break
+
+        # 2. If rolling 30 days has fewer than 25 items, fill remaining slots with highest stock/most popular listed eligible items
+        if len(ordered_items) < 25:
+            for item in eligible_items_qs.order_by('-quantity', '-created_at'):
+                if item.id not in seen_ids:
+                    ordered_items.append(item)
+                    seen_ids.add(item.id)
+                    if len(ordered_items) >= 25:
+                        break
+
+        serializer = PublicItemSerializer(ordered_items[:25], many=True, context={'request': request})
+        return Response(serializer.data)
+
+
+class NewArrivalProductsPublicListView(APIView):
+    """
+    Public storefront API returning up to 25 recently added products (ordered by created_at DESC).
+    Strictly enforces e-commerce rule: must have at least one image and valid weight (> 0).
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        from django.db.models.functions import Coalesce
+        queryset = Item.objects.filter(
+            is_listed_on_website=True,
+            weight__isnull=False,
+            weight__gt=Decimal('0.00'),
+            images__isnull=False
+        ).prefetch_related(
+            'images',
+            'subcategories',
+            'subcategories__category'
+        ).select_related('store').annotate(
+            effective_arrival_date=Coalesce('listed_on_website_at', 'created_at')
+        ).order_by('-effective_arrival_date', '-id').distinct()[:25]
+
+        serializer = PublicItemSerializer(queryset, many=True, context={'request': request})
+        return Response(serializer.data)
+
 
 
 class CategoryListView(APIView):
@@ -161,7 +266,10 @@ class CategoryListView(APIView):
         online_only = request.query_params.get('online_only', 'false').lower() in ('true', '1')
         if online_only:
             categories = Category.objects.filter(
-                subcategories__items__is_listed_on_website=True
+                subcategories__items__is_listed_on_website=True,
+                subcategories__items__weight__isnull=False,
+                subcategories__items__weight__gt=Decimal('0.00'),
+                subcategories__items__images__isnull=False
             ).distinct().prefetch_related('subcategories')
         else:
             categories = Category.objects.all().prefetch_related('subcategories')
@@ -615,6 +723,157 @@ class HeroSlideImageUploadView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class ShopByCategoryCardPublicListView(APIView):
+    """
+    Public API returning active 'Shop By Category' cards for storefront home page.
+    Automatically seeds default cards on first call if none exist.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        from .models import ShopByCategoryCard
+        from .serializers import ShopByCategoryCardSerializer
+
+        # Auto-seed initial 4 defaults if table is empty
+        if not ShopByCategoryCard.objects.exists():
+            default_cards = [
+                {
+                    "title": "Cookware & Dining",
+                    "subtitle": "Non-stick, Pots & Bowls",
+                    "badge": "Up to 60% Off",
+                    "link_url": "/category/kitchen-appliances",
+                    "image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuA9w2vUJKQkRNV1FUIkncrCapIM725jmL-G4rr-BgEIijGnUcOrUwaQD6BVKw5Wwm79xdLoqRaszlezpJ6H077FxVzakFF0vorXx2dP9LcnV_XTIB28W8uOjt7leYjhJLvPd3y6r6ILeVDWkiI1B_g4xcK5YTPfatiZw5jxpqIryrhTFz9qAfvAcSJDv6gx0qXKWohElzV1EN6zRF-LyYxA5jqnpUqI-QVPYQd3rEoKUgYoKnMiYvcR1Q",
+                    "display_order": 1,
+                    "is_active": True,
+                },
+                {
+                    "title": "Smart Gadgets",
+                    "subtitle": "Wearables & Audio",
+                    "badge": "Min 40% Off",
+                    "link_url": "/category/electronics-audio",
+                    "image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuDmYpYYgOcAqx8zW2hmXeF5lgJgFB03SDzmr2JqIRTMHSAiVxdL6sT3FHPc0SksAwcHJpP7gU0ZIE0sIMBL09f5SMbTusBEsD9UiZ_RaP_5P011JBecJ5kiCwZhnDbXVDWDjNHAtCn89uJPFG_MLAisZbg6Mlwx1xvQ2lcL6SSVSFwjk6AQlMHafVHoReK5vHXJG1fBOmocUh8qif0vg8W-B4DNRIP5dYNbvzEfKB5QpWc2mjFGViG81g",
+                    "display_order": 2,
+                    "is_active": True,
+                },
+                {
+                    "title": "Kids & Toys",
+                    "subtitle": "STEM & Board Games",
+                    "badge": "Under ₹499",
+                    "link_url": "/category/toys-games",
+                    "image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuD37ApjZxEPIH29J5O9A8EdaspEO4NB2MUkfTComCU8qol45FjqL0wKJQpVbJlIH-Ao1xen1ITW4rTgqN8enPGkxEj0C7jcuEenBanwxcoC5zwk7AUBvNQuCt8TwpV1TYPtnG5uaiZDnDyU7lfbFFoR4QKufOFTnE9-h2rwMZrDZivD0_3TXsBk1K7xGV3GANp_7XBbPBMEdK5nHFpScPwuwfLmT7lwXbP5a2Fu_nnKMzVCvgsRRJO87A",
+                    "display_order": 3,
+                    "is_active": True,
+                },
+                {
+                    "title": "Eyewear & Style",
+                    "subtitle": "UV400 Polarized",
+                    "badge": "Buy 1 Get 1",
+                    "link_url": "/category/sunglasses-accessories",
+                    "image_url": "https://lh3.googleusercontent.com/aida-public/AB6AXuCN1i80jVIbv2fEfKtFphirGBNs7n1uTfhjkqSC55XNFR0q_EHw_Lcgemw4XRLroqdEzkHa5yVjBULXzb36Npq3ES7DbpDDjtx4LUqx4bEFvmBLIOgs_rcceU4dmH5xuuec1JEAPGiCm0IMPl0oroYkEVn4wgJNY2bcc7i5X1PO-p7lC1pQgLCGm9I-ZvVdxvDU4dKBQ9uPVTg-0weRw3nrORWDNlDCdpi8SDYR95X29Wys8m44hxsEVQ",
+                    "display_order": 4,
+                    "is_active": True,
+                },
+            ]
+            for item in default_cards:
+                ShopByCategoryCard.objects.create(**item)
+
+        cards = ShopByCategoryCard.objects.filter(is_active=True).order_by('display_order', 'id')
+        serializer = ShopByCategoryCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+
+class ShopByCategoryAdminListCreateView(APIView):
+    """
+    OS Admin API to list all Shop By Category cards and create new ones.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        from .models import ShopByCategoryCard
+        from .serializers import ShopByCategoryCardSerializer
+        cards = ShopByCategoryCard.objects.all().order_by('display_order', 'id')
+        serializer = ShopByCategoryCardSerializer(cards, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        from .serializers import ShopByCategoryCardSerializer
+        serializer = ShopByCategoryCardSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ShopByCategoryAdminDetailView(APIView):
+    """
+    OS Admin API to retrieve, edit, reorder, or delete a Shop By Category card.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get_object(self, card_id):
+        from .models import ShopByCategoryCard
+        return get_object_or_404(ShopByCategoryCard, id=card_id)
+
+    def get(self, request, card_id):
+        from .serializers import ShopByCategoryCardSerializer
+        card = self.get_object(card_id)
+        serializer = ShopByCategoryCardSerializer(card)
+        return Response(serializer.data)
+
+    def patch(self, request, card_id):
+        from .serializers import ShopByCategoryCardSerializer
+        card = self.get_object(card_id)
+        serializer = ShopByCategoryCardSerializer(card, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request, card_id):
+        from .serializers import ShopByCategoryCardSerializer
+        card = self.get_object(card_id)
+        serializer = ShopByCategoryCardSerializer(card, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, card_id):
+        card = self.get_object(card_id)
+        card.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ShopByCategoryImageUploadView(APIView):
+    """
+    Upload an image for 'Shop By Category' card, converting it to WebP format.
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        uploaded_file = request.FILES.get('image') or request.FILES.get('file')
+        if not uploaded_file:
+            return Response({'error': 'No image file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from inventory.services import convert_image_to_webp
+        import uuid
+        from django.core.files.storage import default_storage
+
+        try:
+            webp_file = convert_image_to_webp(uploaded_file)
+            filename = f"shop_by_category/{uuid.uuid4().hex[:12]}.webp"
+            saved_path = default_storage.save(filename, webp_file)
+            full_url = request.build_absolute_uri(default_storage.url(saved_path))
+            return Response({'image_url': full_url, 'path': saved_path})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 def sync_expired_deals():
     """
     Checks all active deals whose ends_at has elapsed, marks them inactive,
@@ -640,6 +899,7 @@ def sync_expired_deals():
 class DealOfTheDayPublicListView(APIView):
     """
     Public storefront API returning active Deals of the Day (and auto-expiring stale ones).
+    Only includes items that have an image and a valid weight (> 0).
     """
     authentication_classes = []
     permission_classes = []
@@ -651,8 +911,11 @@ class DealOfTheDayPublicListView(APIView):
 
         deals = DealOfTheDay.objects.filter(
             is_active=True,
-            item__is_listed_on_website=True
-        ).select_related('item').prefetch_related('item__images').order_by('-created_at')
+            item__is_listed_on_website=True,
+            item__weight__isnull=False,
+            item__weight__gt=Decimal('0.00'),
+            item__images__isnull=False
+        ).select_related('item').prefetch_related('item__images').order_by('-created_at').distinct()
 
         serializer = DealOfTheDaySerializer(deals, many=True, context={'request': request})
         return Response(serializer.data)
@@ -662,9 +925,11 @@ class DealOfTheDayAdminListCreateView(APIView):
     """
     OS Admin API to list all deals and create new deals of the day.
     When a deal is created:
-    - Stores original_selling_price and original_mrp from the current inventory Item.
-    - Updates the Item's selling_price and mrp in the inventory database immediately.
-    - Calculates the discount percentage automatically based on deal_mrp and deal_selling_price.
+    - Verifies product completeness: must have at least one image and valid weight (> 0).
+    - If incomplete, creation is rejected with an explanatory message.
+    - Stores original_selling_price and original_mrp from current inventory Item.
+    - Updates Item's selling_price and mrp in inventory immediately.
+    - Calculates discount percentage automatically.
     """
     authentication_classes = []
     permission_classes = []
@@ -687,9 +952,29 @@ class DealOfTheDayAdminListCreateView(APIView):
             return Response({'error': 'item (item_id) is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            item = Item.objects.get(id=item_id)
+            item = Item.objects.prefetch_related('images').get(id=item_id)
         except Item.DoesNotExist:
             return Response({'error': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # STRICT VALIDATION: Must have image and weight to be added to deals / e-com site
+        has_image = item.images.exists()
+        has_weight = item.weight is not None and item.weight > Decimal('0.00')
+
+        if not has_image or not has_weight:
+            missing_parts = []
+            if not has_image:
+                missing_parts.append('at least one product image')
+            if not has_weight:
+                missing_parts.append('product weight in grams (> 0)')
+            missing_desc = ' and '.join(missing_parts)
+            return Response(
+                {
+                    'error': f"Cannot add this product to Deals of the Day: Incomplete product. It is missing {missing_desc}. Only products with an image and weight can be put on the e-commerce site.",
+                    'is_incomplete': True,
+                    'missing_requirements': ['image'] if not has_image else [] + (['weight'] if not has_weight else [])
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             deal_selling_price = Decimal(str(request.data.get('deal_selling_price')))

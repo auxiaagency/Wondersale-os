@@ -61,6 +61,7 @@ import {
   Edit3,
   Link as LinkIcon,
   Upload,
+  LayoutGrid as Grid,
 } from 'lucide-react';
 import ImageCropModal from './ImageCropModal';
 import {
@@ -80,6 +81,11 @@ import {
   createDealOfTheDay,
   updateDealOfTheDay,
   deleteDealOfTheDay,
+  fetchShopByCategoryCards,
+  createShopByCategoryCard,
+  updateShopByCategoryCard,
+  deleteShopByCategoryCard,
+  uploadShopByCategoryImage,
 } from '../api';
 
 
@@ -447,6 +453,8 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
   const [savingDeal, setSavingDeal] = useState(false);
   const [catalogItemsForDeals, setCatalogItemsForDeals] = useState([]);
   const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [isSearchingInventory, setIsSearchingInventory] = useState(false);
+  const [selectedProductObj, setSelectedProductObj] = useState(null);
 
   const loadDeals = useCallback(async () => {
     try {
@@ -461,15 +469,31 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
     }
   }, []);
 
-  const loadCatalogForDeals = useCallback(async () => {
+  const searchInventoryForDeals = useCallback(async (query = '') => {
     try {
-      const res = await fetchItems({ page_size: 200 });
+      setIsSearchingInventory(true);
+      const res = await fetchItems({
+        search: query.trim(),
+        page_size: 50,
+      });
       const list = Array.isArray(res) ? res : res.results || [];
       setCatalogItemsForDeals(list);
     } catch (err) {
-      console.error('Failed to load catalog items for deal picker:', err);
+      console.error('Failed to search inventory items for deal picker:', err);
+    } finally {
+      setIsSearchingInventory(false);
     }
   }, []);
+
+  // Debounced search when typing into the product search bar
+  useEffect(() => {
+    if (!editingDeal || editingDeal.id) return;
+    const timeout = setTimeout(() => {
+      searchInventoryForDeals(itemSearchQuery);
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [itemSearchQuery, editingDeal, searchInventoryForDeals]);
+
 
   const handleSaveDeal = async (formData) => {
     try {
@@ -519,9 +543,118 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
     }
   };
 
+  // Shop By Category State
+  const [shopCategoryCards, setShopCategoryCards] = useState([]);
+  const [loadingShopCategoryCards, setLoadingShopCategoryCards] = useState(false);
+  const [editingShopCategoryCard, setEditingShopCategoryCard] = useState(null);
+  const [shopCategorySuccessMsg, setShopCategorySuccessMsg] = useState('');
+  const [savingShopCategoryCard, setSavingShopCategoryCard] = useState(false);
+  const [uploadingShopCategoryImg, setUploadingShopCategoryImg] = useState(false);
+  const [draggedCardIdx, setDraggedCardIdx] = useState(null);
+  const [dragOverCardIdx, setDragOverCardIdx] = useState(null);
+
+  const loadShopCategoryCards = useCallback(async () => {
+    try {
+      setLoadingShopCategoryCards(true);
+      const data = await fetchShopByCategoryCards();
+      const list = Array.isArray(data) ? data : data.results || [];
+      setShopCategoryCards(list);
+    } catch (err) {
+      console.error('Failed to load shop by category cards:', err);
+    } finally {
+      setLoadingShopCategoryCards(false);
+    }
+  }, []);
+
+  const handleSaveShopCategoryCard = async (formData) => {
+    try {
+      setSavingShopCategoryCard(true);
+      if (formData.id) {
+        const updated = await updateShopByCategoryCard(formData.id, formData);
+        setShopCategoryCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        setShopCategorySuccessMsg('Category card updated successfully!');
+      } else {
+        const created = await createShopByCategoryCard({
+          ...formData,
+          display_order: shopCategoryCards.length + 1,
+        });
+        setShopCategoryCards((prev) => [...prev, created]);
+        setShopCategorySuccessMsg('New category card added to storefront!');
+      }
+      setEditingShopCategoryCard(null);
+      setTimeout(() => setShopCategorySuccessMsg(''), 3000);
+    } catch (err) {
+      alert('Failed to save category card: ' + (err.message || 'Server error'));
+    } finally {
+      setSavingShopCategoryCard(false);
+    }
+  };
+
+  const handleDeleteShopCategoryCard = async (cardId) => {
+    if (!window.confirm('Are you sure you want to remove this category card from the storefront?')) return;
+    try {
+      await deleteShopByCategoryCard(cardId);
+      setShopCategoryCards((prev) => prev.filter((c) => c.id !== cardId));
+      setShopCategorySuccessMsg('Category card removed.');
+      setTimeout(() => setShopCategorySuccessMsg(''), 3000);
+    } catch (err) {
+      alert('Failed to delete category card: ' + (err.message || 'Server error'));
+    }
+  };
+
+  const handleToggleShopCategoryActive = async (card) => {
+    try {
+      const nextState = !card.is_active;
+      const updated = await updateShopByCategoryCard(card.id, { is_active: nextState });
+      setShopCategoryCards((prev) => prev.map((c) => (c.id === card.id ? updated : c)));
+    } catch (err) {
+      alert('Failed to update status: ' + (err.message || 'Server error'));
+    }
+  };
+
+  const handleShopCategoryDrop = async (e, dropIdx) => {
+    e.preventDefault();
+    if (draggedCardIdx === null || draggedCardIdx === dropIdx) {
+      setDraggedCardIdx(null);
+      setDragOverCardIdx(null);
+      return;
+    }
+    const updated = [...shopCategoryCards];
+    const [moved] = updated.splice(draggedCardIdx, 1);
+    updated.splice(dropIdx, 0, moved);
+    const withOrder = updated.map((c, idx) => ({ ...c, display_order: idx + 1 }));
+    setShopCategoryCards(withOrder);
+    setDraggedCardIdx(null);
+    setDragOverCardIdx(null);
+    try {
+      await Promise.all(withOrder.map((c, idx) => updateShopByCategoryCard(c.id, { display_order: idx + 1 })));
+      setShopCategorySuccessMsg('Display order updated!');
+      setTimeout(() => setShopCategorySuccessMsg(''), 3000);
+    } catch (err) {
+      console.error('Failed to reorder category cards:', err);
+      loadShopCategoryCards();
+    }
+  };
+
+  const handleUploadShopCategoryImg = async (file) => {
+    try {
+      setUploadingShopCategoryImg(true);
+      const res = await uploadShopByCategoryImage(file);
+      if (res && res.image_url) {
+        setEditingShopCategoryCard((prev) => ({ ...prev, image_url: res.image_url }));
+      }
+    } catch (err) {
+      alert('Failed to upload image: ' + (err.message || 'Server error'));
+    } finally {
+      setUploadingShopCategoryImg(false);
+    }
+  };
+
   useEffect(() => {
     loadStats();
-  }, [loadStats]);
+    loadDeals();
+    loadShopCategoryCards();
+  }, [loadStats, loadDeals, loadShopCategoryCards]);
 
   useEffect(() => {
     if (activeTab === 'catalog') {
@@ -534,13 +667,29 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
       loadHeroSlides();
     } else if (activeTab === 'deals') {
       loadDeals();
-      loadCatalogForDeals();
+      searchInventoryForDeals();
+    } else if (activeTab === 'shop_by_category') {
+      loadShopCategoryCards();
     }
-  }, [activeTab, loadItems, loadOrders, loadCategories, loadHeroSlides, loadDeals, loadCatalogForDeals]);
+  }, [activeTab, loadItems, loadOrders, loadCategories, loadHeroSlides, loadDeals, searchInventoryForDeals, loadShopCategoryCards]);
+
 
 
   const handleToggleListing = async (item) => {
     const nextState = !item.is_listed_on_website;
+    // Client-side rule check: Only products with image and weight can be published to website
+    if (nextState) {
+      const hasImage = Boolean(item.primary_image_url || (Array.isArray(item.images) && item.images.length > 0));
+      const hasWeight = item.weight !== null && item.weight !== undefined && Number(item.weight) > 0;
+      if (!hasImage || !hasWeight) {
+        const missing = [];
+        if (!hasImage) missing.push('Product Image');
+        if (!hasWeight) missing.push('Weight in grams');
+        alert(`Cannot publish "${item.name}" to the e-commerce website: Incomplete product.\nMissing: ${missing.join(' and ')}.\nOnly products that have an image and weight can be put on the website.`);
+        return;
+      }
+    }
+
     setTogglingItemId(item.id);
     try {
       await toggleItemWebsiteListing(item.id, nextState);
@@ -967,6 +1116,31 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
             </span>
           )}
         </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('shop_by_category')}
+          className={`btn ${activeTab === 'shop_by_category' ? 'btn-primary' : 'btn-secondary'} btn-sm`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <Grid size={15} />
+          <span>Shop By Category</span>
+          {shopCategoryCards.length > 0 && (
+            <span
+              style={{
+                marginLeft: '4px',
+                padding: '1px 6px',
+                borderRadius: '10px',
+                fontSize: '0.7rem',
+                fontWeight: 800,
+                background: 'rgba(56, 189, 248, 0.2)',
+                color: '#38BDF8',
+              }}
+            >
+              {shopCategoryCards.length}
+            </span>
+          )}
+        </button>
       </div>
 
 
@@ -1126,18 +1300,38 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                             ₹{Number(item.mrp || item.selling_price).toFixed(2)}
                           </td>
                           <td style={{ padding: '12px 18px' }}>
-                            <span
-                              style={{
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                background: (item.quantity || 0) > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                color: (item.quantity || 0) > 0 ? '#10B981' : '#EF4444',
-                              }}
-                            >
-                              {item.quantity} in stock
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <span
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  background: (item.quantity || 0) > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                  color: (item.quantity || 0) > 0 ? '#10B981' : '#EF4444',
+                                  alignSelf: 'flex-start',
+                                }}
+                              >
+                                {item.quantity} in stock
+                              </span>
+                              {(!Boolean(item.primary_image_url || (Array.isArray(item.images) && item.images.length > 0)) || item.weight === null || item.weight === undefined || Number(item.weight) <= 0) && (
+                                <span
+                                  style={{
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.66rem',
+                                    fontWeight: 700,
+                                    background: 'rgba(245, 158, 11, 0.14)',
+                                    color: '#F59E0B',
+                                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                                    alignSelf: 'flex-start',
+                                  }}
+                                  title={`Missing: ${[!Boolean(item.primary_image_url || (Array.isArray(item.images) && item.images.length > 0)) && 'Image', (item.weight === null || item.weight === undefined || Number(item.weight) <= 0) && 'Weight'].filter(Boolean).join(', ')}`}
+                                >
+                                  Incomplete for E-com
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td style={{ padding: '12px 18px', textAlign: 'right' }}>
                             <button
@@ -2739,26 +2933,50 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                           </td>
 
                           <td style={{ padding: '14px 18px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleDealActive(deal)}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '4px 10px',
-                                borderRadius: '12px',
-                                fontSize: '0.75rem',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                border: 'none',
-                                background: deal.is_active && !isExpired ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-                                color: deal.is_active && !isExpired ? '#10B981' : 'var(--text-muted)',
-                              }}
-                            >
-                              {deal.is_active && !isExpired ? <Eye size={12} /> : <EyeOff size={12} />}
-                              <span>{deal.is_active && !isExpired ? 'Active' : 'Inactive'}</span>
-                            </button>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDealActive(deal)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  border: 'none',
+                                  background: deal.is_active && !isExpired ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                                  color: deal.is_active && !isExpired ? '#10B981' : 'var(--text-muted)',
+                                  alignSelf: 'flex-start',
+                                }}
+                              >
+                                {deal.is_active && !isExpired ? <Eye size={12} /> : <EyeOff size={12} />}
+                                <span>{deal.is_active && !isExpired ? 'Active' : 'Inactive'}</span>
+                              </button>
+
+                              {deal.is_complete === false && (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    background: 'rgba(239, 68, 68, 0.18)',
+                                    color: '#EF4444',
+                                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                                    alignSelf: 'flex-start',
+                                  }}
+                                  title={`Missing: ${(deal.missing_requirements || ['image', 'weight']).join(' and ')}. Only complete products appear on e-com website.`}
+                                >
+                                  Incomplete
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           <td style={{ padding: '14px 18px', textAlign: 'right' }}>
@@ -2866,6 +3084,20 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                       alert('Please select an inventory product for this deal.');
                       return;
                     }
+
+                    // Check completeness rule: must have image and weight
+                    if (selectedProductObj) {
+                      const hasImg = Boolean(selectedProductObj.primary_image_url || (Array.isArray(selectedProductObj.images) && selectedProductObj.images.length > 0));
+                      const hasWt = selectedProductObj.weight !== null && selectedProductObj.weight !== undefined && Number(selectedProductObj.weight) > 0;
+                      if (!hasImg || !hasWt) {
+                        const missing = [];
+                        if (!hasImg) missing.push('Product Image');
+                        if (!hasWt) missing.push('Weight in grams');
+                        alert(`Cannot add "${selectedProductObj.name}" to Deals of the Day: Incomplete product.\nMissing: ${missing.join(' and ')}.\nOnly products with an image and weight can be put on the e-commerce website.`);
+                        return;
+                      }
+                    }
+
                     if (Number(editingDeal.deal_selling_price) >= Number(editingDeal.deal_mrp)) {
                       if (!window.confirm('Deal Selling Price is equal to or greater than MRP. Continue anyway?')) {
                         return;
@@ -2877,96 +3109,244 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                 >
                   {/* Product Picker */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '8px' }}>
                       Choose Product from Inventory *
                     </label>
 
                     {editingDeal.id ? (
                       <div
                         style={{
-                          padding: '12px',
-                          borderRadius: '8px',
-                          background: '#0B101B',
-                          border: '1px solid #2A364E',
+                          padding: '14px 16px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(15, 23, 42, 0.8) 100%)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '10px',
+                          gap: '12px',
                         }}
                       >
-                        <Package size={20} color="#38BDF8" />
-                        <div>
-                          <div style={{ fontWeight: 700, color: '#FFFFFF' }}>{editingDeal.item_name}</div>
-                          <div style={{ fontSize: '0.76rem', color: '#94A3B8' }}>
-                            UID: {editingDeal.item_uid} • Normal Price: ₹{Number(editingDeal.original_selling_price).toFixed(2)} (MRP: ₹{Number(editingDeal.original_mrp || editingDeal.original_selling_price).toFixed(2)})
+                        <div
+                          style={{
+                            width: '42px',
+                            height: '42px',
+                            borderRadius: '8px',
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            color: '#38BDF8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Package size={22} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 800, color: '#FFFFFF', fontSize: '0.95rem' }}>{editingDeal.item_name}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#94A3B8', marginTop: '2px' }}>
+                            UID: <span style={{ color: '#E2E8F0', fontFamily: 'monospace' }}>{editingDeal.item_uid}</span> • Normal Price: ₹{Number(editingDeal.original_selling_price).toFixed(2)} (MRP: ₹{Number(editingDeal.original_mrp || editingDeal.original_selling_price).toFixed(2)})
                           </div>
                         </div>
                       </div>
-                    ) : (
-                      <div>
-                        <input
-                          type="text"
-                          placeholder="Search product by name, UID, or barcode..."
-                          value={itemSearchQuery}
-                          onChange={(e) => setItemSearchQuery(e.target.value)}
-                          style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            background: '#0B101B',
-                            border: '1px solid #2A364E',
-                            borderRadius: '8px',
-                            color: '#FFFFFF',
-                            fontSize: '0.88rem',
-                            outline: 'none',
-                            marginBottom: '6px',
-                            boxSizing: 'border-box',
+                    ) : selectedProductObj ? (
+                      <div
+                        style={{
+                          padding: '14px 16px',
+                          borderRadius: '10px',
+                          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '44px',
+                              height: '44px',
+                              borderRadius: '8px',
+                              background: '#1E293B',
+                              border: '1px solid var(--border-subtle)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {selectedProductObj.primary_image_url || selectedProductObj.images?.[0]?.image ? (
+                              <img
+                                src={selectedProductObj.primary_image_url || selectedProductObj.images?.[0]?.image}
+                                alt=""
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <Package size={22} color="#10B981" />
+                            )}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 800, color: '#FFFFFF', fontSize: '0.92rem' }}>
+                              {selectedProductObj.name}
+                            </div>
+                            <div style={{ fontSize: '0.76rem', color: '#94A3B8', marginTop: '2px' }}>
+                              UID: <span style={{ color: '#E2E8F0', fontFamily: 'monospace' }}>{selectedProductObj.uid}</span> • Stock: <span style={{ color: '#10B981', fontWeight: 700 }}>{selectedProductObj.quantity || 0} in stock</span> • Current Sell: ₹{selectedProductObj.selling_price} | MRP: ₹{selectedProductObj.mrp || selectedProductObj.selling_price}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProductObj(null);
+                            setEditingDeal({ ...editingDeal, item_id: '', deal_selling_price: '', deal_mrp: '' });
                           }}
-                        />
-                        <select
-                          required
-                          value={editingDeal.item_id || ''}
-                          onChange={(e) => {
-                            const selectedId = Number(e.target.value);
-                            const found = catalogItemsForDeals.find((i) => i.id === selectedId);
-                            if (found) {
-                              setEditingDeal({
-                                ...editingDeal,
-                                item_id: found.id,
-                                deal_selling_price: found.selling_price || '',
-                                deal_mrp: found.mrp || found.selling_price || '',
-                              });
-                            } else {
-                              setEditingDeal({ ...editingDeal, item_id: selectedId });
-                            }
-                          }}
                           style={{
-                            width: '100%',
-                            padding: '10px 12px',
-                            background: '#0B101B',
-                            border: '1px solid #2A364E',
-                            borderRadius: '8px',
-                            color: '#FFFFFF',
-                            fontSize: '0.88rem',
-                            outline: 'none',
-                            boxSizing: 'border-box',
+                            padding: '6px 12px',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: '6px',
+                            color: '#CBD5E1',
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
                           }}
                         >
-                          <option value="">-- Select an Item from Catalog ({catalogItemsForDeals.length} available) --</option>
-                          {catalogItemsForDeals
-                            .filter((item) => {
-                              if (!itemSearchQuery) return true;
-                              const q = itemSearchQuery.toLowerCase();
+                          Change Product
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ position: 'relative' }}>
+                        <div style={{ position: 'relative' }}>
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Type to search any product across entire inventory (Name, UID, or Barcode)..."
+                            value={itemSearchQuery}
+                            onChange={(e) => setItemSearchQuery(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '12px 14px 12px 38px',
+                              background: '#0B101B',
+                              border: '1px solid #38BDF8',
+                              borderRadius: '8px',
+                              color: '#FFFFFF',
+                              fontSize: '0.9rem',
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                              boxShadow: '0 0 0 2px rgba(56, 189, 248, 0.2)',
+                            }}
+                          />
+                          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#38BDF8' }}>
+                            <Search size={16} />
+                          </div>
+                          {isSearchingInventory && (
+                            <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }}>
+                              <RefreshCw size={15} className="spin" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Search Results Dropdown List */}
+                        <div
+                          style={{
+                            marginTop: '8px',
+                            maxHeight: '220px',
+                            overflowY: 'auto',
+                            background: '#0B101B',
+                            border: '1px solid #2A364E',
+                            borderRadius: '8px',
+                            padding: '4px',
+                            boxShadow: '0 12px 28px rgba(0,0,0,0.5)',
+                          }}
+                        >
+                          {isSearchingInventory && catalogItemsForDeals.length === 0 ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '0.84rem' }}>
+                              Searching store inventory...
+                            </div>
+                          ) : catalogItemsForDeals.length === 0 ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '0.84rem' }}>
+                              {itemSearchQuery ? `No products matching "${itemSearchQuery}"` : 'Type to search products in inventory...'}
+                            </div>
+                          ) : (
+                            catalogItemsForDeals.map((item) => {
+                              const hasImg = Boolean(item.primary_image_url || (Array.isArray(item.images) && item.images.length > 0));
+                              const hasWt = item.weight !== null && item.weight !== undefined && Number(item.weight) > 0;
+                              const isComplete = hasImg && hasWt;
+
                               return (
-                                (item.name || '').toLowerCase().includes(q) ||
-                                (item.uid || '').toLowerCase().includes(q)
+                                <div
+                                  key={item.id}
+                                  onClick={() => {
+                                    if (!isComplete) {
+                                      const missing = [];
+                                      if (!hasImg) missing.push('Product Image');
+                                      if (!hasWt) missing.push('Weight in grams');
+                                      alert(`Cannot select "${item.name}": Incomplete product.\nMissing: ${missing.join(' and ')}.\nOnly products with an image and weight can be put on the e-commerce website.`);
+                                      return;
+                                    }
+                                    setSelectedProductObj(item);
+                                    setEditingDeal({
+                                      ...editingDeal,
+                                      item_id: item.id,
+                                      deal_selling_price: item.selling_price || '',
+                                      deal_mrp: item.mrp || item.selling_price || '',
+                                    });
+                                  }}
+                                  style={{
+                                    padding: '10px 12px',
+                                    borderRadius: '6px',
+                                    cursor: isComplete ? 'pointer' : 'not-allowed',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '10px',
+                                    transition: 'background 0.15s ease',
+                                    borderBottom: '1px solid rgba(255,255,255,0.03)',
+                                    opacity: isComplete ? 1 : 0.65,
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = '#1E293B')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                >
+                                  <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ fontWeight: 700, color: '#FFFFFF', fontSize: '0.88rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {item.name}
+                                      </span>
+                                      {!isComplete && (
+                                        <span
+                                          style={{
+                                            fontSize: '0.64rem',
+                                            fontWeight: 700,
+                                            padding: '1px 5px',
+                                            borderRadius: '4px',
+                                            background: 'rgba(239, 68, 68, 0.2)',
+                                            color: '#EF4444',
+                                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                                          }}
+                                          title={`Missing: ${[!hasImg && 'image', !hasWt && 'weight'].filter(Boolean).join(' and ')}`}
+                                        >
+                                          Incomplete
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: '0.74rem', color: '#94A3B8', marginTop: '2px' }}>
+                                      UID: <span style={{ color: '#E2E8F0', fontFamily: 'monospace' }}>{item.uid}</span> • Weight: {item.weight && Number(item.weight) > 0 ? `${item.weight}g` : <strong style={{ color: '#EF4444' }}>None</strong>} • {item.quantity || 0} in stock
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: 'right', shrink: 0 }}>
+                                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#10B981' }}>
+                                      ₹{Number(item.selling_price).toFixed(2)}
+                                    </div>
+                                    <div style={{ fontSize: '0.74rem', color: '#64748B', textDecoration: 'line-through' }}>
+                                      MRP: ₹{Number(item.mrp || item.selling_price).toFixed(2)}
+                                    </div>
+                                  </div>
+                                </div>
                               );
                             })
-                            .slice(0, 50)
-                            .map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name} (UID: {item.uid}) — Current Sell: ₹{item.selling_price} | MRP: ₹{item.mrp || item.selling_price}
-                              </option>
-                            ))}
-                        </select>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3070,32 +3450,66 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                     );
                   })()}
 
-                  {/* Deal Timing Option: Ends At (Optional Date & Exact Time) */}
+                  {/* Deal Timing Option: Ends At (High-Contrast Clean Date & Time Bar) */}
                   <div
                     style={{
-                      padding: '14px',
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      borderRadius: '10px',
-                      border: '1px solid #2A364E',
+                      padding: '16px 18px',
+                      background: 'linear-gradient(180deg, #162032 0%, #0F172A 100%)',
+                      borderRadius: '12px',
+                      border: '1px solid #334155',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#CBD5E1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Clock size={15} color="#38BDF8" />
-                        <span>Deal Expiry: Exact Date & Time (Optional)</span>
-                      </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div
+                          style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            background: 'rgba(56, 189, 248, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#38BDF8',
+                          }}
+                        >
+                          <Clock size={16} />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#F1F5F9' }}>
+                            Deal Expiry: Date & Exact Time
+                          </span>
+                          <span
+                            style={{
+                              marginLeft: '8px',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              borderRadius: '4px',
+                              color: '#94A3B8',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Optional
+                          </span>
+                        </div>
+                      </div>
+
                       {editingDeal.ends_at && (
                         <button
                           type="button"
                           onClick={() => setEditingDeal({ ...editingDeal, ends_at: null })}
                           style={{
-                            background: 'transparent',
-                            border: 'none',
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
                             color: '#F87171',
                             fontSize: '0.74rem',
                             cursor: 'pointer',
-                            fontWeight: 600,
-                            padding: '2px 6px',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
                           }}
                         >
                           ✕ Clear (Make Indefinite)
@@ -3124,23 +3538,24 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                         }}
                         style={{
                           flex: 1,
-                          padding: '10px 12px',
-                          background: '#0B101B',
-                          border: '1px solid #2A364E',
+                          padding: '11px 14px',
+                          background: '#090D16',
+                          border: '1px solid #38BDF8',
                           borderRadius: '8px',
                           color: '#FFFFFF',
-                          fontSize: '0.88rem',
+                          fontSize: '0.92rem',
+                          fontWeight: 600,
                           outline: 'none',
                           boxSizing: 'border-box',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                          cursor: 'pointer',
                         }}
-                        onFocus={(e) => (e.target.style.borderColor = '#38BDF8')}
-                        onBlur={(e) => (e.target.style.borderColor = '#2A364E')}
                       />
                     </div>
 
                     {/* Quick Preset Buttons */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 600 }}>Quick presets:</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: 700 }}>Quick presets:</span>
                       {[
                         { label: '+6 Hours', hours: 6 },
                         { label: '+12 Hours', hours: 12 },
@@ -3156,33 +3571,46 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                             setEditingDeal({ ...editingDeal, ends_at: target.toISOString() });
                           }}
                           style={{
-                            padding: '3px 8px',
-                            background: 'rgba(56, 189, 248, 0.1)',
-                            border: '1px solid rgba(56, 189, 248, 0.25)',
-                            borderRadius: '5px',
+                            padding: '4px 10px',
+                            background: 'rgba(56, 189, 248, 0.12)',
+                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                            borderRadius: '6px',
                             color: '#38BDF8',
-                            fontSize: '0.72rem',
-                            fontWeight: 600,
+                            fontSize: '0.73rem',
+                            fontWeight: 700,
                             cursor: 'pointer',
+                            transition: 'all 0.15s ease',
                           }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)')}
                         >
                           {preset.label}
                         </button>
                       ))}
                     </div>
 
-                    <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: '#94A3B8', lineHeight: '1.4' }}>
+                    <div
+                      style={{
+                        marginTop: '10px',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        fontSize: '0.75rem',
+                        lineHeight: '1.4',
+                      }}
+                    >
                       {editingDeal.ends_at ? (
-                        <span>
-                          ⏳ Deal will end exactly on <strong style={{ color: '#38BDF8' }}>{new Date(editingDeal.ends_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</strong>. Once this exact minute passes, the deal automatically expires and prices revert back to normal inventory values.
+                        <span style={{ color: '#E2E8F0' }}>
+                          ⏳ Deal will end precisely on <strong style={{ color: '#38BDF8' }}>{new Date(editingDeal.ends_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</strong>. Once this exact minute passes, the deal automatically expires and prices revert back in inventory.
                         </span>
                       ) : (
-                        <span>
-                          ♾️ <strong>No time limit set.</strong> This deal will remain active indefinitely on the website until you manually remove it. When manually removed, prices in inventory immediately revert back to normal.
+                        <span style={{ color: '#94A3B8' }}>
+                          ♾️ <strong style={{ color: '#F1F5F9' }}>No time limit set.</strong> This deal will remain active indefinitely on the website until you manually remove it. When removed, prices in inventory immediately revert back.
                         </span>
                       )}
-                    </p>
+                    </div>
                   </div>
+
 
 
                   {/* Badge text */}
@@ -3267,6 +3695,713 @@ export default function WebsiteManagementView({ currentUser, onBackToLauncher })
                     >
                       <Save size={15} />
                       <span>{savingDeal ? 'Saving...' : 'Save & Sync Inventory'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: SHOP BY CATEGORY SECTION */}
+      {activeTab === 'shop_by_category' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {shopCategorySuccessMsg && (
+            <div
+              style={{
+                padding: '12px 18px',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(56, 189, 248, 0.15)',
+                border: '1px solid #38BDF8',
+                color: '#38BDF8',
+                fontSize: '0.88rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <Check size={18} />
+              <span>{shopCategorySuccessMsg}</span>
+            </div>
+          )}
+
+          {/* Section Header */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: '18px 22px',
+              borderRadius: 'var(--radius-lg)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                  Shop By Category Grid Management
+                </h2>
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    color: '#38BDF8',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                  }}
+                >
+                  Homepage Grid
+                </span>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                Manage the promotional category feature cards on the storefront home page (Title, Subtitle, Promotional Badge, and Image). Drag to reorder!
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={loadShopCategoryCards}
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                title="Refresh cards"
+              >
+                <RefreshCw size={14} className={loadingShopCategoryCards ? 'spin' : ''} />
+                <span>Refresh</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingShopCategoryCard({
+                    title: '',
+                    subtitle: '',
+                    badge: 'Special Offer',
+                    link_url: '/categories',
+                    image_url: '',
+                    category: null,
+                    is_active: true,
+                  });
+                }}
+                className="btn btn-primary btn-sm"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)',
+                  border: 'none',
+                }}
+              >
+                <Plus size={16} />
+                <span>Add Category Card</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cards Grid / Reorder List */}
+          {loadingShopCategoryCards ? (
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <RefreshCw size={26} className="spin" style={{ margin: '0 auto 12px' }} />
+              <p>Loading Shop By Category cards...</p>
+            </div>
+          ) : shopCategoryCards.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px 24px', textAlign: 'center', borderRadius: 'var(--radius-lg)' }}>
+              <div
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '50%',
+                  background: 'rgba(56, 189, 248, 0.1)',
+                  color: '#38BDF8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 14px',
+                }}
+              >
+                <Grid size={28} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--text-primary)' }}>
+                No Category Cards Configured
+              </h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '420px', margin: '0 auto 16px auto' }}>
+                Add promotional category feature cards to display prominently in the 4-column Shop By Category grid on your storefront!
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingShopCategoryCard({
+                    title: '',
+                    subtitle: '',
+                    badge: 'Special Offer',
+                    link_url: '/categories',
+                    image_url: '',
+                    category: null,
+                    is_active: true,
+                  });
+                }}
+                className="btn btn-primary btn-sm"
+              >
+                <Plus size={16} />
+                <span>Create First Card</span>
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '16px',
+              }}
+            >
+              {shopCategoryCards.map((card, idx) => {
+                const isDragging = draggedCardIdx === idx;
+                const isOver = dragOverCardIdx === idx;
+
+                return (
+                  <div
+                    key={card.id}
+                    draggable
+                    onDragStart={() => setDraggedCardIdx(idx)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (dragOverCardIdx !== idx) setDragOverCardIdx(idx);
+                    }}
+                    onDragLeave={() => {
+                      if (dragOverCardIdx === idx) setDragOverCardIdx(null);
+                    }}
+                    onDrop={(e) => handleShopCategoryDrop(e, idx)}
+                    onDragEnd={() => {
+                      setDraggedCardIdx(null);
+                      setDragOverCardIdx(null);
+                    }}
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.75)',
+                      border: isOver ? '2px dashed #38BDF8' : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '14px',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      opacity: isDragging ? 0.35 : 1,
+                      transition: 'all 0.15s ease',
+                      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+                    }}
+                  >
+                    {/* Top Image & Badge Preview */}
+                    <div style={{ position: 'relative', width: '100%', height: '140px', background: '#0F172A', overflow: 'hidden' }}>
+                      {card.image_url ? (
+                        <img
+                          src={card.image_url}
+                          alt={card.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+                          <ImageIcon size={32} />
+                        </div>
+                      )}
+
+                      {/* Promo pill */}
+                      {card.badge && (
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: '8px',
+                            left: '8px',
+                            background: '#680114',
+                            color: '#F6E9C8',
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                          }}
+                        >
+                          {card.badge}
+                        </span>
+                      )}
+
+                      {/* Reorder drag handle indicator */}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          left: '8px',
+                          background: 'rgba(0, 0, 0, 0.65)',
+                          backdropFilter: 'blur(4px)',
+                          color: '#CBD5E1',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'grab',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        title="Drag card to reorder position"
+                      >
+                        <GripVertical size={12} />
+                        <span>#{idx + 1}</span>
+                      </div>
+
+                      {/* Status indicator */}
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: '8px',
+                          right: '8px',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          background: card.is_active ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)',
+                          color: card.is_active ? '#10B981' : '#EF4444',
+                          border: card.is_active ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(239, 68, 68, 0.4)',
+                          backdropFilter: 'blur(4px)',
+                        }}
+                      >
+                        {card.is_active ? 'Active' : 'Hidden'}
+                      </span>
+                    </div>
+
+                    {/* Content Details */}
+                    <div style={{ padding: '14px 16px', flex: 1 }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--text-primary)' }}>
+                        {card.title}
+                      </h3>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 10px 0', minHeight: '1.2rem' }}>
+                        {card.subtitle || 'No subtitle'}
+                      </p>
+
+                      <div style={{ fontSize: '0.74rem', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <LinkIcon size={12} color="#38BDF8" />
+                        <code style={{ color: '#E2E8F0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {card.link_url}
+                        </code>
+                      </div>
+                    </div>
+
+                    {/* Bottom Actions */}
+                    <div
+                      style={{
+                        padding: '10px 16px',
+                        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                        background: 'rgba(0, 0, 0, 0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleToggleShopCategoryActive(card)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: card.is_active ? '#10B981' : 'var(--text-muted)',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                        }}
+                      >
+                        {card.is_active ? <Eye size={14} /> : <EyeOff size={14} />}
+                        <span>{card.is_active ? 'Visible' : 'Hidden'}</span>
+                      </button>
+
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setEditingShopCategoryCard(card)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '4px 8px' }}
+                          title="Edit Card"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteShopCategoryCard(card.id)}
+                          className="btn btn-danger btn-sm"
+                          style={{ padding: '4px 8px' }}
+                          title="Delete Card"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Edit / Create Category Card Modal */}
+          {editingShopCategoryCard && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 1000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(5, 8, 16, 0.85)',
+                backdropFilter: 'blur(8px)',
+                padding: '20px',
+              }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  maxWidth: '620px',
+                  maxHeight: '90vh',
+                  overflowY: 'auto',
+                  borderRadius: '16px',
+                  background: '#131A29',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  padding: '24px',
+                  boxShadow: '0 24px 50px rgba(0, 0, 0, 0.7)',
+                  color: '#F8FAFC',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingBottom: '16px',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    marginBottom: '20px',
+                  }}
+                >
+                  <div>
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
+                      {editingShopCategoryCard.id ? 'Edit Shop By Category Card' : 'Create New Shop By Category Card'}
+                    </h3>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#94A3B8' }}>
+                      Configure the category feature card displayed in the homepage grid.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingShopCategoryCard(null)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#94A3B8',
+                      cursor: 'pointer',
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!editingShopCategoryCard.title) {
+                      alert('Title is required.');
+                      return;
+                    }
+                    if (!editingShopCategoryCard.image_url) {
+                      alert('Please provide or upload a card image.');
+                      return;
+                    }
+                    handleSaveShopCategoryCard(editingShopCategoryCard);
+                  }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+                >
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                        Card Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editingShopCategoryCard.title || ''}
+                        onChange={(e) => setEditingShopCategoryCard({ ...editingShopCategoryCard, title: e.target.value })}
+                        placeholder="e.g. Cookware & Dining"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          background: '#0B101B',
+                          border: '1px solid #2A364E',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '0.88rem',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                        onFocus={(e) => (e.target.style.borderColor = '#38BDF8')}
+                        onBlur={(e) => (e.target.style.borderColor = '#2A364E')}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                        Pill Badge Text
+                      </label>
+                      <input
+                        type="text"
+                        value={editingShopCategoryCard.badge || ''}
+                        onChange={(e) => setEditingShopCategoryCard({ ...editingShopCategoryCard, badge: e.target.value })}
+                        placeholder="e.g. Up to 60% Off / Min 40% Off"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          background: '#0B101B',
+                          border: '1px solid #2A364E',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '0.88rem',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                        onFocus={(e) => (e.target.style.borderColor = '#38BDF8')}
+                        onBlur={(e) => (e.target.style.borderColor = '#2A364E')}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                      Subtitle / Product Highlights
+                    </label>
+                    <input
+                      type="text"
+                      value={editingShopCategoryCard.subtitle || ''}
+                      onChange={(e) => setEditingShopCategoryCard({ ...editingShopCategoryCard, subtitle: e.target.value })}
+                      placeholder="e.g. Non-stick, Pots & Bowls"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: '#0B101B',
+                        border: '1px solid #2A364E',
+                        borderRadius: '8px',
+                        color: '#FFFFFF',
+                        fontSize: '0.88rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                      onFocus={(e) => (e.target.style.borderColor = '#38BDF8')}
+                      onBlur={(e) => (e.target.style.borderColor = '#2A364E')}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                        Link To Category
+                      </label>
+                      <select
+                        value={editingShopCategoryCard.category || ''}
+                        onChange={(e) => {
+                          const catId = e.target.value ? Number(e.target.value) : null;
+                          const found = categories.find((c) => c.id === catId);
+                          setEditingShopCategoryCard({
+                            ...editingShopCategoryCard,
+                            category: catId,
+                            link_url: found ? `/category/${found.slug || found.id}` : editingShopCategoryCard.link_url,
+                            title: editingShopCategoryCard.title || (found ? found.name : ''),
+                          });
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          background: '#0B101B',
+                          border: '1px solid #2A364E',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '0.88rem',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        <option value="">-- Custom Link / None --</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name} ({cat.items_count || 0} items)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                        Target Link URL *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editingShopCategoryCard.link_url || ''}
+                        onChange={(e) => setEditingShopCategoryCard({ ...editingShopCategoryCard, link_url: e.target.value })}
+                        placeholder="e.g. /category/kitchen-appliances"
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          background: '#0B101B',
+                          border: '1px solid #2A364E',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '0.88rem',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Image URL & Upload */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#CBD5E1', marginBottom: '6px' }}>
+                      Category Card Image *
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        required
+                        value={editingShopCategoryCard.image_url || ''}
+                        onChange={(e) => setEditingShopCategoryCard({ ...editingShopCategoryCard, image_url: e.target.value })}
+                        placeholder="https://... or upload below"
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          background: '#0B101B',
+                          border: '1px solid #2A364E',
+                          borderRadius: '8px',
+                          color: '#FFFFFF',
+                          fontSize: '0.88rem',
+                          outline: 'none',
+                        }}
+                      />
+                      <label
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '10px 14px',
+                          background: 'rgba(56, 189, 248, 0.15)',
+                          border: '1px solid rgba(56, 189, 248, 0.3)',
+                          borderRadius: '8px',
+                          color: '#38BDF8',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <Upload size={14} />
+                        <span>{uploadingShopCategoryImg ? 'Uploading...' : 'Upload'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleUploadShopCategoryImg(file);
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Image Preview Box */}
+                    {editingShopCategoryCard.image_url && (
+                      <div
+                        style={{
+                          width: '100%',
+                          height: '120px',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: '#0B101B',
+                        }}
+                      >
+                        <img
+                          src={editingShopCategoryCard.image_url}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: '#E2E8F0' }}>
+                      <input
+                        type="checkbox"
+                        checked={editingShopCategoryCard.is_active}
+                        onChange={(e) => setEditingShopCategoryCard({ ...editingShopCategoryCard, is_active: e.target.checked })}
+                        style={{ accentColor: '#38BDF8', width: '16px', height: '16px' }}
+                      />
+                      <span>Active on storefront home page</span>
+                    </label>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: '10px',
+                      marginTop: '8px',
+                      paddingTop: '16px',
+                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setEditingShopCategoryCard(null)}
+                      style={{
+                        padding: '8px 16px',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        color: '#CBD5E1',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingShopCategoryCard}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 18px',
+                        background: '#0284C7',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        cursor: savingShopCategoryCard ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 12px rgba(2, 132, 199, 0.4)',
+                      }}
+                    >
+                      <Save size={15} />
+                      <span>{savingShopCategoryCard ? 'Saving...' : 'Save Category Card'}</span>
                     </button>
                   </div>
                 </form>

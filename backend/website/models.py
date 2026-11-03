@@ -270,3 +270,48 @@ class DealOfTheDay(models.Model):
         if updated:
             item.save(update_fields=['selling_price', 'mrp'])
 
+
+class ShopByCategoryCard(models.Model):
+    """
+    Cards featured in the 'Shop By Category' grid on the e-commerce home page.
+    Fully configurable from Wondersale OS Website Management:
+    - title: Main bold title (e.g., 'Cookware & Dining')
+    - subtitle: Short subtitle description (e.g., 'Non-stick, Pots & Bowls')
+    - badge: Top promotional pill tag (e.g., 'Up to 60% Off', 'Min 40% Off')
+    - image_url: Image URL for the category banner card
+    - category: Optional foreign key to inventory Category
+    - link_url: Target URL on the storefront (e.g., '/category/kitchen-appliances' or '/category/1')
+    - display_order: Sorting sequence on storefront grid
+    - is_active: Whether card is rendered on storefront
+    """
+    title = models.CharField(max_length=200, help_text="Category card main title (e.g. Cookware & Dining)")
+    subtitle = models.CharField(max_length=255, blank=True, default="", help_text="Subtitle or subtext description")
+    badge = models.CharField(max_length=100, blank=True, default="Special Offer", help_text="Promo pill badge text (e.g. Up to 60% Off)")
+    image_url = models.TextField(help_text="URL or path to category feature image")
+    category = models.ForeignKey(
+        'inventory.Category',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shop_by_category_cards',
+        help_text="Linked inventory category"
+    )
+    link_url = models.CharField(
+        max_length=255,
+        default="/categories",
+        help_text="Target URL or slug path when clicked"
+    )
+    display_order = models.PositiveIntegerField(default=0, help_text="Display order sequence (lower comes first)")
+    is_active = models.BooleanField(default=True, help_text="Whether this category card is active and visible")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        verbose_name = 'Shop By Category Card'
+        verbose_name_plural = 'Shop By Category Cards'
+
+    def __str__(self):
+        return f"ShopByCategory #{self.display_order}: {self.title} ({'Active' if self.is_active else 'Hidden'})"
+
+

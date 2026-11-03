@@ -251,7 +251,7 @@ export default function TimelineRangeSelector({
       setIsAllTime(false);
       if (value.unit) setActiveUnit(value.unit);
       if (value.count) setActiveCount(value.count);
-      if (value.startDate && value.endDate && value.count > 1) {
+      if (value.startDate && value.endDate) {
         setCustomStartDate(value.startDate);
         setCustomEndDate(value.endDate);
       } else {
@@ -296,6 +296,15 @@ export default function TimelineRangeSelector({
       const s = parseDateYMD(customStartDate);
       const e = parseDateYMD(customEndDate);
       const diffDays = Math.max(1, Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1);
+
+      // Check if it's an exact single day
+      if (diffDays === 1) {
+        return {
+          currentRange: { startDate: customStartDate, endDate: customEndDate },
+          rangeLabel: `${customStartDate} (1 Day)`,
+          daysDifference: 1,
+        };
+      }
 
       // Check if it's an exact single week
       if (diffDays === 7) {
@@ -791,7 +800,19 @@ export default function TimelineRangeSelector({
         <button
           type="button"
           onClick={() => {
-            setCalendarView(activeUnit === 'year' ? 'year' : activeUnit === 'week' ? 'week' : 'month');
+            const nextView = activeUnit === 'year' ? 'year' : activeUnit === 'week' ? 'week' : activeUnit === 'day' ? 'day' : 'month';
+            setCalendarView(nextView);
+            const activeStart = customStartDate || currentRange.startDate;
+            const activeEnd = customEndDate || currentRange.endDate;
+            if (activeStart && activeEnd) {
+              setDraftDayStart(activeStart);
+              setDraftDayEnd(activeEnd);
+              const p = parseDateYMD(activeEnd);
+              if (p && !isNaN(p.getTime())) {
+                setViewYear(p.getFullYear());
+                setViewMonth(p.getMonth());
+              }
+            }
             setIsCalendarOpen(!isCalendarOpen);
           }}
           style={{

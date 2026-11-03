@@ -18,6 +18,7 @@ export interface ProductCardProps {
   express2Hr?: boolean;
   variant?: "grid" | "horizontal";
   onAddToCart?: (id: string) => void;
+  onBuyNow?: (id: string) => void;
   onToggleWishlist?: (id: string) => void;
   isWishlisted?: boolean;
 }
@@ -37,6 +38,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   express2Hr = true,
   variant = "grid",
   onAddToCart,
+  onBuyNow,
   onToggleWishlist,
   isWishlisted = false,
 }) => {
@@ -84,13 +86,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               )}
             </div>
             {inStock ? (
-              <button
-                type="button"
-                onClick={() => onAddToCart?.(id)}
-                className="h-8 px-3.5 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
-              >
-                Add
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onAddToCart?.(id)}
+                  className="h-8 px-2.5 bg-transparent hover:bg-[#680114]/10 text-[#680114] border border-[#680114]/60 font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer"
+                >
+                  + Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onBuyNow ? onBuyNow(id) : onAddToCart?.(id)}
+                  className="h-8 px-3.5 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] font-bold text-xs rounded-xl active:scale-95 transition-all cursor-pointer shadow-2xs"
+                >
+                  Buy Now
+                </button>
+              </div>
             ) : (
               <span className="text-[10px] font-semibold text-[#735A4A]">Out of Stock</span>
             )}
@@ -103,7 +114,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Default: Vertical Grid Card
   return (
     <div
-      className={`w-full bg-[#F6E9C8] rounded-xl border-2 p-1.5 sm:p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group overflow-hidden ${
+      className={`w-full h-full bg-[#F6E9C8] rounded-xl border-2 p-1 sm:p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group overflow-hidden ${
         !inStock
           ? "border-[#680114]/40 bg-[#EDE4CE]"
           : "border-[#680114]"
@@ -156,13 +167,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Link
               href={`/product/${slug}`}
               draggable={false}
-              className="w-full h-full flex items-center justify-center p-1 select-none"
+              className="w-full h-full flex items-center justify-center p-0.5 sm:p-1 select-none"
             >
               {imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={imageUrl}
                   alt={title}
+                  loading="lazy"
+                  decoding="async"
                   draggable={false}
                   className={`w-full h-full object-contain pointer-events-none select-none transition-transform duration-200 ${
                     !inStock ? "opacity-60 contrast-95" : "group-hover:scale-105"
@@ -179,8 +192,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <img
               src={imageUrl}
               alt={title}
+              loading="lazy"
+              decoding="async"
               draggable={false}
-              className={`w-full h-full object-contain p-1 pointer-events-none select-none ${
+              className={`w-full h-full object-contain p-0.5 sm:p-1 pointer-events-none select-none ${
                 !inStock ? "opacity-60 contrast-95" : ""
               }`}
             />
@@ -193,25 +208,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Out of Stock Pill Over Bottom Center of Image */}
           {!inStock && (
             <div className="absolute inset-x-0 bottom-1 sm:bottom-2 flex justify-center z-15 pointer-events-none px-1 sm:px-2">
-              <span className="bg-[#680114]/90 backdrop-blur-xs text-[#F6E9C8] font-serif font-bold text-[7.5px] sm:text-[10px] tracking-wide px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-md border border-[#F6E9C8]/30">
+              <span className="bg-[#680114]/90 backdrop-blur-xs text-[#F6E9C8] font-serif font-bold text-[7px] sm:text-[10px] tracking-wide px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-md border border-[#F6E9C8]/30">
                 Out of Stock
               </span>
             </div>
           )}
         </div>
 
-        {/* Product Title: Visually balanced spacing between image bottom and price/button row */}
-        <div className="pt-1.5 sm:pt-2 pb-1 sm:pb-1.5 flex items-center min-h-[30px] sm:min-h-[34px]">
+        {/* Product Title: Uniform 2-line box height so 1-line and 2-line titles have identical card dimensions */}
+        <div className="pt-1 sm:pt-2 pb-0.5 sm:pb-1.5 flex items-start h-[28px] sm:h-[38px] overflow-hidden">
           {slug ? (
             <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors w-full">
-              <h3 className={`text-[10px] sm:text-[11px] font-semibold line-clamp-2 leading-tight ${
+              <h3 className={`text-[9.5px] sm:text-[11px] md:text-[12px] font-semibold line-clamp-2 leading-tight ${
                 !inStock ? "text-[#735A4A]" : "text-[#680114]"
               }`}>
                 {title}
               </h3>
             </Link>
           ) : (
-            <h3 className={`text-[10px] sm:text-[11px] font-semibold line-clamp-2 leading-tight w-full ${
+            <h3 className={`text-[9.5px] sm:text-[11px] md:text-[12px] font-semibold line-clamp-2 leading-tight w-full ${
               !inStock ? "text-[#735A4A]" : "text-[#680114]"
             }`}>
               {title}
@@ -220,34 +235,46 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
       </div>
 
-      {/* Bottom Row: Price (Larger) + Horizontal Cut MRP (Smaller on the right) & Inline Add Button */}
-      <div className="flex items-center justify-between pt-0.5 sm:pt-1 gap-1 sm:gap-1.5 mt-auto">
-        <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0 flex-wrap">
-          <span className={`text-[11px] sm:text-[15px] font-black leading-none ${
-            !inStock ? "text-[#680114]/60" : "text-[#680114]"
-          }`}>
-            {formatPrice(sellingPricePaise)}
+      {/* Price row */}
+      <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0 flex-wrap pt-0.5 sm:pt-1.5">
+        <span className={`text-[11px] sm:text-[14px] md:text-[15px] font-black leading-tight tracking-tight whitespace-nowrap ${
+          !inStock ? "text-[#680114]/60" : "text-[#680114]"
+        }`}>
+          {formatPrice(sellingPricePaise)}
+        </span>
+        {discount > 0 && (
+          <span className="text-[8px] sm:text-[10px] md:text-[10.5px] font-medium text-[#735A4A] line-through leading-tight opacity-80 whitespace-nowrap">
+            {formatPrice(mrpPaise)}
           </span>
-          {discount > 0 && (
-            <span className="text-[8px] sm:text-[11px] font-medium text-[#735A4A] line-through leading-none opacity-80">
-              {formatPrice(mrpPaise)}
-            </span>
-          )}
-        </div>
+        )}
+      </div>
 
+      {/* Action Buttons: Buy Now (Bigger, Primary) + Add (Smaller, Secondary) */}
+      <div className="pt-1 sm:pt-2 mt-auto">
         {inStock ? (
-          <button
-            type="button"
-            onClick={() => onAddToCart?.(id)}
-            className="h-5 sm:h-6 px-1.5 sm:px-2.5 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-[8.5px] sm:text-[10px] font-bold rounded-md flex items-center justify-center shadow-xs transition-colors cursor-pointer shrink-0"
-          >
-            + Add
-          </button>
+          <div className="flex items-center gap-1 sm:gap-1.5 w-full">
+            <button
+              type="button"
+              onClick={() => onAddToCart?.(id)}
+              className="shrink-0 h-5 sm:h-6.5 md:h-7 px-1.5 sm:px-2.5 bg-transparent hover:bg-[#680114]/10 text-[#680114] border border-[#680114]/50 text-[7.5px] sm:text-[9.5px] md:text-[10px] font-bold rounded-full flex items-center justify-center active:scale-95 transition-all cursor-pointer whitespace-nowrap tracking-tight leading-none"
+              title="Add to Cart"
+            >
+              + Add
+            </button>
+            <button
+              type="button"
+              onClick={() => onBuyNow ? onBuyNow(id) : onAddToCart?.(id)}
+              className="flex-1 min-w-0 h-5 sm:h-6.5 md:h-7 px-1.5 sm:px-3 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-[8.5px] sm:text-[11px] md:text-[11.5px] font-extrabold rounded-full flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer truncate tracking-tight leading-none"
+              title="Buy Now"
+            >
+              Buy Now
+            </button>
+          </div>
         ) : (
           <button
             type="button"
             disabled
-            className="h-5 sm:h-6 px-1 sm:px-2 bg-[#680114]/10 text-[#680114]/50 text-[7.5px] sm:text-[9px] font-bold rounded-md flex items-center justify-center cursor-not-allowed border border-[#680114]/20 shrink-0"
+            className="w-full h-5 sm:h-6.5 md:h-7 px-1 bg-[#680114]/10 text-[#680114]/50 text-[7.5px] sm:text-[9px] font-bold rounded-full flex items-center justify-center cursor-not-allowed border border-[#680114]/20 leading-none"
           >
             Unavailable
           </button>
