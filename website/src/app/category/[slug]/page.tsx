@@ -514,15 +514,14 @@ function CategoryContent() {
   };
 
   const sortLabelMap: Record<string, string> = {
-    popularity: "Popularity / Best Match",
+    popularity: "Popularity",
     price_asc: "Price: Low to High",
     price_desc: "Price: High to Low",
     name_asc: "Name: A to Z",
-    rating: "Customer Rating 4★+",
   };
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] text-[#680114] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F6E9C8] text-[#680114] flex flex-col font-sans">
       {/* Top Global Header (Sticky, with Search & Cart) */}
       <GlobalHeader />
 
@@ -557,64 +556,73 @@ function CategoryContent() {
           )}
         </div>
 
-        {/* Top Header Row: Category Title, In-Category Search Bar, and Mobile Filter/Sort Triggers */}
-        <div className="bg-[#FAF3E0] rounded-xl sm:rounded-2xl border-2 border-[#680114] p-3 sm:p-4 md:p-5 shadow-xs mb-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-6">
-            
-            {/* Left: Category Icon, Name & Product Count */}
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#680114] text-[#F6E9C8] flex items-center justify-center shrink-0 shadow-2xs">
+        {/* Mobile-Only Top Header Card: Full Width on Mobile */}
+        <div className="md:hidden bg-[#F6E9C8] rounded-xl border-2 border-[#680114] p-3 shadow-xs mb-3">
+          {/* Top: Category Title & Count above Search Bar */}
+          <div className="flex items-center justify-between gap-2.5 mb-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-[#680114] text-[#F6E9C8] flex items-center justify-center shrink-0 shadow-2xs">
                 {(() => {
                   const Icon = getCategoryIcon(activeCategory?.icon, activeCategoryTitle);
-                  return <Icon className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2]" />;
+                  return <Icon className="w-5 h-5 stroke-[2]" />;
                 })()}
               </div>
               <div className="min-w-0">
-                <h1 className="font-serif font-extrabold text-base sm:text-xl md:text-2xl text-[#680114] leading-tight truncate">
+                <h1 className="font-serif font-extrabold text-base text-[#680114] leading-tight truncate">
                   {activeCategoryTitle}
                 </h1>
-                <p className="text-[11px] sm:text-xs text-[#735A4A] mt-0.5 font-medium">
-                  {totalCount} {totalCount === 1 ? "product" : "products"} available
+                <p className="text-[11px] text-[#735A4A] mt-0.5 font-medium truncate">
+                  {totalCount} {totalCount === 1 ? "product" : "products"}
                   {selectedSubcategory ? ` in "${selectedSubcategory}"` : ""}
                 </p>
               </div>
             </div>
 
-            {/* Right: In-Page Real-time Search Input */}
-            <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-full md:max-w-md w-full">
-              <Search className="w-4 h-4 text-[#680114] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search in ${activeCategoryTitle}...`}
-                className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-xs sm:text-sm rounded-full pl-9 pr-9 py-2 border border-[#680114]/40 focus:outline-none focus:ring-1 focus:ring-[#680114] transition-all shadow-inner"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery("");
-                    updateQueryParams({ q: "", page: 1 });
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#735A4A] hover:text-[#680114]"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </form>
+            {(selectedSubcategory || searchQuery) && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="text-[11px] font-serif font-bold text-[#680114] hover:underline cursor-pointer shrink-0 px-2 py-1 bg-[#F6E9C8] border border-[#680114]/30 rounded-lg shadow-2xs"
+              >
+                Reset
+              </button>
+            )}
           </div>
 
-          {/* Subcategory Pills Row (Horizontal Scrollable on Mobile & Desktop) */}
+          {/* Search Bar Row */}
+          <form onSubmit={handleSearchSubmit} className="relative w-full">
+            <Search className="w-4 h-4 text-[#680114] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search in ${activeCategoryTitle}...`}
+              className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-xs rounded-full pl-9 pr-9 py-2 border-2 border-[#680114] focus:outline-none focus:ring-1 focus:ring-[#680114] transition-all shadow-inner"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  updateQueryParams({ q: "", page: 1 });
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#735A4A] hover:text-[#680114]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </form>
+
+          {/* Subcategory Pills Row (Horizontal Scrollable on Mobile) */}
           {activeCategory && activeCategory.subcategories && activeCategory.subcategories.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-[#680114]/15 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <div className="mt-2.5 pt-2 border-t border-[#680114]/20 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
               <button
                 type="button"
                 onClick={() => handleSubcategorySelect("")}
-                className={`px-3 py-1 rounded-full text-xs font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full text-[11px] font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
                   !selectedSubcategory
-                    ? "bg-[#680114] text-[#F6E9C8] shadow-2xs"
-                    : "bg-[#F6E9C8] text-[#680114] hover:bg-[#E8D7B0] border border-[#680114]/30"
+                    ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
+                    : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
                 }`}
               >
                 All {activeCategory.name}
@@ -627,10 +635,10 @@ function CategoryContent() {
                     key={sub.id}
                     type="button"
                     onClick={() => handleSubcategorySelect(sub.name)}
-                    className={`px-3 py-1 rounded-full text-xs font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
                       isSelected
-                        ? "bg-[#680114] text-[#F6E9C8] shadow-2xs"
-                        : "bg-[#F6E9C8] text-[#680114] hover:bg-[#E8D7B0] border border-[#680114]/30"
+                        ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
+                        : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
                     }`}
                   >
                     {sub.name}
@@ -641,195 +649,297 @@ function CategoryContent() {
           )}
         </div>
 
-        {/* Mobile Quick Action Buttons (Filter Drawer + Sort Sheet) */}
-        <div className="flex md:hidden items-center justify-between gap-2 mb-3 px-0.5">
-          <button
-            type="button"
-            onClick={() => setShowFilterSheet(true)}
-            className="flex-1 h-9 bg-[#F6E9C8] border-2 border-[#680114] rounded-xl text-xs font-serif font-bold text-[#680114] flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Filters {selectedBrands.length > 0 || inStockOnly ? "• Active" : ""}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowSortSheet(true)}
-            className="flex-1 h-9 bg-[#F6E9C8] border-2 border-[#680114] rounded-xl text-xs font-serif font-bold text-[#680114] flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5" />
-            <span className="truncate">Sort: {sortLabelMap[selectedSort] || "Popularity"}</span>
-          </button>
-        </div>
-
-        {/* Desktop 2-Column Grid Layout: Left Sidebar + Right Products Grid */}
-        <div className="flex items-start gap-5 lg:gap-6">
+        {/* 2-Column Layout: Left Categories/Subcategories Bar + Right Column (Products Grid on mobile, Header+Grid on desktop) */}
+        <div className="flex items-start gap-2 sm:gap-4 lg:gap-5">
           
           {/* ========================================================= */}
-          {/* LEFT SIDEBAR (Desktop): Category Tree & Master Filters   */}
+          {/* LEFT SIDEBAR: Categories / Subcategories Bar              */}
           {/* ========================================================= */}
-          <aside className="hidden md:flex flex-col w-64 lg:w-72 shrink-0 space-y-4">
+          <aside className="flex flex-col w-20 sm:w-24 md:w-28 lg:w-32 shrink-0 space-y-2 sm:space-y-4">
             
-            {/* Categories & Subcategories Tree Card */}
-            <div className="bg-[#F6E9C8] border-2 border-[#680114] rounded-2xl p-4 shadow-2xs">
-              <div className="flex items-center justify-between pb-3 border-b border-[#680114]/20">
-                <span className="font-serif font-bold text-sm text-[#680114] flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-[#680114]" />
-                  <span>Departments</span>
+            {/* Sidebar Card: Dynamic Categories or Subcategories View */}
+            <div className="bg-[#F6E9C8] border-2 border-[#680114] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-2xs">
+              <div className="flex flex-col items-center pb-1.5 sm:pb-2 mb-1.5 sm:mb-2 border-b border-[#680114]/20 text-center">
+                <span className="font-serif font-bold text-[11px] sm:text-xs text-[#680114] flex items-center justify-center gap-1">
+                  <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#680114]" />
+                  <span>{activeCategory ? "Subcategories" : "Categories"}</span>
                 </span>
-                <Link
-                  href="/category/all"
-                  className={`text-[11px] font-bold ${
-                    !activeCategory ? "text-[#680114] underline" : "text-[#735A4A] hover:text-[#680114]"
-                  }`}
-                >
-                  View All
-                </Link>
-              </div>
-
-              {/* Category Tree Navigation with subcategory expand/collapse */}
-              <div className="pt-2 space-y-1.5 max-h-[480px] overflow-y-auto no-scrollbar">
-                {categories.map((cat) => {
-                  const isCurrentCat = activeCategory?.id === cat.id;
-                  const catTargetSlug = cat.slug || String(cat.id);
-                  const Icon = getCategoryIcon(cat.icon, cat.name);
-
-                  return (
-                    <div key={cat.id} className="flex flex-col">
-                      <button
-                        type="button"
-                        onClick={() => handleCategorySelect(catTargetSlug)}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-serif transition-colors text-left cursor-pointer ${
-                          isCurrentCat
-                            ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs"
-                            : "text-[#680114] hover:bg-[#E8D7B0] font-semibold"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Icon className={`w-3.5 h-3.5 shrink-0 ${isCurrentCat ? "text-[#F6E9C8]" : "text-[#680114]"}`} />
-                          <span className="truncate">{cat.name}</span>
-                        </div>
-                        {cat.subcategories && cat.subcategories.length > 0 && (
-                          <ChevronDown
-                            className={`w-3.5 h-3.5 transition-transform ${isCurrentCat ? "rotate-180" : ""}`}
-                          />
-                        )}
-                      </button>
-
-                      {/* Expanded Subcategories Under Active Category */}
-                      {isCurrentCat && cat.subcategories && cat.subcategories.length > 0 && (
-                        <div className="pl-6 pr-2 py-1 space-y-1 border-l-2 border-[#680114]/30 ml-4 my-1">
-                          {cat.subcategories.map((sub) => {
-                            const isSubActive = selectedSubcategory === sub.name;
-                            return (
-                              <button
-                                key={sub.id}
-                                type="button"
-                                onClick={() => handleSubcategorySelect(sub.name)}
-                                className={`w-full text-left text-xs px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                                  isSubActive
-                                    ? "bg-[#680114]/15 text-[#680114] font-bold"
-                                    : "text-[#735A4A] hover:text-[#680114] hover:bg-[#E8D7B0]"
-                                }`}
-                              >
-                                • {sub.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Faceted Filters Card (Availability, Verified Brands, Sorting) */}
-            <div className="bg-[#F6E9C8] border-2 border-[#680114] rounded-2xl p-4 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#680114]/20">
-                <span className="font-serif font-bold text-sm text-[#680114] flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-4 h-4 text-[#680114]" />
-                  <span>Filters</span>
-                </span>
-                {(selectedBrands.length > 0 || inStockOnly || selectedSubcategory || searchQuery) && (
+                {activeCategory ? (
                   <button
                     type="button"
-                    onClick={handleClearFilters}
-                    className="text-[11px] font-bold text-[#680114] hover:underline cursor-pointer"
+                    onClick={() => handleCategorySelect("all")}
+                    className="text-[9px] sm:text-[10px] font-bold mt-0.5 sm:mt-1 text-[#680114] hover:underline flex items-center gap-0.5 cursor-pointer"
+                    title="Back to all categories"
                   >
-                    Reset All
+                    <ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    <span>All Categories</span>
                   </button>
+                ) : (
+                  <Link
+                    href="/category/all"
+                    className="text-[9px] sm:text-[10px] font-bold mt-0.5 sm:mt-1 text-[#680114] underline"
+                  >
+                    View All
+                  </Link>
                 )}
               </div>
 
-              {/* In Stock Only Checkbox */}
-              <div>
-                <label className="flex items-center gap-2.5 text-xs font-semibold text-[#680114] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={inStockOnly}
-                    onChange={(e) => {
-                      const next = e.target.checked;
-                      setInStockOnly(next);
-                      updateQueryParams({ in_stock: next, page: 1 });
-                    }}
-                    className="w-4 h-4 rounded accent-[#680114] cursor-pointer"
-                  />
-                  <span>In-Stock Items Only</span>
-                </label>
-              </div>
+              {/* Navigation Items with Icon Top & Name Underneath */}
+              <div className="space-y-1.5 sm:space-y-2 max-h-[70vh] md:max-h-[640px] overflow-y-auto no-scrollbar">
+                {activeCategory ? (
+                  /* ======================================================= */
+                  /* SUBCATEGORIES OF CURRENT SELECTED CATEGORY              */
+                  /* ======================================================= */
+                  <>
+                    {/* "All [Category]" Option to clear subcategory filter */}
+                    <div className="flex flex-col items-center">
+                      <button
+                        type="button"
+                        onClick={() => handleSubcategorySelect("")}
+                        title={`All ${activeCategory.name}`}
+                        className={`w-full flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg sm:rounded-xl text-center transition-all cursor-pointer group ${
+                          !selectedSubcategory
+                            ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs border-2 border-[#680114]"
+                            : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114] font-semibold"
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 sm:mb-1 transition-colors ${
+                            !selectedSubcategory
+                              ? "bg-[#F6E9C8] text-[#680114] border-2 border-[#F6E9C8]"
+                              : "border-2 border-[#680114] text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
+                          }`}
+                        >
+                          {(() => {
+                            const ParentIcon = getCategoryIcon(activeCategory.icon, activeCategory.name);
+                            return <ParentIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />;
+                          })()}
+                        </div>
+                        <span
+                          className={`text-[9px] sm:text-[10px] leading-tight line-clamp-2 w-full break-words ${
+                            !selectedSubcategory ? "text-[#F6E9C8] font-bold" : "text-[#680114]"
+                          }`}
+                        >
+                          All {activeCategory.name}
+                        </span>
+                      </button>
+                    </div>
 
-              {/* Verified Brands Filter */}
-              <div>
-                <span className="text-xs font-serif font-bold text-[#680114] block mb-2">
-                  Verified Brands
-                </span>
-                <div className="space-y-1.5">
-                  {availableBrands.map((brand) => (
-                    <label
-                      key={brand}
-                      className="flex items-center gap-2 text-xs font-medium text-[#680114] hover:text-[#7A0C16] cursor-pointer select-none"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedBrands.includes(brand)}
-                        onChange={() => toggleBrand(brand)}
-                        className="w-4 h-4 rounded accent-[#680114] cursor-pointer"
-                      />
-                      <span>{brand}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                    {/* Subcategories list of this category */}
+                    {activeCategory.subcategories && activeCategory.subcategories.map((sub) => {
+                      const isSubActive = selectedSubcategory === sub.name;
+                      const SubIcon = getCategoryIcon(null, sub.name);
 
-              {/* Sort By Dropdown */}
-              <div>
-                <span className="text-xs font-serif font-bold text-[#680114] block mb-1.5">
-                  Sort Order
-                </span>
-                <select
-                  value={selectedSort}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setSelectedSort(next);
-                    updateQueryParams({ sort: next, page: 1 });
-                  }}
-                  className="w-full bg-[#FAF3E0] border border-[#680114]/40 rounded-xl px-2.5 py-1.5 text-xs text-[#680114] font-medium focus:outline-none focus:ring-1 focus:ring-[#680114] cursor-pointer"
-                >
-                  <option value="popularity">Popularity / Best Match</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="name_asc">Name: A to Z</option>
-                  <option value="rating">Customer Rating 4★+</option>
-                </select>
+                      return (
+                        <div key={sub.id} className="flex flex-col items-center">
+                          <button
+                            type="button"
+                            onClick={() => handleSubcategorySelect(sub.name)}
+                            title={sub.name}
+                            className={`w-full flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg sm:rounded-xl text-center transition-all cursor-pointer group ${
+                              isSubActive
+                                ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs border-2 border-[#680114]"
+                                : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114] font-semibold"
+                            }`}
+                          >
+                            <div
+                              className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 sm:mb-1 transition-colors ${
+                                isSubActive
+                                  ? "bg-[#F6E9C8] text-[#680114] border-2 border-[#F6E9C8]"
+                                  : "border-2 border-[#680114] text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
+                              }`}
+                            >
+                              <SubIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
+                            </div>
+                            <span
+                              className={`text-[9px] sm:text-[10px] leading-tight line-clamp-2 w-full break-words ${
+                                isSubActive ? "text-[#F6E9C8] font-bold" : "text-[#680114]"
+                              }`}
+                            >
+                              {sub.name}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  /* ======================================================= */
+                  /* ALL MAIN CATEGORIES VIEW                                */
+                  /* ======================================================= */
+                  categories.map((cat) => {
+                    const isCurrentCat = false;
+                    const catTargetSlug = cat.slug || String(cat.id);
+                    const Icon = getCategoryIcon(cat.icon, cat.name);
+
+                    return (
+                      <div key={cat.id} className="flex flex-col items-center">
+                        <button
+                          type="button"
+                          onClick={() => handleCategorySelect(catTargetSlug)}
+                          title={cat.name}
+                          className={`w-full flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg sm:rounded-xl text-center transition-all cursor-pointer group ${
+                            isCurrentCat
+                              ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs border-2 border-[#680114]"
+                              : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114] font-semibold"
+                          }`}
+                        >
+                          <div
+                            className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 sm:mb-1 transition-colors ${
+                              isCurrentCat
+                                ? "bg-[#F6E9C8] text-[#680114] border-2 border-[#F6E9C8]"
+                                : "border-2 border-[#680114] text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
+                          </div>
+                          <span
+                            className={`text-[9px] sm:text-[10px] leading-tight line-clamp-2 w-full break-words ${
+                              isCurrentCat ? "text-[#F6E9C8] font-bold" : "text-[#680114]"
+                            }`}
+                          >
+                            {cat.name}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </aside>
 
           {/* ========================================================= */}
-          {/* RIGHT PRODUCT LISTING GRID: Products + Pagination        */}
+          {/* RIGHT COLUMN: Search Header Card (Desktop) + Products      */}
           {/* ========================================================= */}
           <section className="flex-1 min-w-0">
+            {/* Desktop-Only Header Card: Placed on Right Column */}
+            <div className="hidden md:block bg-[#F6E9C8] rounded-2xl border-2 border-[#680114] p-4 md:p-5 shadow-xs mb-4">
+              {/* Top: Category Title & Count above Search Bar */}
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#680114] text-[#F6E9C8] flex items-center justify-center shrink-0 shadow-2xs">
+                    {(() => {
+                      const Icon = getCategoryIcon(activeCategory?.icon, activeCategoryTitle);
+                      return <Icon className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[2]" />;
+                    })()}
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="font-serif font-extrabold text-base sm:text-xl md:text-2xl text-[#680114] leading-tight truncate">
+                      {activeCategoryTitle}
+                    </h1>
+                    <p className="text-[11px] sm:text-xs text-[#735A4A] mt-0.5 font-medium">
+                      {totalCount} {totalCount === 1 ? "product" : "products"} available
+                      {selectedSubcategory ? ` in "${selectedSubcategory}"` : ""}
+                    </p>
+                  </div>
+                </div>
+
+                {(selectedSubcategory || searchQuery) && (
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="text-xs font-serif font-bold text-[#680114] hover:underline cursor-pointer shrink-0 px-2 py-1 bg-[#F6E9C8] border border-[#680114]/30 rounded-lg shadow-2xs"
+                  >
+                    Reset All Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Search Bar & Sort Dropdown Row */}
+              <div className="flex items-center gap-3 w-full">
+                <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-0">
+                  <Search className="w-4 h-4 text-[#680114] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={`Search in ${activeCategoryTitle}...`}
+                    className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-sm rounded-full pl-9 pr-9 py-2 border-2 border-[#680114] focus:outline-none focus:ring-1 focus:ring-[#680114] transition-all shadow-inner"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery("");
+                        updateQueryParams({ q: "", page: 1 });
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#735A4A] hover:text-[#680114]"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </form>
+
+                {/* Sort Dropdown Placed Directly on the Right of Search Bar */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs font-serif font-bold text-[#680114] whitespace-nowrap">
+                    Sort:
+                  </span>
+                  <select
+                    value={selectedSort}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setSelectedSort(next);
+                      updateQueryParams({ sort: next, page: 1 });
+                    }}
+                    className="bg-[#F6E9C8] border-2 border-[#680114] rounded-full px-3 py-2 text-xs text-[#680114] font-serif font-bold focus:outline-none focus:ring-1 focus:ring-[#680114] cursor-pointer shadow-2xs"
+                  >
+                    <option value="popularity">Popularity</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                    <option value="name_asc">Name: A to Z</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Subcategory Pills Row (Desktop) */}
+              {activeCategory && activeCategory.subcategories && activeCategory.subcategories.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-[#680114]/20 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSubcategorySelect("")}
+                    className={`px-3 py-1 rounded-full text-xs font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
+                      !selectedSubcategory
+                        ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
+                        : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
+                    }`}
+                  >
+                    All {activeCategory.name}
+                  </button>
+
+                  {activeCategory.subcategories.map((sub) => {
+                    const isSelected = selectedSubcategory === sub.name;
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => handleSubcategorySelect(sub.name)}
+                        className={`px-3 py-1 rounded-full text-xs font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
+                            : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
+                        }`}
+                      >
+                        {sub.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Quick Action Buttons (Sort Sheet Trigger) */}
+            <div className="flex md:hidden items-center justify-between gap-2 mb-3 px-0.5">
+              <button
+                type="button"
+                onClick={() => setShowSortSheet(true)}
+                className="w-full h-9 bg-[#F6E9C8] border-2 border-[#680114] rounded-xl text-xs font-serif font-bold text-[#680114] flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+                <span className="truncate">Sort: {sortLabelMap[selectedSort] || "Popularity"}</span>
+              </button>
+            </div>
             
             {/* Loading Indicator */}
             {loading ? (
@@ -860,9 +970,9 @@ function CategoryContent() {
                 </button>
               </div>
             ) : (
-              /* Products Grid: Exactly 3 cards per row on mobile (compact scaled cards), 3 on sm, 4 on md/lg, 5 on xl */
+              /* Products Grid: Compact scaled cards, 6 in a row on desktop (xl:grid-cols-6) */
               <>
-                <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-1.5 sm:gap-2.5 md:gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 sm:gap-2">
                   {products.map((prod) => (
                     <div key={prod.id} className="flex flex-col h-full">
                       <ProductCard
@@ -999,11 +1109,10 @@ function CategoryContent() {
 
             <div className="py-2 space-y-1">
               {[
-                { label: "Popularity / Best Match", key: "popularity" },
+                { label: "Popularity", key: "popularity" },
                 { label: "Price: Low to High", key: "price_asc" },
                 { label: "Price: High to Low", key: "price_desc" },
                 { label: "Name: A to Z", key: "name_asc" },
-                { label: "Customer Rating 4★+", key: "rating" },
               ].map((opt) => (
                 <button
                   key={opt.key}
@@ -1129,8 +1238,8 @@ export default function CategoryPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="min-h-screen bg-[#FDF8EE] flex items-center justify-center text-xs font-serif font-bold text-[#680114]">
-          Loading department products...
+        <div className="min-h-screen bg-[#F6E9C8] flex items-center justify-center text-xs font-serif font-bold text-[#680114]">
+          Loading category products...
         </div>
       }
     >

@@ -1051,6 +1051,7 @@ class ItemCreateUpdateSerializer(serializers.ModelSerializer):
         initial_quantity = validated_data.pop('initial_quantity', None)
         target_quantity = validated_data.pop('quantity', None)
         variants_data = validated_data.pop('variants', None)
+        validated_data.pop('keep_active_deal_price', None)
         qty = initial_quantity if initial_quantity is not None else (target_quantity or 0)
         subcategories = validated_data.pop('subcategories', [])
 

@@ -114,7 +114,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Default: Vertical Grid Card
   return (
     <div
-      className={`w-full h-full bg-[#F6E9C8] rounded-xl border-2 p-1 sm:p-2 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group overflow-hidden ${
+      className={`w-full h-full bg-[#F6E9C8] rounded-xl border-2 p-1 sm:p-1.5 shadow-2xs hover:shadow-md transition-all relative flex flex-col justify-between group overflow-hidden ${
         !inStock
           ? "border-[#680114]/40 bg-[#EDE4CE]"
           : "border-[#680114]"
@@ -127,22 +127,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             ? "bg-[#E6DCC4] border-[#680114]/15"
             : "bg-[#F6E9C8] border-[#680114]/20"
         }`}>
-          {/* Top Left Discount Tag (Mirrors Heart Button: absolute top-1 left-1 sm:top-2 sm:left-2) */}
+          {/* Top Left Discount Tag */}
           {discount > 0 && inStock ? (
-            <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10 flex items-center">
-              <span className="h-3.5 sm:h-6 px-1 sm:px-2 bg-[#680114] text-[#F6E9C8] text-[6.5px] sm:text-[9.5px] font-bold rounded-full shadow-xs flex items-center justify-center leading-none tracking-tight">
+            <div className="absolute top-1 left-1 z-10 flex items-center">
+              <span className="h-4 sm:h-5 px-1 sm:px-1.5 bg-[#680114] text-[#F6E9C8] text-[7px] sm:text-[8.5px] font-bold rounded-full shadow-xs flex items-center justify-center leading-none tracking-tight">
                 {discount}% OFF
               </span>
             </div>
           ) : badge && inStock ? (
-            <div className="absolute top-1 left-1 sm:top-2 sm:left-2 z-10 flex items-center">
-              <span className="h-3.5 sm:h-6 px-1 sm:px-2 bg-[#520210] text-[#F6E9C8] text-[6.5px] sm:text-[9.5px] font-bold rounded-full shadow-xs flex items-center justify-center leading-none tracking-tight">
+            <div className="absolute top-1 left-1 z-10 flex items-center">
+              <span className="h-4 sm:h-5 px-1 sm:px-1.5 bg-[#520210] text-[#F6E9C8] text-[7px] sm:text-[8.5px] font-bold rounded-full shadow-xs flex items-center justify-center leading-none tracking-tight">
                 {badge}
               </span>
             </div>
           ) : null}
 
-          {/* Top Right Wishlist Button (Mirrors Discount Tag: absolute top-1 right-1 sm:top-2 sm:right-2) */}
+          {/* Top Right Wishlist Button */}
           <button
             type="button"
             onClick={(e) => {
@@ -150,11 +150,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.stopPropagation();
               onToggleWishlist?.(id);
             }}
-            className="absolute top-1 right-1 sm:top-2 sm:right-2 w-4 h-4 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[#680114] hover:scale-115 active:scale-90 transition-all z-10 cursor-pointer"
+            className="absolute top-1 right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[#680114] hover:scale-115 active:scale-90 transition-all z-10 cursor-pointer"
             aria-label="Wishlist"
           >
             <Heart
-              className={`w-3 h-3 sm:w-4 sm:h-4 transition-all ${
+              className={`w-3 h-3 sm:w-3.5 sm:h-3.5 transition-all ${
                 isWishlisted
                   ? "fill-[#680114] text-[#680114] stroke-[2]"
                   : "fill-transparent text-[#680114] stroke-[2] hover:fill-[#680114]/20"
@@ -207,26 +207,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           {/* Out of Stock Pill Over Bottom Center of Image */}
           {!inStock && (
-            <div className="absolute inset-x-0 bottom-1 sm:bottom-2 flex justify-center z-15 pointer-events-none px-1 sm:px-2">
-              <span className="bg-[#680114]/90 backdrop-blur-xs text-[#F6E9C8] font-serif font-bold text-[7px] sm:text-[10px] tracking-wide px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full shadow-md border border-[#F6E9C8]/30">
+            <div className="absolute inset-x-0 bottom-1 flex justify-center z-15 pointer-events-none px-1">
+              <span className="bg-[#680114]/90 backdrop-blur-xs text-[#F6E9C8] font-serif font-bold text-[7px] sm:text-[8.5px] tracking-wide px-1.5 py-0.5 rounded-full shadow-md border border-[#F6E9C8]/30">
                 Out of Stock
               </span>
             </div>
           )}
         </div>
 
-        {/* Product Title: Uniform 2-line box height so 1-line and 2-line titles have identical card dimensions */}
-        <div className="pt-1 sm:pt-2 pb-0.5 sm:pb-1.5 flex items-start h-[28px] sm:h-[38px] overflow-hidden">
+        {/* Product Title: Uniform 2-line box height */}
+        <div className="pt-1 sm:pt-1.5 pb-0.5 flex items-start h-[26px] sm:h-[32px] overflow-hidden">
           {slug ? (
             <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors w-full">
-              <h3 className={`text-[9.5px] sm:text-[11px] md:text-[12px] font-semibold line-clamp-2 leading-tight ${
+              <h3 className={`text-[9.5px] sm:text-[10.5px] md:text-[11px] font-semibold line-clamp-2 leading-tight ${
                 !inStock ? "text-[#735A4A]" : "text-[#680114]"
               }`}>
                 {title}
               </h3>
             </Link>
           ) : (
-            <h3 className={`text-[9.5px] sm:text-[11px] md:text-[12px] font-semibold line-clamp-2 leading-tight w-full ${
+            <h3 className={`text-[9.5px] sm:text-[10.5px] md:text-[11px] font-semibold line-clamp-2 leading-tight w-full ${
               !inStock ? "text-[#735A4A]" : "text-[#680114]"
             }`}>
               {title}
@@ -236,27 +236,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       {/* Price row */}
-      <div className="flex items-baseline gap-1 sm:gap-1.5 min-w-0 flex-wrap pt-0.5 sm:pt-1.5">
-        <span className={`text-[11px] sm:text-[14px] md:text-[15px] font-black leading-tight tracking-tight whitespace-nowrap ${
+      <div className="flex items-baseline gap-1 min-w-0 flex-wrap pt-0.5">
+        <span className={`text-[11px] sm:text-[12.5px] md:text-[13.5px] font-black leading-tight tracking-tight whitespace-nowrap ${
           !inStock ? "text-[#680114]/60" : "text-[#680114]"
         }`}>
           {formatPrice(sellingPricePaise)}
         </span>
         {discount > 0 && (
-          <span className="text-[8px] sm:text-[10px] md:text-[10.5px] font-medium text-[#735A4A] line-through leading-tight opacity-80 whitespace-nowrap">
+          <span className="text-[8px] sm:text-[9.5px] font-medium text-[#735A4A] line-through leading-tight opacity-80 whitespace-nowrap">
             {formatPrice(mrpPaise)}
           </span>
         )}
       </div>
 
       {/* Action Buttons: Buy Now (Bigger, Primary) + Add (Smaller, Secondary) */}
-      <div className="pt-1 sm:pt-2 mt-auto">
+      <div className="pt-1 sm:pt-1.5 mt-auto">
         {inStock ? (
-          <div className="flex items-center gap-1 sm:gap-1.5 w-full">
+          <div className="flex items-center gap-1 w-full">
             <button
               type="button"
               onClick={() => onAddToCart?.(id)}
-              className="shrink-0 h-5 sm:h-6.5 md:h-7 px-1.5 sm:px-2.5 bg-transparent hover:bg-[#680114]/10 text-[#680114] border border-[#680114]/50 text-[7.5px] sm:text-[9.5px] md:text-[10px] font-bold rounded-full flex items-center justify-center active:scale-95 transition-all cursor-pointer whitespace-nowrap tracking-tight leading-none"
+              className="shrink-0 h-5 sm:h-6 px-1.5 bg-transparent hover:bg-[#680114]/10 text-[#680114] border border-[#680114]/50 text-[7.5px] sm:text-[8.5px] md:text-[9px] font-bold rounded-full flex items-center justify-center active:scale-95 transition-all cursor-pointer whitespace-nowrap tracking-tight leading-none"
               title="Add to Cart"
             >
               + Add
@@ -264,7 +264,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <button
               type="button"
               onClick={() => onBuyNow ? onBuyNow(id) : onAddToCart?.(id)}
-              className="flex-1 min-w-0 h-5 sm:h-6.5 md:h-7 px-1.5 sm:px-3 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-[8.5px] sm:text-[11px] md:text-[11.5px] font-extrabold rounded-full flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer truncate tracking-tight leading-none"
+              className="flex-1 min-w-0 h-5 sm:h-6 px-1.5 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-[8px] sm:text-[9.5px] md:text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-2xs active:scale-95 transition-all cursor-pointer truncate tracking-tight leading-none"
               title="Buy Now"
             >
               Buy Now
@@ -274,7 +274,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <button
             type="button"
             disabled
-            className="w-full h-5 sm:h-6.5 md:h-7 px-1 bg-[#680114]/10 text-[#680114]/50 text-[7.5px] sm:text-[9px] font-bold rounded-full flex items-center justify-center cursor-not-allowed border border-[#680114]/20 leading-none"
+            className="w-full h-5 sm:h-6 px-1 bg-[#680114]/10 text-[#680114]/50 text-[7.5px] sm:text-[8.5px] font-bold rounded-full flex items-center justify-center cursor-not-allowed border border-[#680114]/20 leading-none"
           >
             Unavailable
           </button>

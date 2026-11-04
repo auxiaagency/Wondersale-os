@@ -21,8 +21,8 @@ function CategoriesRedirectContent() {
   }, [router, searchParams]);
 
   return (
-    <div className="min-h-screen bg-[#FDF8EE] flex items-center justify-center text-[#680114] font-serif font-bold text-sm">
-      Loading department catalog...
+    <div className="min-h-screen bg-[#F6E9C8] flex items-center justify-center text-[#680114] font-serif font-bold text-sm">
+      Loading category catalog...
     </div>
   );
 }
@@ -31,8 +31,8 @@ export default function CategoriesRedirectPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#FDF8EE] flex items-center justify-center text-[#680114] font-serif font-bold text-sm">
-          Loading department catalog...
+        <div className="min-h-screen bg-[#F6E9C8] flex items-center justify-center text-[#680114] font-serif font-bold text-sm">
+          Loading category catalog...
         </div>
       }
     >
