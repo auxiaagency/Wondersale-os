@@ -13,7 +13,7 @@ export const BottomTabBar: React.FC = () => {
   const navItems = [
     { label: "Home", href: "/", icon: Home },
     { label: "Categories", href: "#categories-menu", icon: Grid, isMenuTrigger: true },
-    { label: "Search", href: "/search", icon: Search },
+    { label: "Search", href: "/category/all", icon: Search },
     { label: "Cart", href: "/cart", icon: ShoppingBag, count: isHydrated ? cartCount : 0 },
     { label: "Account", href: "/account", icon: User },
   ];

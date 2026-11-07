@@ -12,11 +12,14 @@ import {
   Check,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Layers,
   Sparkles,
   RefreshCw,
+  LayoutGrid,
 } from "lucide-react";
 import { ProductCard } from "@/components/ui/ProductCard";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import { StorefrontFooter } from "@/components/layout/StorefrontFooter";
@@ -215,6 +218,48 @@ function CategoryContent() {
   // UI Drawers / Modals
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [showSortSheet, setShowSortSheet] = useState(false);
+  const [expandedCategoryId, setExpandedCategoryId] = useState<string | number | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Auto-collapse sidebar on scroll so cards tuck in automatically (mobile only)
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    let ticking = false;
+
+    const handleScroll = () => {
+      // Collapse only on mobile viewport (< 768px)
+      if (window.innerWidth >= 768) {
+        if (isSidebarCollapsed) setIsSidebarCollapsed(false);
+        return;
+      }
+
+      const currentScrollY = window.scrollY;
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          // Smoothly trigger collapse as soon as user starts scrolling down (>= 12px)
+          if (currentScrollY > 12 && currentScrollY > lastScrollY) {
+            setIsSidebarCollapsed(true);
+          }
+          lastScrollY = currentScrollY;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsSidebarCollapsed(false);
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isSidebarCollapsed]);
 
   // Data & Backend Pagination State
   const [products, setProducts] = useState<ProductItem[]>([]);
@@ -260,6 +305,13 @@ function CategoryContent() {
   }, [categories, slugParam]);
 
   const activeCategoryTitle = activeCategory ? activeCategory.name : "All Products & Categories";
+
+  // Automatically expand active category when navigating
+  useEffect(() => {
+    if (activeCategory) {
+      setExpandedCategoryId(activeCategory.id);
+    }
+  }, [activeCategory]);
 
   // URL State Synchronizer
   const updateQueryParams = useCallback(
@@ -526,455 +578,359 @@ function CategoryContent() {
       <GlobalHeader />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-3 md:py-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 md:px-6 lg:px-8 pb-3 md:pb-6 flex flex-col">
         
-        {/* Breadcrumb & Mobile Back Row */}
-        <div className="flex items-center gap-2 text-xs text-[#735A4A] mb-3 px-1">
-          <Link href="/" className="hover:text-[#680114] font-medium flex items-center gap-1">
-            <ArrowLeft className="w-3.5 h-3.5 md:hidden" />
-            <span>Home</span>
-          </Link>
-          <ChevronRight className="w-3 h-3 opacity-60" />
-          <Link href="/category/all" className="hover:text-[#680114] font-medium">
-            Categories
-          </Link>
-          {activeCategory && (
-            <>
-              <ChevronRight className="w-3 h-3 opacity-60" />
-              <span className="text-[#680114] font-bold truncate max-w-[180px] sm:max-w-none">
-                {activeCategory.name}
-              </span>
-            </>
-          )}
-          {selectedSubcategory && (
-            <>
-              <ChevronRight className="w-3 h-3 opacity-60" />
-              <span className="text-[#680114] font-semibold bg-[#EFE0BC] px-2 py-0.5 rounded-full text-[10px]">
-                {selectedSubcategory}
-              </span>
-            </>
-          )}
-        </div>
-
-        {/* Mobile-Only Top Header Card: Full Width on Mobile */}
-        <div className="md:hidden bg-[#F6E9C8] rounded-xl border-2 border-[#680114] p-3 shadow-xs mb-3">
-          {/* Top: Category Title & Count above Search Bar */}
-          <div className="flex items-center justify-between gap-2.5 mb-2.5">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-[#680114] text-[#F6E9C8] flex items-center justify-center shrink-0 shadow-2xs">
-                {(() => {
-                  const Icon = getCategoryIcon(activeCategory?.icon, activeCategoryTitle);
-                  return <Icon className="w-5 h-5 stroke-[2]" />;
-                })()}
-              </div>
-              <div className="min-w-0">
-                <h1 className="font-serif font-extrabold text-base text-[#680114] leading-tight truncate">
-                  {activeCategoryTitle}
-                </h1>
-                <p className="text-[11px] text-[#735A4A] mt-0.5 font-medium truncate">
-                  {totalCount} {totalCount === 1 ? "product" : "products"}
-                  {selectedSubcategory ? ` in "${selectedSubcategory}"` : ""}
-                </p>
-              </div>
-            </div>
-
-            {(selectedSubcategory || searchQuery) && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="text-[11px] font-serif font-bold text-[#680114] hover:underline cursor-pointer shrink-0 px-2 py-1 bg-[#F6E9C8] border border-[#680114]/30 rounded-lg shadow-2xs"
-              >
-                Reset
-              </button>
+        {/* Sticky Breadcrumb Bar: Attached cleanly right below sticky GlobalHeader with single-line horizontal scroll on mobile */}
+        <div className="sticky top-[118px] md:top-20 z-30 bg-[#F6E9C8] py-1.5 md:py-2 px-1 mb-2 border-b border-[#680114]/15">
+          <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base font-serif font-bold text-[#680114] whitespace-nowrap overflow-x-auto no-scrollbar">
+            <Link href="/" className="hover:text-[#88091E] flex items-center transition-colors shrink-0">
+              <span>Home</span>
+            </Link>
+            <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-60 shrink-0 text-[#680114]" />
+            <Link
+              href="/category/all"
+              className={`transition-colors shrink-0 ${
+                !activeCategory
+                  ? "text-[#680114] font-extrabold cursor-default"
+                  : "hover:text-[#88091E]"
+              }`}
+            >
+              All Products
+            </Link>
+            {activeCategory && (
+              <>
+                <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-60 shrink-0 text-[#680114]" />
+                <span className="text-[#680114] font-extrabold shrink-0">
+                  {activeCategory.name}
+                </span>
+              </>
+            )}
+            {selectedSubcategory && (
+              <>
+                <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-60 shrink-0 text-[#680114]" />
+                <span className="text-[#680114] font-bold bg-[#EFE0BC] border border-[#680114]/30 px-2 py-0.5 rounded-full text-[11px] sm:text-sm shrink-0">
+                  {selectedSubcategory}
+                </span>
+              </>
             )}
           </div>
-
-          {/* Search Bar Row */}
-          <form onSubmit={handleSearchSubmit} className="relative w-full">
-            <Search className="w-4 h-4 text-[#680114] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search in ${activeCategoryTitle}...`}
-              className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-xs rounded-full pl-9 pr-9 py-2 border-2 border-[#680114] focus:outline-none focus:ring-1 focus:ring-[#680114] transition-all shadow-inner"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  updateQueryParams({ q: "", page: 1 });
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#735A4A] hover:text-[#680114]"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </form>
-
-          {/* Subcategory Pills Row (Horizontal Scrollable on Mobile) */}
-          {activeCategory && activeCategory.subcategories && activeCategory.subcategories.length > 0 && (
-            <div className="mt-2.5 pt-2 border-t border-[#680114]/20 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-              <button
-                type="button"
-                onClick={() => handleSubcategorySelect("")}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  !selectedSubcategory
-                    ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
-                    : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
-                }`}
-              >
-                All {activeCategory.name}
-              </button>
-
-              {activeCategory.subcategories.map((sub) => {
-                const isSelected = selectedSubcategory === sub.name;
-                return (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    onClick={() => handleSubcategorySelect(sub.name)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      isSelected
-                        ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
-                        : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
-                    }`}
-                  >
-                    {sub.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* 2-Column Layout: Left Categories/Subcategories Bar + Right Column (Products Grid on mobile, Header+Grid on desktop) */}
-        <div className="flex items-start gap-2 sm:gap-4 lg:gap-5">
+        <div className="flex-1 flex items-start gap-2 sm:gap-4 lg:gap-5 min-h-[60vh]">
           
           {/* ========================================================= */}
-          {/* LEFT SIDEBAR: Categories / Subcategories Bar              */}
+          {/* LEFT SIDEBAR: Categories & Subcategories Tree Dropdown    */}
           {/* ========================================================= */}
-          <aside className="flex flex-col w-20 sm:w-24 md:w-28 lg:w-32 shrink-0 space-y-2 sm:space-y-4">
-            
-            {/* Sidebar Card: Dynamic Categories or Subcategories View */}
-            <div className="bg-[#F6E9C8] border-2 border-[#680114] rounded-xl sm:rounded-2xl p-1.5 sm:p-2.5 shadow-2xs">
-              <div className="flex flex-col items-center pb-1.5 sm:pb-2 mb-1.5 sm:mb-2 border-b border-[#680114]/20 text-center">
-                <span className="font-serif font-bold text-[11px] sm:text-xs text-[#680114] flex items-center justify-center gap-1">
-                  <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#680114]" />
-                  <span>{activeCategory ? "Subcategories" : "Categories"}</span>
-                </span>
-                {activeCategory ? (
-                  <button
-                    type="button"
-                    onClick={() => handleCategorySelect("all")}
-                    className="text-[9px] sm:text-[10px] font-bold mt-0.5 sm:mt-1 text-[#680114] hover:underline flex items-center gap-0.5 cursor-pointer"
-                    title="Back to all categories"
-                  >
-                    <ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    <span>All Categories</span>
-                  </button>
-                ) : (
-                  <Link
-                    href="/category/all"
-                    className="text-[9px] sm:text-[10px] font-bold mt-0.5 sm:mt-1 text-[#680114] underline"
-                  >
-                    View All
-                  </Link>
-                )}
+          <aside
+            onClick={() => {
+              if (isSidebarCollapsed && window.innerWidth < 768) {
+                setIsSidebarCollapsed(false);
+              }
+            }}
+            className={`sticky top-[168px] md:top-[132px] flex flex-col shrink-0 transition-[width] duration-300 ease-in-out z-20 select-none ${
+              isSidebarCollapsed
+                ? "w-14 sm:w-16 md:w-60 lg:w-72 cursor-pointer md:cursor-default"
+                : "w-[195px] sm:w-60 md:w-60 lg:w-72"
+            }`}
+          >
+            {/* Sidebar Card: Categories Tree Dropdown View */}
+            <div
+              className={`bg-[#F6E9C8] border-2 border-[#680114] rounded-xl sm:rounded-2xl transition-all duration-300 ease-in-out shadow-sm relative overflow-hidden ${
+                isSidebarCollapsed ? "p-1.5 md:p-3" : "p-2 sm:p-3"
+              }`}
+            >
+              {/* Header with Title and Toggle Sideways Button (Button only on mobile) */}
+              <div
+                className={`flex items-center pb-1.5 sm:pb-2 mb-2 border-b border-[#680114]/20 transition-all ${
+                  isSidebarCollapsed
+                    ? "justify-center md:justify-between border-b-0 md:border-b mb-1 md:mb-2 pb-1 md:pb-2"
+                    : "justify-between text-left"
+                }`}
+              >
+                {/* On mobile show title when not collapsed; on desktop always show */}
+                <div
+                  className={`items-center gap-1.5 ${
+                    isSidebarCollapsed ? "hidden md:flex" : "flex"
+                  }`}
+                >
+                  <span className="font-serif font-bold text-xs sm:text-sm text-[#680114] flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#680114]" />
+                    <span>Categories</span>
+                  </span>
+                </div>
+
+                {/* Desktop: "All Products" button positioned on the far right of the card header */}
+                <Link
+                  href="/category/all"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`hidden md:inline-flex text-[11px] font-serif font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                    !activeCategory
+                      ? "bg-[#680114] text-[#F6E9C8] border-[#680114]"
+                      : "bg-[#EFE0BC] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] border-[#680114]/30"
+                  }`}
+                >
+                  All Products
+                </Link>
+
+                {/* Sidebar Collapse/Expand Toggle Button: ONLY ON MOBILE (< md) */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSidebarCollapsed(!isSidebarCollapsed);
+                  }}
+                  title={isSidebarCollapsed ? "Expand Categories" : "Collapse Categories"}
+                  aria-label={isSidebarCollapsed ? "Expand Categories" : "Collapse Categories"}
+                  className="md:hidden w-7 h-7 rounded-lg bg-[#680114] text-[#F6E9C8] hover:bg-[#88091E] flex items-center justify-center transition-all cursor-pointer shadow-2xs shrink-0"
+                >
+                  {isSidebarCollapsed ? (
+                    <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                  ) : (
+                    <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+                  )}
+                </button>
               </div>
 
-              {/* Navigation Items with Icon Top & Name Underneath */}
-              <div className="space-y-1.5 sm:space-y-2 max-h-[70vh] md:max-h-[640px] overflow-y-auto no-scrollbar">
-                {activeCategory ? (
-                  /* ======================================================= */
-                  /* SUBCATEGORIES OF CURRENT SELECTED CATEGORY              */
-                  /* ======================================================= */
-                  <>
-                    {/* "All [Category]" Option to clear subcategory filter */}
-                    <div className="flex flex-col items-center">
-                      <button
-                        type="button"
-                        onClick={() => handleSubcategorySelect("")}
-                        title={`All ${activeCategory.name}`}
-                        className={`w-full flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg sm:rounded-xl text-center transition-all cursor-pointer group ${
-                          !selectedSubcategory
-                            ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs border-2 border-[#680114]"
-                            : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114] font-semibold"
+              {/* Navigation Items: If collapsed on mobile, shows only icons; Desktop always shows full details */}
+              <div className="space-y-1.5 max-h-[75vh] md:max-h-[680px] overflow-y-auto no-scrollbar">
+                {/* Mobile-Only First Item: "All Products" with LayoutGrid icon */}
+                <div className="md:hidden flex flex-col select-none">
+                  <div
+                    className={`flex items-center w-full rounded-lg hover:bg-[#680114]/5 transition-colors group relative py-1 ${
+                      isSidebarCollapsed ? "justify-center" : "justify-between"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedCategoryId(null);
+                        handleCategorySelect("all");
+                      }}
+                      title="All Products"
+                      className={`flex items-center text-left cursor-pointer border-none bg-transparent min-w-0 ${
+                        isSidebarCollapsed
+                          ? "w-full justify-center px-0 py-0.5"
+                          : "w-auto flex-1 gap-2.5 px-0.5 py-0.5"
+                      }`}
+                    >
+                      {/* 32px diameter circle icon */}
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                          !activeCategory
+                            ? "bg-[#680114] text-[#F6E9C8] shadow-xs"
+                            : "bg-[#680114]/15 text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
                         }`}
                       >
-                        <div
-                          className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 sm:mb-1 transition-colors ${
-                            !selectedSubcategory
-                              ? "bg-[#F6E9C8] text-[#680114] border-2 border-[#F6E9C8]"
-                              : "border-2 border-[#680114] text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
-                          }`}
-                        >
-                          {(() => {
-                            const ParentIcon = getCategoryIcon(activeCategory.icon, activeCategory.name);
-                            return <ParentIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />;
-                          })()}
-                        </div>
-                        <span
-                          className={`text-[9px] sm:text-[10px] leading-tight line-clamp-2 w-full break-words ${
-                            !selectedSubcategory ? "text-[#F6E9C8] font-bold" : "text-[#680114]"
-                          }`}
-                        >
-                          All {activeCategory.name}
-                        </span>
-                      </button>
-                    </div>
+                        <LayoutGrid className="w-4 h-4 stroke-[2]" />
+                      </div>
 
-                    {/* Subcategories list of this category */}
-                    {activeCategory.subcategories && activeCategory.subcategories.map((sub) => {
-                      const isSubActive = selectedSubcategory === sub.name;
-                      const SubIcon = getCategoryIcon(null, sub.name);
+                      {/* Title: Only shown when sidebar is expanded */}
+                      <span
+                        className={`text-xs sm:text-[13px] font-serif font-bold leading-tight break-words transition-all duration-300 ease-in-out ${
+                          isSidebarCollapsed
+                            ? "hidden"
+                            : "w-auto opacity-100"
+                        } ${
+                          !activeCategory ? "text-[#680114] font-extrabold" : "text-[#680114]/90"
+                        }`}
+                      >
+                        All Products
+                      </span>
+                    </button>
+                  </div>
+                </div>
 
-                      return (
-                        <div key={sub.id} className="flex flex-col items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleSubcategorySelect(sub.name)}
-                            title={sub.name}
-                            className={`w-full flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg sm:rounded-xl text-center transition-all cursor-pointer group ${
-                              isSubActive
-                                ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs border-2 border-[#680114]"
-                                : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114] font-semibold"
-                            }`}
-                          >
-                            <div
-                              className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 sm:mb-1 transition-colors ${
-                                isSubActive
-                                  ? "bg-[#F6E9C8] text-[#680114] border-2 border-[#F6E9C8]"
-                                  : "border-2 border-[#680114] text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
-                              }`}
-                            >
-                              <SubIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
-                            </div>
-                            <span
-                              className={`text-[9px] sm:text-[10px] leading-tight line-clamp-2 w-full break-words ${
-                                isSubActive ? "text-[#F6E9C8] font-bold" : "text-[#680114]"
-                              }`}
-                            >
-                              {sub.name}
-                            </span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </>
-                ) : (
-                  /* ======================================================= */
-                  /* ALL MAIN CATEGORIES VIEW                                */
-                  /* ======================================================= */
-                  categories.map((cat) => {
-                    const isCurrentCat = false;
-                    const catTargetSlug = cat.slug || String(cat.id);
-                    const Icon = getCategoryIcon(cat.icon, cat.name);
+                {categories.map((cat) => {
+                  const isCurrentCat = activeCategory?.id === cat.id;
+                  const isExpanded = expandedCategoryId === cat.id;
+                  const catTargetSlug = cat.slug || String(cat.id);
+                  const Icon = getCategoryIcon(cat.icon, cat.name);
+                  const subcats = cat.subcategories || [];
 
-                    return (
-                      <div key={cat.id} className="flex flex-col items-center">
+                  return (
+                    <div key={cat.id} className="flex flex-col select-none">
+                      {/* Category Header Row */}
+                      <div
+                        className={`flex items-center w-full rounded-lg hover:bg-[#680114]/5 transition-colors group relative py-1 ${
+                          isSidebarCollapsed ? "justify-center md:justify-between" : "justify-between"
+                        }`}
+                      >
                         <button
                           type="button"
-                          onClick={() => handleCategorySelect(catTargetSlug)}
+                          onClick={(e) => {
+                            if (isSidebarCollapsed && window.innerWidth < 768) {
+                              e.stopPropagation();
+                              setIsSidebarCollapsed(false);
+                              setExpandedCategoryId(cat.id);
+                              handleCategorySelect(catTargetSlug);
+                              return;
+                            }
+                            if (subcats.length > 0) {
+                              setExpandedCategoryId(isExpanded ? null : cat.id);
+                            }
+                            handleCategorySelect(catTargetSlug);
+                          }}
                           title={cat.name}
-                          className={`w-full flex flex-col items-center justify-center p-1 sm:p-2 rounded-lg sm:rounded-xl text-center transition-all cursor-pointer group ${
-                            isCurrentCat
-                              ? "bg-[#680114] text-[#F6E9C8] font-bold shadow-2xs border-2 border-[#680114]"
-                              : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114] font-semibold"
+                          className={`flex items-center text-left cursor-pointer border-none bg-transparent min-w-0 ${
+                            isSidebarCollapsed ? "w-full justify-center px-0 py-0.5 md:w-auto md:flex-1 md:justify-start md:gap-2.5 md:px-0.5" : "w-auto flex-1 gap-2.5 px-0.5 py-0.5"
                           }`}
                         >
+                          {/* 32px diameter circle icon — centered on collapsed mobile, left-aligned on desktop */}
                           <div
-                            className={`w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 mb-0.5 sm:mb-1 transition-colors ${
+                            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
                               isCurrentCat
-                                ? "bg-[#F6E9C8] text-[#680114] border-2 border-[#F6E9C8]"
-                                : "border-2 border-[#680114] text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
+                                ? "bg-[#680114] text-[#F6E9C8] shadow-xs"
+                                : "bg-[#680114]/15 text-[#680114] group-hover:bg-[#680114] group-hover:text-[#F6E9C8]"
                             }`}
                           >
-                            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2]" />
+                            <Icon className="w-4 h-4 stroke-[2]" />
                           </div>
+
+                          {/* Title: Smoothly wraps into multiple lines when needed without ellipsis cutting */}
                           <span
-                            className={`text-[9px] sm:text-[10px] leading-tight line-clamp-2 w-full break-words ${
-                              isCurrentCat ? "text-[#F6E9C8] font-bold" : "text-[#680114]"
+                            className={`text-xs sm:text-[13px] font-serif font-bold leading-tight break-words transition-all duration-300 ease-in-out ${
+                              isSidebarCollapsed
+                                ? "hidden md:inline-block md:w-auto md:opacity-100"
+                                : "w-auto opacity-100"
+                            } ${
+                              isCurrentCat ? "text-[#680114] font-extrabold" : "text-[#680114]/90"
                             }`}
                           >
                             {cat.name}
                           </span>
                         </button>
+
+                        {/* Chevron for expanding/collapsing dropdown: Smooth transition */}
+                        {subcats.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedCategoryId(isExpanded ? null : cat.id);
+                            }}
+                            aria-label={`Toggle ${cat.name} subcategories`}
+                            className={`p-1 text-[#680114] hover:bg-[#680114]/10 rounded-md transition-all duration-300 cursor-pointer shrink-0 ml-1 ${
+                              isSidebarCollapsed ? "hidden md:block" : "block"
+                            }`}
+                          >
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform duration-200 stroke-[2.2] ${
+                                isExpanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+                        )}
                       </div>
-                    );
-                  })
-                )}
+
+                      {/* Tree Branch Dropdown Menu - Centered line directly below category icon circle */}
+                      {isExpanded && subcats.length > 0 && (
+                        <div className={`relative ml-[12px] pl-6 pt-0 -mt-2 flex flex-col transition-all duration-300 overflow-hidden ${
+                          isSidebarCollapsed
+                            ? "max-h-0 opacity-0 pointer-events-none md:max-h-[600px] md:opacity-100 md:pointer-events-auto"
+                            : "max-h-[600px] opacity-100"
+                        }`}>
+                          {subcats.map((sub, idx) => {
+                            const isSubActive = isCurrentCat && selectedSubcategory === sub.name;
+                            const isFirst = idx === 0;
+                            const isLast = idx === subcats.length - 1;
+
+                            return (
+                              <div
+                                key={sub.id || idx}
+                                className="relative flex items-center py-1.5 min-h-[30px]"
+                              >
+                                {/* Vertical connection going up into the bottom center of the 32px icon circle */}
+                                {isFirst && (
+                                  <span className="absolute -left-[20px] -top-2 h-2 w-0.5 bg-[#680114]" />
+                                )}
+
+                                {!isLast && (
+                                  <span className="absolute -left-[20px] top-0 bottom-0 w-0.5 bg-[#680114]" />
+                                )}
+
+                                {isLast ? (
+                                  <span className="absolute -left-[20px] top-0 w-4 h-4 border-l-2 border-b-2 border-[#680114] rounded-bl-xl pointer-events-none" />
+                                ) : (
+                                  <span className="absolute -left-[20px] top-0 w-4 h-4 border-l-2 border-b-2 border-[#680114] rounded-bl-lg pointer-events-none" />
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!isCurrentCat) {
+                                      router.push(`/category/${catTargetSlug}?subcategory=${encodeURIComponent(sub.name)}`);
+                                    } else {
+                                      handleSubcategorySelect(sub.name);
+                                    }
+                                  }}
+                                  className={`text-[12px] sm:text-[13px] font-sans pl-1 pr-1 py-0.5 text-left transition-all leading-snug cursor-pointer line-clamp-2 max-w-full hover:translate-x-0.5 border-none bg-transparent ${
+                                    isSubActive
+                                      ? "text-[#680114] font-bold underline underline-offset-4 decoration-[#680114] decoration-[1.5px]"
+                                      : "text-[#5A0A10] font-medium hover:text-[#680114] hover:font-semibold"
+                                  }`}
+                                >
+                                  {sub.name}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </aside>
 
           {/* ========================================================= */}
-          {/* RIGHT COLUMN: Search Header Card (Desktop) + Products      */}
+          {/* RIGHT COLUMN: Products Grid                                */}
           {/* ========================================================= */}
-          <section className="flex-1 min-w-0">
-            {/* Desktop-Only Header Card: Placed on Right Column */}
-            <div className="hidden md:block bg-[#F6E9C8] rounded-2xl border-2 border-[#680114] p-4 md:p-5 shadow-xs mb-4">
-              {/* Top: Category Title & Count above Search Bar */}
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#680114] text-[#F6E9C8] flex items-center justify-center shrink-0 shadow-2xs">
-                    {(() => {
-                      const Icon = getCategoryIcon(activeCategory?.icon, activeCategoryTitle);
-                      return <Icon className="w-5 h-5 sm:w-5.5 sm:h-5.5 stroke-[2]" />;
-                    })()}
+          <section className="flex-1 min-w-0 self-stretch flex flex-col">
+            {/* Loading Indicator: 3D Gyroscopic Spinning Circles */}
+            {loading ? (
+              <LoadingSpinner
+                text="Loading catalog products..."
+                className="flex-1 min-h-[400px]"
+              />
+            ) : products.length === 0 ? (
+              /* Empty State: Perfectly centered horizontally and vertically */
+              <div className="flex-1 min-h-[50vh] flex items-center justify-center py-6">
+                <div className="w-full max-w-md bg-[#F6E9C8] rounded-2xl border-2 border-[#680114] text-center p-8 sm:p-10 shadow-xs">
+                  <div className="w-12 h-12 bg-[#E8D7B0] rounded-full flex items-center justify-center mx-auto mb-3 text-[#680114]">
+                    <Search className="w-6 h-6" />
                   </div>
-                  <div className="min-w-0">
-                    <h1 className="font-serif font-extrabold text-base sm:text-xl md:text-2xl text-[#680114] leading-tight truncate">
-                      {activeCategoryTitle}
-                    </h1>
-                    <p className="text-[11px] sm:text-xs text-[#735A4A] mt-0.5 font-medium">
-                      {totalCount} {totalCount === 1 ? "product" : "products"} available
-                      {selectedSubcategory ? ` in "${selectedSubcategory}"` : ""}
-                    </p>
-                  </div>
-                </div>
-
-                {(selectedSubcategory || searchQuery) && (
+                  <h3 className="font-serif font-bold text-base text-[#680114]">
+                    No products found
+                  </h3>
+                  <p className="text-xs text-[#735A4A] mt-1 mb-4">
+                    We couldn&apos;t find any products matching your current filters or search term.
+                  </p>
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="text-xs font-serif font-bold text-[#680114] hover:underline cursor-pointer shrink-0 px-2 py-1 bg-[#F6E9C8] border border-[#680114]/30 rounded-lg shadow-2xs"
+                    className="px-4 py-2 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-xs font-serif font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
                   >
                     Reset All Filters
                   </button>
-                )}
-              </div>
-
-              {/* Search Bar & Sort Dropdown Row */}
-              <div className="flex items-center gap-3 w-full">
-                <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-0">
-                  <Search className="w-4 h-4 text-[#680114] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={`Search in ${activeCategoryTitle}...`}
-                    className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-sm rounded-full pl-9 pr-9 py-2 border-2 border-[#680114] focus:outline-none focus:ring-1 focus:ring-[#680114] transition-all shadow-inner"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchQuery("");
-                        updateQueryParams({ q: "", page: 1 });
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#735A4A] hover:text-[#680114]"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </form>
-
-                {/* Sort Dropdown Placed Directly on the Right of Search Bar */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-xs font-serif font-bold text-[#680114] whitespace-nowrap">
-                    Sort:
-                  </span>
-                  <select
-                    value={selectedSort}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setSelectedSort(next);
-                      updateQueryParams({ sort: next, page: 1 });
-                    }}
-                    className="bg-[#F6E9C8] border-2 border-[#680114] rounded-full px-3 py-2 text-xs text-[#680114] font-serif font-bold focus:outline-none focus:ring-1 focus:ring-[#680114] cursor-pointer shadow-2xs"
-                  >
-                    <option value="popularity">Popularity</option>
-                    <option value="price_asc">Price: Low to High</option>
-                    <option value="price_desc">Price: High to Low</option>
-                    <option value="name_asc">Name: A to Z</option>
-                  </select>
                 </div>
-              </div>
-
-              {/* Subcategory Pills Row (Desktop) */}
-              {activeCategory && activeCategory.subcategories && activeCategory.subcategories.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-[#680114]/20 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSubcategorySelect("")}
-                    className={`px-3 py-1 rounded-full text-xs font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      !selectedSubcategory
-                        ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
-                        : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
-                    }`}
-                  >
-                    All {activeCategory.name}
-                  </button>
-
-                  {activeCategory.subcategories.map((sub) => {
-                    const isSelected = selectedSubcategory === sub.name;
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        onClick={() => handleSubcategorySelect(sub.name)}
-                        className={`px-3 py-1 rounded-full text-xs font-serif font-bold whitespace-nowrap transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-[#680114] text-[#F6E9C8] shadow-2xs border-2 border-[#680114]"
-                            : "bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 border-2 border-[#680114]"
-                        }`}
-                      >
-                        {sub.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Mobile Quick Action Buttons (Sort Sheet Trigger) */}
-            <div className="flex md:hidden items-center justify-between gap-2 mb-3 px-0.5">
-              <button
-                type="button"
-                onClick={() => setShowSortSheet(true)}
-                className="w-full h-9 bg-[#F6E9C8] border-2 border-[#680114] rounded-xl text-xs font-serif font-bold text-[#680114] flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer"
-              >
-                <ArrowUpDown className="w-3.5 h-3.5" />
-                <span className="truncate">Sort: {sortLabelMap[selectedSort] || "Popularity"}</span>
-              </button>
-            </div>
-            
-            {/* Loading Indicator */}
-            {loading ? (
-              <div className="py-24 flex flex-col items-center justify-center text-center">
-                <div className="w-8 h-8 border-3 border-[#680114] border-t-transparent rounded-full animate-spin mb-3" />
-                <p className="text-xs font-serif font-bold text-[#680114]">
-                  Loading catalog products...
-                </p>
-              </div>
-            ) : products.length === 0 ? (
-              /* Empty State */
-              <div className="py-16 bg-[#F6E9C8] rounded-2xl border-2 border-[#680114] text-center px-4 max-w-md mx-auto shadow-xs">
-                <div className="w-12 h-12 bg-[#E8D7B0] rounded-full flex items-center justify-center mx-auto mb-3 text-[#680114]">
-                  <Search className="w-6 h-6" />
-                </div>
-                <h3 className="font-serif font-bold text-base text-[#680114]">
-                  No products found
-                </h3>
-                <p className="text-xs text-[#735A4A] mt-1 mb-4">
-                  We couldn&apos;t find any products matching your current filters or search term.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleClearFilters}
-                  className="px-4 py-2 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-xs font-serif font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
-                >
-                  Reset All Filters
-                </button>
               </div>
             ) : (
-              /* Products Grid: Compact scaled cards, 6 in a row on desktop (xl:grid-cols-6) */
+              /* Products Grid: 3 columns on mobile when sidebar is collapsed (in), 2 columns when sidebar is open (out) */
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 sm:gap-2">
+                <div
+                  className={`grid gap-1.5 sm:gap-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 ${
+                    isSidebarCollapsed
+                      ? "grid-cols-3 sm:grid-cols-4"
+                      : "grid-cols-2 sm:grid-cols-3"
+                  }`}
+                >
                   {products.map((prod) => (
-                    <div key={prod.id} className="flex flex-col h-full">
+                    <div
+                      key={prod.id}
+                      className="flex flex-col h-full w-full min-w-0"
+                    >
                       <ProductCard
                         id={prod.id}
                         slug={prod.slug}
@@ -1238,9 +1194,7 @@ export default function CategoryPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="min-h-screen bg-[#F6E9C8] flex items-center justify-center text-xs font-serif font-bold text-[#680114]">
-          Loading category products...
-        </div>
+        <LoadingSpinner fullScreen text="Loading category products..." />
       }
     >
       <CategoryContent />

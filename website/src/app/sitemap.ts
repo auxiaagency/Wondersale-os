@@ -35,7 +35,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/search`,
+      url: `${baseUrl}/category/all`,
       lastModified: new Date("2026-10-16"),
       changeFrequency: "daily" as const,
       priority: 0.8,

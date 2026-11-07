@@ -315,17 +315,17 @@ export const CategoryTreeMenuModal: React.FC = () => {
                         return (
                           <div key={sub.id || idx} className="relative flex items-center py-1.5 min-h-[34px]">
                             {!isLast && (
-                              <span className="absolute -left-[24px] top-0 bottom-0 w-0.5 bg-[#680114]/45" />
+                              <span className="absolute -left-[24px] top-0 bottom-0 w-0.5 bg-[#680114]" />
                             )}
 
                             {isLast ? (
-                              <span className="absolute -left-[24px] top-0 w-5 h-4.5 border-l-2 border-b-2 border-[#680114]/45 rounded-bl-xl" />
+                              <span className="absolute -left-[24px] top-0 w-5 h-4.5 border-l-2 border-b-2 border-[#680114] rounded-bl-xl" />
                             ) : (
-                              <span className="absolute -left-[24px] top-0 w-5 h-4.5 border-l-2 border-b-2 border-[#680114]/45 rounded-bl-lg" />
+                              <span className="absolute -left-[24px] top-0 w-5 h-4.5 border-l-2 border-b-2 border-[#680114] rounded-bl-lg" />
                             )}
                             
                             <Link
-                              href={`/search?category=${encodeURIComponent(category.name)}&subcategory=${encodeURIComponent(sub.name)}`}
+                              href={`/category/${targetSlug}?subcategory=${encodeURIComponent(sub.name)}`}
                               onClick={closeCategoryMenu}
                               className="text-sm sm:text-[14.5px] font-medium text-[#4D060E] hover:text-[#680114] hover:font-bold hover:translate-x-1 transition-all pl-1 leading-tight inline-block"
                             >
@@ -418,17 +418,17 @@ export const CategoryTreeMenuModal: React.FC = () => {
                         return (
                           <div key={sub.id || idx} className="relative flex items-center py-1 min-h-[26px]">
                             {!isLast && (
-                              <span className="absolute -left-[18px] top-0 bottom-0 w-0.5 bg-[#680114]/40" />
+                              <span className="absolute -left-[18px] top-0 bottom-0 w-0.5 bg-[#680114]" />
                             )}
 
                             {isLast ? (
-                              <span className="absolute -left-[18px] top-0 w-4 h-3.5 border-l-2 border-b-2 border-[#680114]/40 rounded-bl-lg" />
+                              <span className="absolute -left-[18px] top-0 w-4 h-3.5 border-l-2 border-b-2 border-[#680114] rounded-bl-lg" />
                             ) : (
-                              <span className="absolute -left-[18px] top-0 w-4 h-3.5 border-l-2 border-b-2 border-[#680114]/40 rounded-bl-md" />
+                              <span className="absolute -left-[18px] top-0 w-4 h-3.5 border-l-2 border-b-2 border-[#680114] rounded-bl-md" />
                             )}
 
                             <Link
-                              href={`/search?category=${encodeURIComponent(category.name)}&subcategory=${encodeURIComponent(sub.name)}`}
+                              href={`/category/${targetSlug}?subcategory=${encodeURIComponent(sub.name)}`}
                               onClick={closeCategoryMenu}
                               className="text-xs font-medium text-[#4D060E] hover:text-[#680114] active:text-[#680114] active:font-bold pl-0.5 leading-tight line-clamp-2"
                             >

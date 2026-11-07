@@ -69,7 +69,7 @@ export const StorefrontFooter: React.FC = () => {
                 </li>
                 <li>
                   <Link
-                    href="/search?category=Electronics"
+                    href="/category/electronics"
                     className="hover:text-amber-200 transition-colors"
                   >
                     Electronics
@@ -77,7 +77,7 @@ export const StorefrontFooter: React.FC = () => {
                 </li>
                 <li>
                   <Link
-                    href="/search?category=Home%20%26%20Kitchen"
+                    href="/category/home-kitchen"
                     className="hover:text-amber-200 transition-colors"
                   >
                     Home & Kitchen
@@ -85,7 +85,7 @@ export const StorefrontFooter: React.FC = () => {
                 </li>
                 <li>
                   <Link
-                    href="/search?category=Fashion%20%26%20Accessories"
+                    href="/category/fashion-accessories"
                     className="hover:text-amber-200 transition-colors"
                   >
                     Fashion & Accessories
@@ -93,7 +93,7 @@ export const StorefrontFooter: React.FC = () => {
                 </li>
                 <li>
                   <Link
-                    href="/search?category=Food%20Items"
+                    href="/category/food-items"
                     className="hover:text-amber-200 transition-colors"
                   >
                     Food Items
@@ -101,7 +101,7 @@ export const StorefrontFooter: React.FC = () => {
                 </li>
                 <li>
                   <Link
-                    href="/search?category=Personal%20Care%20%26%20Beauty"
+                    href="/category/personal-care-beauty"
                     className="hover:text-amber-200 transition-colors"
                   >
                     Personal Care & Beauty

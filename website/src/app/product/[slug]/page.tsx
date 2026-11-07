@@ -21,6 +21,7 @@ import {
   Copy,
   Check,
   ChevronRight,
+  ChevronDown,
   ShoppingCart,
   Truck,
   Sparkles,
@@ -131,6 +132,8 @@ function ProductDetailContent() {
   const [copiedCoupon, setCopiedCoupon] = useState(false);
   const [isAddedToCart, setIsAddedToCart] = useState(false);
   const [suggestedProducts, setSuggestedProducts] = useState<SuggestedProduct[]>([]);
+  const [isMobileOverviewOpen, setIsMobileOverviewOpen] = useState(false);
+  const [isMobileSpecsOpen, setIsMobileSpecsOpen] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -534,9 +537,48 @@ function ProductDetailContent() {
                   ))}
                 </div>
               )}
+
+              {/* Action Buttons Placed Under Product Image (Larger & Prominent) */}
+              <div className="w-full max-w-md mx-auto flex items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={!product.inStock}
+                  className={`flex-1 h-12 px-4 rounded-xl border-2 text-sm font-serif font-bold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
+                    !product.inStock
+                      ? "opacity-50 cursor-not-allowed border-[#680114]/40 text-[#735A4A]"
+                      : isAddedToCart
+                      ? "border-emerald-700 bg-emerald-50 text-emerald-800"
+                      : "border-[#680114] bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 shadow-2xs"
+                  }`}
+                >
+                  {isAddedToCart ? (
+                    <>
+                      <Check className="w-5 h-5" />
+                      <span>Added!</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-5 h-5" />
+                      <span>Add to Cart</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={!product.inStock}
+                  className={`flex-[1.15] h-12 px-4 rounded-xl bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-sm font-serif font-bold flex items-center justify-center gap-2 shadow-2xs transition-all active:scale-95 cursor-pointer ${
+                    !product.inStock ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <Zap className="w-5 h-5 fill-current" />
+                  <span>Buy Now</span>
+                </button>
+              </div>
             </div>
 
-            {/* Right Column: Title, Price, Variants, Description & Specs, then Delivery & Actions */}
+            {/* Right Column: Title, Price, Variants, Description & Specs, then Delivery */}
             <div className="col-span-12 lg:col-span-7 flex flex-col gap-4">
               {/* Product Header Card */}
               <div className="bg-[#F6E9C8] p-6 rounded-2xl shadow-xs border-2 border-[#680114]">
@@ -675,45 +717,6 @@ function ProductDetailContent() {
                   </div>
                 </div>
               </div>
-
-              {/* Action Buttons Desktop (Now Placed After Description & Specifications) */}
-              <div className="bg-[#F6E9C8] p-5 rounded-2xl shadow-xs border-2 border-[#680114] flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  disabled={!product.inStock}
-                  className={`flex-1 h-12 rounded-xl border-2 text-sm font-serif font-bold flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
-                    !product.inStock
-                      ? "opacity-50 cursor-not-allowed border-[#680114]/40 text-[#735A4A]"
-                      : isAddedToCart
-                      ? "border-emerald-700 bg-emerald-50 text-emerald-800"
-                      : "border-[#680114] bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10 shadow-2xs"
-                  }`}
-                >
-                  {isAddedToCart ? (
-                    <>
-                      <Check className="w-5 h-5" />
-                      <span>Added to Cart!</span>
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-5 h-5" />
-                      <span>Add to Cart</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBuyNow}
-                  disabled={!product.inStock}
-                  className={`flex-[1.2] h-12 rounded-xl bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] text-sm font-serif font-bold flex items-center justify-center gap-2 shadow-2xs transition-all active:scale-95 cursor-pointer ${
-                    !product.inStock ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  <Zap className="w-5 h-5 fill-current" />
-                  <span>Buy Now • {formatPrice(currentSellingPricePaise)}</span>
-                </button>
-              </div>
             </div>
           </div>
 
@@ -809,8 +812,8 @@ function ProductDetailContent() {
           </div>
           <div className="flex items-center gap-1">
             <Link
-              href="/search"
-              aria-label="Search"
+              href="/category/all"
+              aria-label="Search all products"
               className="flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#680114]/10 active:scale-95 transition-transform"
             >
               <Search className="h-5 w-5" />
@@ -861,11 +864,6 @@ function ProductDetailContent() {
                 <span>SAVE {savingsPercent}%</span>
               </div>
             )}
-
-            <div className="absolute top-3 right-3 z-10 flex items-center gap-1 rounded-full bg-[#680114] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#F6E9C8]">
-              <CheckCircle className="h-3 w-3 text-emerald-300" />
-              <span>100% Genuine</span>
-            </div>
 
             {currentDisplayImage ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -980,32 +978,60 @@ function ProductDetailContent() {
           </section>
         )}
 
-        {/* 5. DESCRIPTION (Moved before delivery/specs as requested) */}
+        {/* 5. DESCRIPTION (Collapsible Dropdown Accordion) */}
         {product.description && (
-          <section className="bg-[#F6E9C8] px-4 py-4 border-b-2 border-[#680114]">
-            <h2 className="text-sm font-serif font-bold text-[#680114] pb-2 border-b border-[#680114]/20">
-              Product Overview
-            </h2>
-            <div className="mt-2 text-xs text-[#680114] font-medium leading-relaxed whitespace-pre-line">
-              {product.description}
-            </div>
+          <section className="bg-[#F6E9C8] border-b-2 border-[#680114]">
+            <button
+              type="button"
+              onClick={() => setIsMobileOverviewOpen(!isMobileOverviewOpen)}
+              className="w-full flex items-center justify-between px-4 py-3.5 text-left cursor-pointer transition-colors hover:bg-[#680114]/5"
+              aria-expanded={isMobileOverviewOpen}
+            >
+              <h2 className="text-sm font-serif font-bold text-[#680114]">
+                Product Overview
+              </h2>
+              <ChevronDown
+                className={`h-4 w-4 text-[#680114] transition-transform duration-200 ${
+                  isMobileOverviewOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            {isMobileOverviewOpen && (
+              <div className="px-4 pb-4 pt-1 text-xs text-[#680114] font-medium leading-relaxed whitespace-pre-line border-t border-[#680114]/20 animate-fadeIn">
+                {product.description}
+              </div>
+            )}
           </section>
         )}
 
-        {/* 6. SPECIFICATIONS TABLE */}
+        {/* 6. SPECIFICATIONS TABLE (Collapsible Dropdown Accordion) */}
         {product.specs.length > 0 && (
-          <section className="bg-[#F6E9C8] px-4 py-4 border-b-2 border-[#680114]">
-            <h2 className="text-sm font-serif font-bold text-[#680114] pb-2 border-b border-[#680114]/20">
-              Product Specifications
-            </h2>
-            <div className="mt-3 divide-y divide-[#680114]/20 text-xs">
-              {product.specs.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-2 py-2">
-                  <span className="font-medium text-[#735A4A]">{item.label}</span>
-                  <span className="font-semibold text-[#680114]">{item.value}</span>
-                </div>
-              ))}
-            </div>
+          <section className="bg-[#F6E9C8] border-b-2 border-[#680114]">
+            <button
+              type="button"
+              onClick={() => setIsMobileSpecsOpen(!isMobileSpecsOpen)}
+              className="w-full flex items-center justify-between px-4 py-3.5 text-left cursor-pointer transition-colors hover:bg-[#680114]/5"
+              aria-expanded={isMobileSpecsOpen}
+            >
+              <h2 className="text-sm font-serif font-bold text-[#680114]">
+                Product Specifications
+              </h2>
+              <ChevronDown
+                className={`h-4 w-4 text-[#680114] transition-transform duration-200 ${
+                  isMobileSpecsOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+            {isMobileSpecsOpen && (
+              <div className="px-4 pb-4 pt-1 divide-y divide-[#680114]/20 text-xs border-t border-[#680114]/20 animate-fadeIn">
+                {product.specs.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-2 py-2">
+                    <span className="font-medium text-[#735A4A]">{item.label}</span>
+                    <span className="font-semibold text-[#680114]">{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 

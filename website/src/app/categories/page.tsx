@@ -2,6 +2,7 @@
 
 import React, { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 function CategoriesRedirectContent() {
   const router = useRouter();
@@ -20,22 +21,12 @@ function CategoriesRedirectContent() {
     router.replace(target);
   }, [router, searchParams]);
 
-  return (
-    <div className="min-h-screen bg-[#F6E9C8] flex items-center justify-center text-[#680114] font-serif font-bold text-sm">
-      Loading category catalog...
-    </div>
-  );
+  return <LoadingSpinner fullScreen text="Loading category catalog..." />;
 }
 
 export default function CategoriesRedirectPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-[#F6E9C8] flex items-center justify-center text-[#680114] font-serif font-bold text-sm">
-          Loading category catalog...
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingSpinner fullScreen text="Loading category catalog..." />}>
       <CategoriesRedirectContent />
     </Suspense>
   );

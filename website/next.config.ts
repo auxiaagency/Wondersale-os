@@ -38,6 +38,15 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async redirects() {
+    return [
+      {
+        source: "/search",
+        destination: "/category/all",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

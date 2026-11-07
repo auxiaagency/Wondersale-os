@@ -67,7 +67,7 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
       if (onSearchSubmit) {
         onSearchSubmit(searchQuery.trim());
       } else {
-        router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+        router.push(`/category/all?q=${encodeURIComponent(searchQuery.trim())}`);
       }
     }
   };

@@ -13,6 +13,7 @@ import { ProductCard } from "@/components/ui/ProductCard";
 import { PriceBreakdownCard } from "@/components/ui/PriceBreakdownCard";
 import { OrderTimeline } from "@/components/ui/OrderTimeline";
 import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
 export default function DesignSystemPage() {
   if (process.env.NODE_ENV === "production") {
@@ -264,6 +265,34 @@ export default function DesignSystemPage() {
               couponDiscountPaise={25000}
               couponCode="WONDER50"
             />
+          </div>
+        </section>
+
+        {/* Section 6: Brand Gyroscopic 3D Loading Spinner */}
+        <section className="bg-[#F6E9C8] p-6 rounded-2xl border-2 border-[#680114] shadow-sm space-y-4">
+          <div className="border-b border-[#680114]/20 pb-2">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#680114]">
+              6. Brand Gyroscopic 3D Loading Spinner
+            </h2>
+            <p className="text-xs text-[#735A4A]">
+              Pure CSS 3D gyroscopic spinning rings with solid and dashed burgundy lines on cream background
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-around gap-6 py-6 overflow-hidden">
+            <div className="text-center">
+              <span className="text-xs font-serif font-bold text-[#680114] block mb-2">
+                Responsive (160px Mobile / 250px Desktop, 3.5px lines)
+              </span>
+              <LoadingSpinner text="Loading Products..." />
+            </div>
+
+            <div className="text-center">
+              <span className="text-xs font-serif font-bold text-[#680114] block mb-2">
+                Compact (100px)
+              </span>
+              <LoadingSpinner size={100} />
+            </div>
           </div>
         </section>
       </main>
