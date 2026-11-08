@@ -63,6 +63,7 @@ export const metadata: Metadata = {
 
 import { StorefrontProvider } from "@/context/StorefrontContext";
 import { CategoryTreeMenuModal } from "@/components/navigation/CategoryTreeMenuModal";
+import { SearchModalDrawer } from "@/components/navigation/SearchModalDrawer";
 
 export default function RootLayout({
   children,
@@ -88,6 +89,7 @@ export default function RootLayout({
         <StorefrontProvider>
           {children}
           <CategoryTreeMenuModal />
+          <SearchModalDrawer />
         </StorefrontProvider>
       </body>
     </html>

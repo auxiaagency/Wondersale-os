@@ -25,7 +25,24 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
   onSearchSubmit,
 }) => {
   const router = useRouter();
-  const { cartCount, wishlistCount, location, checkAndApplyPincode, isHydrated, toggleCategoryMenu } = useStorefront();
+  const {
+    cartCount,
+    wishlistCount,
+    location,
+    checkAndApplyPincode,
+    isHydrated,
+    toggleCategoryMenu,
+    isSearchModalOpen,
+    openSearchModal,
+    closeSearchModal,
+    searchHeaderQuery,
+    setSearchHeaderQuery,
+    searchInStockOnly,
+    searchMinPrice,
+    searchMaxPrice,
+    searchScopeCategory,
+    searchScopeSubcategory,
+  } = useStorefront();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showPincodeModal, setShowPincodeModal] = useState(false);
@@ -61,13 +78,28 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
     };
   }, [isHydrated]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const term = searchHeaderQuery.trim();
+    if (term) {
       if (onSearchSubmit) {
-        onSearchSubmit(searchQuery.trim());
+        onSearchSubmit(term);
       } else {
-        router.push(`/category/all?q=${encodeURIComponent(searchQuery.trim())}`);
+        const sp = new URLSearchParams();
+        sp.set("q", term);
+        if (searchScopeSubcategory) sp.set("subcategory", searchScopeSubcategory);
+        if (searchInStockOnly) sp.set("in_stock", "true");
+        if (searchMinPrice !== null && !isNaN(searchMinPrice)) sp.set("min_price", String(searchMinPrice));
+        if (searchMaxPrice !== null && !isNaN(searchMaxPrice)) sp.set("max_price", String(searchMaxPrice));
+        const targetPath = searchScopeCategory?.slug
+          ? `/category/${searchScopeCategory.slug}?${sp.toString()}`
+          : `/category/all?${sp.toString()}`;
+        router.push(targetPath);
+      }
+      closeSearchModal();
+      // Blur active input to dismiss mobile keyboard if open
+      if (typeof document !== "undefined") {
+        (document.activeElement as HTMLElement)?.blur?.();
       }
     }
   };
@@ -100,23 +132,39 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             {/* 1. Brand Logo (dark variant: #F6E9C8 cream text, no hover effect) */}
             <WondersaleLogo size="md" variant="dark" />
 
-            {/* 2. Central Extended Search Bar */}
+            {/* 2. Central Extended Search Bar (Active input that directly controls the Search Drawer) */}
             <form onSubmit={handleSearch} className="relative flex-1 max-w-3xl">
-              <Search className="w-4 h-4 text-[#680114] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#680114] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none stroke-[2.5]" />
               <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products, brands and appliances..."
-                className="w-full h-11 text-sm bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] rounded-full pl-11 pr-12 border border-[#DFCBA0] focus:outline-none focus:ring-2 focus:ring-[#FAF3E0] transition-all shadow-inner"
+                id="wondersale-desktop-search-input"
+                type="text"
+                value={searchHeaderQuery}
+                onFocus={openSearchModal}
+                onClick={openSearchModal}
+                onChange={(e) => {
+                  setSearchHeaderQuery(e.target.value);
+                  if (!isSearchModalOpen) openSearchModal();
+                }}
+                placeholder="Search products, appliances, cookware..."
+                className="w-full h-11 text-sm font-medium bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] rounded-full pl-11 pr-14 border border-[#DFCBA0] focus:outline-none focus:ring-2 focus:ring-[#FAF3E0] transition-all shadow-inner"
               />
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center text-[#680114]">
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[#680114]">
+                {searchHeaderQuery && (
+                  <button
+                    type="button"
+                    aria-label="Clear Search"
+                    onClick={() => setSearchHeaderQuery("")}
+                    className="p-1 hover:text-[#88091E] rounded-md transition-all cursor-pointer"
+                  >
+                    <X className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                )}
                 <button
-                  type="button"
-                  aria-label="Voice Search"
+                  type="submit"
+                  aria-label="Submit Search"
                   className="p-1 hover:text-[#88091E] hover:scale-110 rounded-md transition-all cursor-pointer"
                 >
-                  <Mic className="w-4 h-4" />
+                  <Search className="w-4 h-4 stroke-[2.5]" />
                 </button>
               </div>
             </form>
@@ -198,24 +246,40 @@ export const GlobalHeader: React.FC<GlobalHeaderProps> = ({
             </div>
           </div>
 
-          {/* Search Bar Component */}
+          {/* Search Bar Component (Active input that triggers drawer on mobile) */}
           <div className="px-4 py-2.5 bg-[#680114]">
             <form onSubmit={handleSearch} className="relative flex items-center w-full">
-              <Search className="w-4 h-4 text-[#680114] absolute left-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-[#680114] absolute left-3.5 pointer-events-none stroke-[2.5]" />
               <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products, brands and more..."
-                className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-xs rounded-full pl-9 pr-10 py-2.5 border border-[#DFCBA0] focus:outline-none focus:ring-1 focus:ring-[#FAF3E0] transition-all shadow-inner"
+                id="wondersale-mobile-search-input"
+                type="text"
+                value={searchHeaderQuery}
+                onFocus={openSearchModal}
+                onClick={openSearchModal}
+                onChange={(e) => {
+                  setSearchHeaderQuery(e.target.value);
+                  if (!isSearchModalOpen) openSearchModal();
+                }}
+                placeholder="Search products, appliances and more..."
+                className="w-full bg-[#F6E9C8] text-[#5A0A10] placeholder:text-[#8C7355] text-xs font-medium rounded-full pl-9 pr-14 py-2.5 border border-[#DFCBA0] focus:outline-none focus:ring-1 focus:ring-[#FAF3E0] transition-all shadow-inner"
               />
-              <div className="absolute right-3 flex items-center text-[#680114]">
+              <div className="absolute right-3 flex items-center gap-1 text-[#680114]">
+                {searchHeaderQuery && (
+                  <button
+                    type="button"
+                    aria-label="Clear Search"
+                    onClick={() => setSearchHeaderQuery("")}
+                    className="p-1 hover:text-[#88091E] transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                  </button>
+                )}
                 <button
-                  type="button"
-                  aria-label="Voice Search"
+                  type="submit"
+                  aria-label="Submit Search"
                   className="p-1 hover:text-[#88091E] transition-colors"
                 >
-                  <Mic className="w-4 h-4" />
+                  <Search className="w-4 h-4 stroke-[2.5]" />
                 </button>
               </div>
             </form>

@@ -15,6 +15,7 @@ interface ProductCarouselSectionProps {
   actionText?: string;
   actionHref?: string;
   products: DemoProduct[];
+  isLoading?: boolean;
   accentBorderColor?: string;
   bgClass?: string;
   onAddToCart: (item: DemoProduct) => void;
@@ -31,6 +32,7 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
   actionText,
   actionHref,
   products,
+  isLoading = false,
   bgClass = "bg-[#FAF3E0]/70",
   onAddToCart,
   onToggleWishlist,
@@ -171,7 +173,7 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
     }
   };
 
-  if (!products || products.length === 0) return null;
+  if (!isLoading && (!products || products.length === 0)) return null;
 
   const isCleanBackground = bgClass.includes("border-0") || bgClass.includes("border-none");
   const borderStyle = isCleanBackground
@@ -256,42 +258,67 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
       </div>
 
       {/* Horizontal Carousel Track with Native Snapping, Touch Support & Smooth Mouse Drag */}
-      <div
-        ref={scrollRef}
-        onScroll={checkScroll}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUpOrLeave}
-        onMouseLeave={handleMouseUpOrLeave}
-        onClickCapture={handleClickCapture}
-        className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory py-1 px-0.5 -mx-0.5 cursor-grab select-none active:cursor-grabbing"
-      >
-        {products.map((item) => (
-          <div
-            key={item.id}
-            onDragStart={(e) => e.preventDefault()}
-            className="w-[102px] xs:w-[110px] sm:w-[175px] md:w-[190px] lg:w-[195px] shrink-0 snap-start flex flex-col select-none"
-          >
-            <ProductCard
-              id={item.id}
-              slug={item.slug}
-              title={item.title}
-              brand={item.brand}
-              mrpPaise={item.mrpPaise}
-              sellingPricePaise={item.sellingPricePaise}
-              rating={item.rating}
-              ratingCount={item.ratingCount}
-              imageUrl={item.imageUrl}
-              inStock={item.inStock}
-              badge={item.bestsellerRank ? "Top Seller" : undefined}
-              variant="grid"
-              onAddToCart={() => onAddToCart(item)}
-              onToggleWishlist={() => onToggleWishlist(item)}
-              isWishlisted={isInWishlist(item.id)}
-            />
-          </div>
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="flex items-stretch gap-2 sm:gap-3 overflow-hidden py-1 px-0.5 -mx-0.5">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <div
+              key={`carousel-skel-${idx}`}
+              className="w-[102px] xs:w-[110px] sm:w-[175px] md:w-[190px] lg:w-[195px] shrink-0 flex flex-col p-2.5 rounded-2xl bg-[#EFE0BC]/50 border border-[#680114]/15 animate-pulse"
+            >
+              <div className="w-full aspect-square rounded-xl bg-[#DFCBA0]/50 mb-2.5" />
+              <div className="w-3/4 h-3 bg-[#DFCBA0]/60 rounded mb-1.5" />
+              <div className="w-1/2 h-2.5 bg-[#DFCBA0]/40 rounded mb-2.5" />
+              <div className="w-1/3 h-3.5 bg-[#DFCBA0]/60 rounded mt-auto" />
+            </div>
+          ))}
+        </div>
+      ) : products.length === 0 ? (
+        <div className="w-full py-8 px-4 rounded-2xl bg-[#EFE0BC]/40 border border-[#680114]/15 flex flex-col items-center justify-center text-center">
+          <p className="text-xs sm:text-sm font-serif font-bold text-[#680114]/80">
+            No products are here at this moment
+          </p>
+          <p className="text-[11px] sm:text-xs text-[#680114]/60 mt-0.5">
+            Check back soon as we restock new inventory daily.
+          </p>
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          onScroll={checkScroll}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onMouseLeave={handleMouseUpOrLeave}
+          onClickCapture={handleClickCapture}
+          className="flex items-stretch gap-2 sm:gap-3 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory py-1 px-0.5 -mx-0.5 cursor-grab select-none active:cursor-grabbing"
+        >
+          {products.map((item) => (
+            <div
+              key={item.id}
+              onDragStart={(e) => e.preventDefault()}
+              className="w-[102px] xs:w-[110px] sm:w-[175px] md:w-[190px] lg:w-[195px] shrink-0 snap-start flex flex-col select-none"
+            >
+              <ProductCard
+                id={item.id}
+                slug={item.slug}
+                title={item.title}
+                brand={item.brand}
+                mrpPaise={item.mrpPaise}
+                sellingPricePaise={item.sellingPricePaise}
+                rating={item.rating}
+                ratingCount={item.ratingCount}
+                imageUrl={item.imageUrl}
+                inStock={item.inStock}
+                badge={item.bestsellerRank ? "Top Seller" : undefined}
+                variant="grid"
+                onAddToCart={() => onAddToCart(item)}
+                onToggleWishlist={() => onToggleWishlist(item)}
+                isWishlisted={isInWishlist(item.id)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 };

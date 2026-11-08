@@ -5,3 +5,7 @@ class WebsiteConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'website'
     verbose_name = 'Website & Online Store'
+
+    def ready(self):
+        # Register real-time Meilisearch sync signals
+        import website.signals

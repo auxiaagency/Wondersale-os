@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("q") || searchParams.get("search") || "";
     const sort = searchParams.get("sort") || "";
     const inStock = searchParams.get("in_stock") || "";
+    const minPrice = searchParams.get("min_price") || "";
+    const maxPrice = searchParams.get("max_price") || "";
     const page = searchParams.get("page") || "1";
     const pageSize = searchParams.get("pageSize") || searchParams.get("page_size") || "24";
 
@@ -19,6 +21,8 @@ export async function GET(request: NextRequest) {
     if (search) params.set("q", search);
     if (sort) params.set("sort", sort);
     if (inStock) params.set("in_stock", inStock);
+    if (minPrice) params.set("min_price", minPrice);
+    if (maxPrice) params.set("max_price", maxPrice);
     if (page) params.set("page", page);
     if (pageSize) params.set("page_size", pageSize);
 

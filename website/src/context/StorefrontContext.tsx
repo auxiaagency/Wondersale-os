@@ -85,6 +85,24 @@ interface StorefrontContextType {
   closeCategoryMenu: () => void;
   toggleCategoryMenu: () => void;
 
+  // Search Panel Modal/Drawer & Unified Search Filters
+  isSearchModalOpen: boolean;
+  searchHeaderQuery: string;
+  setSearchHeaderQuery: (q: string) => void;
+  searchInStockOnly: boolean;
+  setSearchInStockOnly: (val: boolean | ((prev: boolean) => boolean)) => void;
+  searchMinPrice: number | null;
+  setSearchMinPrice: (val: number | null) => void;
+  searchMaxPrice: number | null;
+  setSearchMaxPrice: (val: number | null) => void;
+  searchScopeCategory: { id: string | number; name: string; slug: string } | null;
+  setSearchScopeCategory: (cat: { id: string | number; name: string; slug: string } | null) => void;
+  searchScopeSubcategory: string | null;
+  setSearchScopeSubcategory: (sub: string | null) => void;
+  openSearchModal: () => void;
+  closeSearchModal: () => void;
+  toggleSearchModal: () => void;
+
   // Hydration readiness
   isHydrated: boolean;
 }
@@ -107,10 +125,21 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
   const [location, setLocation] = useState<DeliveryLocation>(DEFAULT_LOCATION);
   const [deliveryAddress, setDeliveryAddress] = useState<UserDeliveryAddress | null>(null);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [searchHeaderQuery, setSearchHeaderQuery] = useState("");
+  const [searchInStockOnly, setSearchInStockOnly] = useState(false);
+  const [searchMinPrice, setSearchMinPrice] = useState<number | null>(null);
+  const [searchMaxPrice, setSearchMaxPrice] = useState<number | null>(null);
+  const [searchScopeCategory, setSearchScopeCategory] = useState<{ id: string | number; name: string; slug: string } | null>(null);
+  const [searchScopeSubcategory, setSearchScopeSubcategory] = useState<string | null>(null);
 
   const openCategoryMenu = () => setIsCategoryMenuOpen(true);
   const closeCategoryMenu = () => setIsCategoryMenuOpen(false);
   const toggleCategoryMenu = () => setIsCategoryMenuOpen((prev) => !prev);
+
+  const openSearchModal = () => setIsSearchModalOpen(true);
+  const closeSearchModal = () => setIsSearchModalOpen(false);
+  const toggleSearchModal = () => setIsSearchModalOpen((prev) => !prev);
 
   // Load from localStorage only after client mounts
   useEffect(() => {
@@ -320,6 +349,22 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
         openCategoryMenu,
         closeCategoryMenu,
         toggleCategoryMenu,
+        isSearchModalOpen,
+        searchHeaderQuery,
+        setSearchHeaderQuery,
+        searchInStockOnly,
+        setSearchInStockOnly,
+        searchMinPrice,
+        setSearchMinPrice,
+        searchMaxPrice,
+        setSearchMaxPrice,
+        searchScopeCategory,
+        setSearchScopeCategory,
+        searchScopeSubcategory,
+        setSearchScopeSubcategory,
+        openSearchModal,
+        closeSearchModal,
+        toggleSearchModal,
         isHydrated,
       }}
     >

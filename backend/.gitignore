@@ -12,3 +12,5 @@ venv/
 !.env.example
 backups/
 logs/
+meili_data/
+meilisearch.exe

@@ -264,61 +264,55 @@ export default function HomePage() {
   const [shopCategoryCards, setShopCategoryCards] = useState<ShopByCategoryCardItem[]>(DEFAULT_SHOP_CATEGORY_CARDS);
   const [bestSellers, setBestSellers] = useState<any[]>([]);
   const [newArrivals, setNewArrivals] = useState<any[]>([]);
+  const [isPageDataLoaded, setIsPageDataLoaded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/categories")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setCategories(data.data);
-        }
-      })
-      .catch(() => {});
-
-    fetch("/api/hero-slides")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setHeroSlides(data.data);
-        }
-      })
-      .catch(() => {});
-
-    fetch("/api/deals-of-the-day")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setRealDeals(data.data);
-        }
-      })
-      .catch(() => {});
-
-    fetch("/api/shop-by-category")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setShopCategoryCards(data.data);
-        }
-      })
-      .catch(() => {});
-
-    fetch("/api/best-sellers")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setBestSellers(data.data);
-        }
-      })
-      .catch(() => {});
-
-    fetch("/api/new-arrivals")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-          setNewArrivals(data.data);
-        }
-      })
-      .catch(() => {});
+    Promise.allSettled([
+      fetch("/api/categories")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            setCategories(data.data);
+          }
+        }),
+      fetch("/api/hero-slides")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            setHeroSlides(data.data);
+          }
+        }),
+      fetch("/api/deals-of-the-day")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            setRealDeals(data.data);
+          }
+        }),
+      fetch("/api/shop-by-category")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            setShopCategoryCards(data.data);
+          }
+        }),
+      fetch("/api/best-sellers")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            setBestSellers(data.data);
+          }
+        }),
+      fetch("/api/new-arrivals")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+            setNewArrivals(data.data);
+          }
+        }),
+    ]).finally(() => {
+      setIsPageDataLoaded(true);
+    });
   }, []);
 
   const handleCopyCode = (code: string) => {
@@ -357,46 +351,60 @@ export default function HomePage() {
 
             {/* Mobile View: Dynamic category grid with deep burgundy outline */}
             <div className="grid grid-cols-5 md:hidden gap-1.5 items-start justify-items-center">
-              {categories.slice(0, 5).map((cat) => {
-                const Icon = getCategoryIcon(cat.icon, cat.name);
-                const targetSlug = cat.slug || String(cat.id);
-                return (
-                  <Link
-                    key={cat.id}
-                    href={`/category/${targetSlug}`}
-                    className="flex flex-col items-center group w-full px-0.5 py-1 transition-transform active:scale-95 text-center"
-                  >
-                    <div className="w-13 h-13 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114]/10 shadow-2xs shrink-0">
-                      <Icon className="w-5.5 h-5.5 text-[#680114] stroke-[2]" />
+              {categories.length === 0 && !isPageDataLoaded
+                ? Array.from({ length: 5 }).map((_, idx) => (
+                    <div key={`cat-skel-${idx}`} className="flex flex-col items-center w-full px-0.5 py-1 animate-pulse">
+                      <div className="w-13 h-13 rounded-full bg-[#EFE0BC] border-2 border-[#680114]/20 shrink-0" />
+                      <div className="w-10 h-2.5 bg-[#EFE0BC] rounded mt-2" />
                     </div>
-                    <span className="text-[11px] text-[#680114] text-center mt-1.5 line-clamp-2 leading-tight font-serif font-bold group-hover:text-[#680114] transition-colors h-[28px] flex items-start justify-center w-full">
-                      {cat.name}
-                    </span>
-                  </Link>
-                );
-              })}
+                  ))
+                : categories.slice(0, 5).map((cat) => {
+                    const Icon = getCategoryIcon(cat.icon, cat.name);
+                    const targetSlug = cat.slug || String(cat.id);
+                    return (
+                      <Link
+                        key={cat.id}
+                        href={`/category/${targetSlug}`}
+                        className="flex flex-col items-center group w-full px-0.5 py-1 transition-transform active:scale-95 text-center"
+                      >
+                        <div className="w-13 h-13 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114]/10 shadow-2xs shrink-0">
+                          <Icon className="w-5.5 h-5.5 text-[#680114] stroke-[2]" />
+                        </div>
+                        <span className="text-[11px] text-[#680114] text-center mt-1.5 line-clamp-2 leading-tight font-serif font-bold group-hover:text-[#680114] transition-colors h-[28px] flex items-start justify-center w-full">
+                          {cat.name}
+                        </span>
+                      </Link>
+                    );
+                  })}
             </div>
 
             {/* Desktop View: Full real categories evenly spaced without More button, showing full names */}
             <div className="hidden md:grid md:grid-cols-7 gap-3 lg:gap-6 items-start justify-items-center w-full">
-              {categories.map((cat) => {
-                const Icon = getCategoryIcon(cat.icon, cat.name);
-                const targetSlug = cat.slug || String(cat.id);
-                return (
-                  <Link
-                    key={cat.id}
-                    href={`/category/${targetSlug}`}
-                    className="flex flex-col items-center group w-full px-1 py-1 transition-transform hover:-translate-y-0.5 text-center"
-                  >
-                    <div className="w-15 h-15 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
-                      <Icon className="w-6.5 h-6.5 text-[#680114] group-hover:text-[#F6E9C8] stroke-[2] transition-colors" />
+              {categories.length === 0 && !isPageDataLoaded
+                ? Array.from({ length: 7 }).map((_, idx) => (
+                    <div key={`cat-skel-d-${idx}`} className="flex flex-col items-center w-full px-1 py-1 animate-pulse">
+                      <div className="w-15 h-15 rounded-full bg-[#EFE0BC] border-2 border-[#680114]/20 shadow-2xs" />
+                      <div className="w-16 h-3 bg-[#EFE0BC] rounded mt-2" />
                     </div>
-                    <span className="text-xs lg:text-sm text-[#680114] text-center mt-2 font-serif font-bold group-hover:text-[#680114] transition-colors leading-tight line-clamp-2 max-w-[140px]">
-                      {cat.name}
-                    </span>
-                  </Link>
-                );
-              })}
+                  ))
+                : categories.map((cat) => {
+                    const Icon = getCategoryIcon(cat.icon, cat.name);
+                    const targetSlug = cat.slug || String(cat.id);
+                    return (
+                      <Link
+                        key={cat.id}
+                        href={`/category/${targetSlug}`}
+                        className="flex flex-col items-center group w-full px-1 py-1 transition-transform hover:-translate-y-0.5 text-center"
+                      >
+                        <div className="w-15 h-15 rounded-full bg-transparent border-2 border-[#680114] flex items-center justify-center transition-all group-hover:bg-[#680114] group-hover:text-[#F6E9C8] shadow-2xs">
+                          <Icon className="w-6.5 h-6.5 text-[#680114] group-hover:text-[#F6E9C8] stroke-[2] transition-colors" />
+                        </div>
+                        <span className="text-xs lg:text-sm text-[#680114] text-center mt-2 font-serif font-bold group-hover:text-[#680114] transition-colors leading-tight line-clamp-2 max-w-[140px]">
+                          {cat.name}
+                        </span>
+                      </Link>
+                    );
+                  })}
             </div>
           </section>
 
@@ -524,96 +532,64 @@ export default function HomePage() {
           </section>
 
           {/* 4. DEALS OF THE DAY (Swipeable Carousel) */}
-          {realDeals.length > 0 ? (
-            <ProductCarouselSection
-              id="deals"
-              icon={<Zap className="w-5 h-5 sm:w-6 sm:h-6 text-[#680114] fill-[#680114]" />}
-              title={
-                <>
-                  <span className="inline sm:hidden">Deals</span>
-                  <span className="hidden sm:inline">Deals of the Day</span>
-                </>
-              }
-              bgClass="bg-[#F6E9C8] border-0"
-              badge={
-                <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full inline-flex items-center gap-1 sm:gap-1.5 text-[9.5px] sm:text-[11px] font-bold shadow-2xs leading-none translate-y-[1px] sm:translate-y-0.5 self-center">
-                  <Clock className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-[#680114] shrink-0" />
-                  <span className="font-sans font-semibold">
-                    <span className="inline sm:hidden">
-                      {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
-                    </span>
-                    <span className="hidden sm:inline">
-                      Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
-                    </span>
+          <ProductCarouselSection
+            id="deals"
+            icon={<Zap className="w-5 h-5 sm:w-6 sm:h-6 text-[#680114] fill-[#680114]" />}
+            title={
+              <>
+                <span className="inline sm:hidden">Deals</span>
+                <span className="hidden sm:inline">Deals of the Day</span>
+              </>
+            }
+            bgClass="bg-[#F6E9C8] border-0"
+            isLoading={!isPageDataLoaded && realDeals.length === 0}
+            badge={
+              <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full inline-flex items-center gap-1 sm:gap-1.5 text-[9.5px] sm:text-[11px] font-bold shadow-2xs leading-none translate-y-[1px] sm:translate-y-0.5 self-center">
+                <Clock className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-[#680114] shrink-0" />
+                <span className="font-sans font-semibold">
+                  <span className="inline sm:hidden">
+                    {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
                   </span>
-                </div>
-              }
-              actionText="All Deals"
-              actionHref="/categories"
-              products={realDeals.map((deal) => {
-                const dealSp = Number(deal.deal_selling_price || 0);
-                const dealMrp = Number(deal.deal_mrp || dealSp);
-                const discountPct = deal.discount_percentage
-                  ? Math.round(Number(deal.discount_percentage))
-                  : (dealMrp > dealSp ? Math.round(((dealMrp - dealSp) / dealMrp) * 100) : 0);
+                  <span className="hidden sm:inline">
+                    Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
+                  </span>
+                </span>
+              </div>
+            }
+            actionText="All Deals"
+            actionHref="/categories"
+            products={realDeals.map((deal) => {
+              const dealSp = Number(deal.deal_selling_price || 0);
+              const dealMrp = Number(deal.deal_mrp || dealSp);
+              const discountPct = deal.discount_percentage
+                ? Math.round(Number(deal.discount_percentage))
+                : (dealMrp > dealSp ? Math.round(((dealMrp - dealSp) / dealMrp) * 100) : 0);
 
-                return {
-                  id: String(deal.item_id || deal.id),
-                  slug: String(deal.item_uid || deal.item_id || deal.id),
-                  title: deal.item_name || "Special Deal Product",
-                  brand: "Wondersale Deal",
-                  category: "Deals of the Day",
-                  categorySlug: "deals",
-                  mrpPaise: Math.round(dealMrp * 100),
-                  sellingPricePaise: Math.round(dealSp * 100),
-                  rating: 4.8,
-                  ratingCount: 38,
-                  imageUrl: deal.item_image_url || "",
-                  inStock: Boolean(deal.item_in_stock),
-                  stockCount: deal.item_quantity || 10,
-                  badge: deal.custom_badge || (discountPct > 0 ? `${discountPct}% OFF` : "Deal of the Day"),
-                  description: "Limited-time Deal of the Day promotion directly from Bhopal store inventory.",
-                  variants: [{ capacity: "Standard", pricePaise: Math.round(dealSp * 100), note: `${deal.item_quantity || 0} in stock` }],
-                  specs: [{ label: "Condition", value: "Brand New" }],
-                  reviews: [],
-                };
-              })}
-              onAddToCart={handleAddToCart}
-              onToggleWishlist={handleToggleWishlist}
-              isInWishlist={isInWishlist}
-            />
-          ) : (
-            <ProductCarouselSection
-              id="deals"
-              icon={<Zap className="w-5 h-5 sm:w-6 sm:h-6 text-[#680114] fill-[#680114]" />}
-              title={
-                <>
-                  <span className="inline sm:hidden">Deals</span>
-                  <span className="hidden sm:inline">Deals of the Day</span>
-                </>
-              }
-              bgClass="bg-[#F6E9C8] border-0"
-              badge={
-                <div className="bg-[#E8D7B0] text-[#680114] border border-[#680114]/40 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full inline-flex items-center gap-1 sm:gap-1.5 text-[9.5px] sm:text-[11px] font-bold shadow-2xs leading-none translate-y-[1px] sm:translate-y-0.5 self-center">
-                  <Clock className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-[#680114] shrink-0" />
-                  <span className="font-sans font-semibold">
-                    <span className="inline sm:hidden">
-                      {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
-                    </span>
-                    <span className="hidden sm:inline">
-                      Ends in {padTime(timeLeft.hours)}h : {padTime(timeLeft.minutes)}m : {padTime(timeLeft.seconds)}s
-                    </span>
-                  </span>
-                </div>
-              }
-              actionText="All Deals"
-              actionHref="/categories"
-              products={DEMO_PRODUCTS.slice(0, 10)}
-              onAddToCart={handleAddToCart}
-              onToggleWishlist={handleToggleWishlist}
-              isInWishlist={isInWishlist}
-            />
-          )}
+              return {
+                id: String(deal.item_id || deal.id),
+                slug: String(deal.item_uid || deal.item_id || deal.id),
+                title: deal.item_name || "Special Deal Product",
+                brand: "Wondersale Deal",
+                category: "Deals of the Day",
+                categorySlug: "deals",
+                mrpPaise: Math.round(dealMrp * 100),
+                sellingPricePaise: Math.round(dealSp * 100),
+                rating: 4.8,
+                ratingCount: 38,
+                imageUrl: deal.item_image_url || "",
+                inStock: Boolean(deal.item_in_stock),
+                stockCount: deal.item_quantity || 10,
+                badge: deal.custom_badge || (discountPct > 0 ? `${discountPct}% OFF` : "Deal of the Day"),
+                description: "Limited-time Deal of the Day promotion directly from Bhopal store inventory.",
+                variants: [{ capacity: "Standard", pricePaise: Math.round(dealSp * 100), note: `${deal.item_quantity || 0} in stock` }],
+                specs: [{ label: "Condition", value: "Brand New" }],
+                reviews: [],
+              };
+            })}
+            onAddToCart={handleAddToCart}
+            onToggleWishlist={handleToggleWishlist}
+            isInWishlist={isInWishlist}
+          />
 
           {/* 5. SHOP BY CATEGORY */}
           <section className="w-full">
@@ -669,6 +645,7 @@ export default function HomePage() {
             icon={<TrendingUp className="w-5 h-5 text-[#680114]" />}
             title="Best Sellers"
             bgClass="bg-[#F6E9C8] border-0"
+            isLoading={!isPageDataLoaded && bestSellers.length === 0}
             badge={null}
             actionText="View Top 25"
             actionHref="/categories"
@@ -695,7 +672,7 @@ export default function HomePage() {
                     specs: [{ label: "Condition", value: "Brand New" }],
                     reviews: [],
                   }))
-                : DEMO_PRODUCTS.slice(0, 10)
+                : []
             }
             onAddToCart={handleAddToCart}
             onToggleWishlist={handleToggleWishlist}
@@ -708,6 +685,7 @@ export default function HomePage() {
             icon={<Sparkles className="w-5 h-5 text-[#680114]" />}
             title="New Arrivals"
             bgClass="bg-[#F6E9C8] border-0"
+            isLoading={!isPageDataLoaded && newArrivals.length === 0}
             badge={null}
             actionText="View Catalog"
             actionHref="/categories"
@@ -733,7 +711,7 @@ export default function HomePage() {
                     specs: [{ label: "Condition", value: "Fresh Stock" }],
                     reviews: [],
                   }))
-                : DEMO_PRODUCTS.slice(10, 20)
+                : []
             }
             onAddToCart={handleAddToCart}
             onToggleWishlist={handleToggleWishlist}

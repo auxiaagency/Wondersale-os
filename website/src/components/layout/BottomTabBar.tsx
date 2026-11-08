@@ -8,12 +8,20 @@ import { useStorefront } from "@/context/StorefrontContext";
 
 export const BottomTabBar: React.FC = () => {
   const pathname = usePathname();
-  const { cartCount, isHydrated, toggleCategoryMenu, isCategoryMenuOpen } = useStorefront();
+  const {
+    cartCount,
+    isHydrated,
+    toggleCategoryMenu,
+    isCategoryMenuOpen,
+    isSearchModalOpen,
+    openSearchModal,
+    closeSearchModal,
+  } = useStorefront();
 
   const navItems = [
     { label: "Home", href: "/", icon: Home },
     { label: "Categories", href: "#categories-menu", icon: Grid, isMenuTrigger: true },
-    { label: "Search", href: "/category/all", icon: Search },
+    { label: "Search", href: "#search-drawer", icon: Search, isSearchTrigger: true },
     { label: "Cart", href: "/cart", icon: ShoppingBag, count: isHydrated ? cartCount : 0 },
     { label: "Account", href: "/account", icon: User },
   ];
@@ -25,15 +33,32 @@ export const BottomTabBar: React.FC = () => {
     >
       <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
-          const isActive = item.isMenuTrigger ? isCategoryMenuOpen : pathname === item.href;
+          const isActive = item.isMenuTrigger
+            ? isCategoryMenuOpen
+            : item.isSearchTrigger
+            ? isSearchModalOpen
+            : pathname === item.href;
           const Icon = item.icon;
 
-          if (item.isMenuTrigger) {
+          if (item.isMenuTrigger || item.isSearchTrigger) {
+            const handleTriggerClick = (e: React.MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (item.isMenuTrigger) {
+                toggleCategoryMenu();
+              } else {
+                if (isSearchModalOpen) {
+                  closeSearchModal();
+                } else {
+                  openSearchModal();
+                }
+              }
+            };
             return (
               <button
                 key={item.label}
                 type="button"
-                onClick={toggleCategoryMenu}
+                onClick={handleTriggerClick}
                 className={`flex flex-col items-center justify-center flex-1 h-full transition-all relative min-w-[44px] cursor-pointer ${
                   isActive
                     ? "text-[#FDF8EE] font-extrabold"

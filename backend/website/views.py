@@ -22,6 +22,7 @@ from .serializers import (
     CustomerSerializer,
     WebsiteOrderSerializer,
 )
+from .meilisearch_service import get_meili_client, INDEX_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ def get_authenticated_customer(request):
 
 
 class StandardWebsitePagination(PageNumberPagination):
-    page_size = 20
+    page_size = 24
     page_size_query_param = 'page_size'
     max_page_size = 100
 
@@ -64,12 +65,64 @@ class StandardWebsitePagination(PageNumberPagination):
 class ProductListView(APIView):
     """
     Public listing of products visible on the website (is_listed_on_website=True).
-    Supports search query ?q=, category slug/id ?category=, and sort ?sort=.
+    Supports typo-tolerant search query ?q= via Meilisearch, category slug/id ?category=,
+    min_price ?min_price=, max_price ?max_price=, and sort ?sort=.
+    Falls back gracefully to database SQL search if Meilisearch is unavailable.
     """
     authentication_classes = []
     permission_classes = []
 
     def get(self, request):
+        search_query = (request.query_params.get('q') or request.query_params.get('search') or '').strip()
+        min_price = request.query_params.get('min_price')
+        max_price = request.query_params.get('max_price')
+        category_param = request.query_params.get('category')
+        subcategory_param = request.query_params.get('subcategory')
+        in_stock = request.query_params.get('in_stock')
+        sort = request.query_params.get('sort')
+
+        meili_hit_ids = None
+
+        # 1. Attempt Typo-Tolerant & Synonym search via Meilisearch when query or filters are present
+        if search_query:
+            try:
+                client = get_meili_client()
+                filter_rules = ["is_listed_on_website = true"]
+
+                if in_stock in ['true', '1']:
+                    filter_rules.append("in_stock = true")
+
+                if min_price:
+                    try:
+                        filter_rules.append(f"price >= {float(min_price)}")
+                    except ValueError:
+                        pass
+
+                if max_price:
+                    try:
+                        filter_rules.append(f"price <= {float(max_price)}")
+                    except ValueError:
+                        pass
+
+                search_params = {
+                    "limit": 100,
+                    "attributesToSearchOn": ["name", "category_names", "subcategory_names"],
+                    "rankingScoreThreshold": 0.5,
+                    "filter": " AND ".join(filter_rules) if filter_rules else None,
+                }
+
+                if sort == 'price_asc':
+                    search_params["sort"] = ["price:asc"]
+                elif sort == 'price_desc':
+                    search_params["sort"] = ["price:desc"]
+
+                search_results = client.index(INDEX_NAME).search(search_query, search_params)
+                meili_hit_ids = [hit['id'] for hit in search_results.get('hits', [])]
+            except Exception as e:
+                logger.warning(f"Meilisearch query failed, falling back to SQL: {e}")
+                meili_hit_ids = None
+
+        # 2. Build QuerySet
         queryset = Item.objects.filter(
             is_listed_on_website=True,
             weight__isnull=False,
@@ -81,18 +134,20 @@ class ProductListView(APIView):
             'subcategories__category'
         ).select_related('store')
 
-        # Search filter
-        search_query = request.query_params.get('q') or request.query_params.get('search')
-        if search_query:
-            query = search_query.strip()
+        if meili_hit_ids is not None:
+            # Preserve Meilisearch ranked relevance order
+            from django.db.models import Case, When
+            preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(meili_hit_ids)])
+            queryset = queryset.filter(id__in=meili_hit_ids).order_by(preserved_order)
+        elif search_query:
+            # Fallback SQL search
             queryset = queryset.filter(
-                Q(name__icontains=query) |
-                Q(uid__icontains=query) |
-                Q(description__icontains=query)
+                Q(name__icontains=search_query) |
+                Q(uid__icontains=search_query) |
+                Q(description__icontains=search_query)
             )
 
         # Category filter (by ID or name)
-        category_param = request.query_params.get('category')
         if category_param:
             if category_param.isdigit():
                 queryset = queryset.filter(subcategories__category_id=int(category_param))
@@ -100,28 +155,39 @@ class ProductListView(APIView):
                 queryset = queryset.filter(subcategories__category__name__iexact=category_param)
 
         # Subcategory filter
-        subcategory_param = request.query_params.get('subcategory')
         if subcategory_param:
             if subcategory_param.isdigit():
                 queryset = queryset.filter(subcategories__id=int(subcategory_param))
             else:
                 queryset = queryset.filter(subcategories__name__iexact=subcategory_param)
 
-        # In stock only
-        in_stock = request.query_params.get('in_stock')
-        if in_stock in ['true', '1']:
+        # Price Range Filters (when Meilisearch wasn't used or fallback)
+        if meili_hit_ids is None:
+            if min_price:
+                try:
+                    queryset = queryset.filter(selling_price__gte=Decimal(min_price))
+                except Exception:
+                    pass
+            if max_price:
+                try:
+                    queryset = queryset.filter(selling_price__lte=Decimal(max_price))
+                except Exception:
+                    pass
+
+        # In stock only (when Meilisearch wasn't used or fallback)
+        if meili_hit_ids is None and in_stock in ['true', '1']:
             queryset = queryset.filter(quantity__gt=0)
 
-        # Sorting
-        sort = request.query_params.get('sort')
-        if sort == 'price_asc':
-            queryset = queryset.order_by('selling_price')
-        elif sort == 'price_desc':
-            queryset = queryset.order_by('-selling_price')
-        elif sort == 'name_asc':
-            queryset = queryset.order_by('name')
-        else:
-            queryset = queryset.order_by('-created_at')
+        # Sorting (when Meilisearch rank wasn't applied)
+        if meili_hit_ids is None or sort in ['price_asc', 'price_desc', 'name_asc']:
+            if sort == 'price_asc':
+                queryset = queryset.order_by('selling_price')
+            elif sort == 'price_desc':
+                queryset = queryset.order_by('-selling_price')
+            elif sort == 'name_asc':
+                queryset = queryset.order_by('name')
+            elif meili_hit_ids is None:
+                queryset = queryset.order_by('-created_at')
 
         queryset = queryset.distinct()
 
