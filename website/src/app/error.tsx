@@ -23,7 +23,7 @@ export default function ErrorBoundary({
           !
         </div>
         <h2 className="text-lg font-bold mb-2">Unable to load content</h2>
-        <p className="text-sm text-neutral-600 mb-5">
+        <p className="text-sm text-[#680114] mb-5">
           An error occurred while loading this section. Please try again.
         </p>
         <button

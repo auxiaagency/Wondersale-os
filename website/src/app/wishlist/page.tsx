@@ -48,14 +48,14 @@ export default function WishlistPage() {
       <GlobalHeader />
 
       {/* 2. Desktop Breadcrumb Navigation */}
-      <div className="hidden md:block bg-[#FAF3E0] border-b border-[#EADFC7]">
-        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-3">
-          <nav className="flex items-center text-xs font-medium text-[#735A4A] space-x-2">
-            <Link href="/" className="hover:text-[#7A0C16] transition-colors">
-              Home
+      <div className="hidden md:block bg-[#F6E9C8] border-b border-[#680114]/15">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-1.5 md:py-2">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base font-serif font-bold text-[#680114] whitespace-nowrap overflow-x-auto no-scrollbar">
+            <Link href="/" className="hover:text-[#88091E] flex items-center transition-colors shrink-0">
+              <span>Home</span>
             </Link>
-            <ChevronRight className="w-3.5 h-3.5 text-[#735A4A]" />
-            <span className="text-[#680114] font-bold">
+            <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-60 shrink-0 text-[#680114]" />
+            <span className="text-[#680114] font-extrabold shrink-0">
               My Wishlist ({items.length} {items.length === 1 ? "item" : "items"})
             </span>
           </nav>
@@ -74,7 +74,7 @@ export default function WishlistPage() {
           </button>
           <div>
             <h1 className="font-bold text-base text-[#680114] leading-tight font-serif">My Wishlist</h1>
-            <p className="text-[11px] text-[#735A4A]">{items.length} Saved Items</p>
+            <p className="text-[11px] text-[#680114]/80">{items.length} Saved Items</p>
           </div>
         </div>
 
@@ -99,7 +99,7 @@ export default function WishlistPage() {
             <h1 className="text-2xl font-bold text-[#680114] font-serif">
               My Saved Wishlist
             </h1>
-            <p className="text-xs text-[#735A4A] mt-1">
+            <p className="text-xs text-[#680114]/80 mt-1">
               Items saved here stay reserved for express doorstep delivery
             </p>
           </div>
@@ -139,7 +139,7 @@ export default function WishlistPage() {
             <h2 className="text-xl md:text-2xl font-bold text-[#680114] font-serif">
               Your Wishlist is Empty
             </h2>
-            <p className="text-xs md:text-sm text-[#735A4A] max-w-md mx-auto mt-2 mb-6 leading-relaxed">
+            <p className="text-xs md:text-sm text-[#680114]/80 max-w-md mx-auto mt-2 mb-6 leading-relaxed">
               Explore thousands of verified products across our retail departments and tap the heart icon on any product to save it for later.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">

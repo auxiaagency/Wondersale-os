@@ -149,7 +149,7 @@ function OrderConfirmationContent() {
           <Link
             href="/"
             aria-label="Home"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 hover:bg-neutral-100 transition-colors active:scale-95"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-[#680114] hover:bg-neutral-100 transition-colors active:scale-95"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
@@ -158,17 +158,17 @@ function OrderConfirmationContent() {
               <span className="text-xs font-semibold text-[#D91E2A]">
                 {liveOrder?.status ? liveOrder.status.replace(/_/g, " ") : "Confirmed"}
               </span>
-              <span className="text-[10px] text-neutral-500">#{displayOrderNumber}</span>
+              <span className="text-[10px] text-[#680114]/75">#{displayOrderNumber}</span>
             </div>
             <button
               onClick={handleCopy}
-              className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-neutral-800 hover:text-[#D91E2A] transition-colors"
+              className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-[#680114] hover:text-[#D91E2A] transition-colors"
             >
               <span>{displayOrderNumber}</span>
               {copiedTracking ? (
                 <Check className="h-3 w-3 text-emerald-600" />
               ) : (
-                <Copy className="h-3 w-3 text-neutral-400" />
+                <Copy className="h-3 w-3 text-[#680114]/75" />
               )}
             </button>
           </div>
@@ -196,7 +196,7 @@ function OrderConfirmationContent() {
             <h1 className="text-xl font-extrabold text-[#680114] tracking-tight">
               Order Placed Successfully!
             </h1>
-            <p className="text-xs text-neutral-600 mt-1.5 leading-relaxed max-w-[300px]">
+            <p className="text-xs text-[#680114] mt-1.5 leading-relaxed max-w-[300px]">
               Thank you <span className="font-semibold text-[#680114]">{recipientName}</span>!
               Your order has been routed to{" "}
               <span className="font-semibold text-[#D91E2A]">
@@ -222,7 +222,7 @@ function OrderConfirmationContent() {
                     </span>
                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   </div>
-                  <p className="text-[10px] text-neutral-500">
+                  <p className="text-[10px] text-[#680114]/75">
                     {isBhopal
                       ? `Express Delivery Guarantee to ${liveOrder?.address?.city || location.locality || "your doorstep"}`
                       : `Fast Pan-India Tracked Courier to ${liveOrder?.address?.pincode || location.pincode}`}
@@ -256,9 +256,9 @@ function OrderConfirmationContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <h3 className="text-xs font-bold text-[#680114]">Order Confirmed</h3>
-                <time className="text-[10px] font-medium text-neutral-400">Just now</time>
+                <time className="text-[10px] font-medium text-[#680114]/75">Just now</time>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 Order verified and accepted by Fulfillment Hub
               </p>
             </div>
@@ -274,7 +274,7 @@ function OrderConfirmationContent() {
                 </h3>
                 <time className="text-[10px] font-bold text-[#D91E2A]">Active</time>
               </div>
-              <p className="text-[11px] text-neutral-600 mt-0.5">
+              <p className="text-[11px] text-[#680114] mt-0.5">
                 Packing in progress — Items verified with tamper-proof security seal
               </p>
               <div className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#D91E2A] bg-red-50 px-2 py-1 rounded w-fit border border-red-200">
@@ -285,16 +285,16 @@ function OrderConfirmationContent() {
 
             {/* Step 3: Out for Delivery */}
             <div className="relative flex flex-col opacity-60">
-              <div className="absolute -left-6 top-0 w-5 h-5 rounded-full bg-neutral-200 text-neutral-600 flex items-center justify-center ring-4 ring-white">
+              <div className="absolute -left-6 top-0 w-5 h-5 rounded-full bg-neutral-200 text-[#680114] flex items-center justify-center ring-4 ring-white">
                 <Zap className="h-3 w-3" />
               </div>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-xs font-semibold text-neutral-800">Out for Delivery</h3>
-                <span className="text-[10px] text-neutral-400">
+                <h3 className="text-xs font-semibold text-[#680114]">Out for Delivery</h3>
+                <span className="text-[10px] text-[#680114]/75">
                   {isBhopal ? "Est. 2:00 PM" : "Est. Day 3"}
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 {isBhopal
                   ? "Wondersale Express Rider assigned & departing"
                   : "Handed over to BlueDart / Delhivery"}
@@ -303,16 +303,16 @@ function OrderConfirmationContent() {
 
             {/* Step 4: Delivered */}
             <div className="relative flex flex-col opacity-60">
-              <div className="absolute -left-6 top-0 w-5 h-5 rounded-full bg-neutral-200 text-neutral-600 flex items-center justify-center ring-4 ring-white">
+              <div className="absolute -left-6 top-0 w-5 h-5 rounded-full bg-neutral-200 text-[#680114] flex items-center justify-center ring-4 ring-white">
                 <MapPin className="h-3 w-3" />
               </div>
               <div className="flex items-baseline justify-between">
-                <h3 className="text-xs font-semibold text-neutral-800">Delivered</h3>
-                <span className="text-[10px] text-neutral-400">
+                <h3 className="text-xs font-semibold text-[#680114]">Delivered</h3>
+                <span className="text-[10px] text-[#680114]/75">
                   {isBhopal ? "Est. 4:30 PM" : "Est. 3-5 Days"}
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 {liveOrder?.address?.city || location.city}{" "}
                 {liveOrder?.address?.pincode || location.pincode}
               </p>
@@ -323,7 +323,7 @@ function OrderConfirmationContent() {
         {/* 4. LIVE DELIVERY PARTNER CARD */}
         <section className="bg-white rounded-2xl p-4 border border-neutral-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#680114]/75">
               {isBhopal ? "Dedicated Rider" : "Logistics Partner"}
             </span>
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -333,19 +333,19 @@ function OrderConfirmationContent() {
           </div>
 
           <div className="flex items-center gap-3 mt-3">
-            <div className="relative w-12 h-12 rounded-full overflow-hidden bg-neutral-200 shrink-0 border-2 border-red-200 flex items-center justify-center text-xs font-bold text-neutral-700">
+            <div className="relative w-12 h-12 rounded-full overflow-hidden bg-neutral-200 shrink-0 border-2 border-red-200 flex items-center justify-center text-xs font-bold text-[#680114]">
               WS
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-xs font-bold text-[#680114] truncate">
                 Wondersale Express Fleet
               </h3>
-              <p className="text-[10px] text-neutral-500 truncate">
+              <p className="text-[10px] text-[#680114]/75 truncate">
                 Tracked Dispatch Partner
               </p>
               <div className="flex items-center gap-1 mt-0.5">
                 <span className="text-[11px] font-bold text-[#680114]">4.8 ★</span>
-                <span className="text-[10px] text-neutral-400">(1,240+ verified deliveries)</span>
+                <span className="text-[10px] text-[#680114]/75">(1,240+ verified deliveries)</span>
               </div>
             </div>
           </div>
@@ -354,7 +354,7 @@ function OrderConfirmationContent() {
           <div className="grid grid-cols-2 gap-2 mt-3.5">
             <a
               href="tel:+919826012345"
-              className="flex items-center justify-center gap-1.5 py-2 px-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-xl text-xs font-semibold transition-all active:scale-95 border border-neutral-200"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 bg-neutral-100 hover:bg-neutral-200 text-[#680114] rounded-xl text-xs font-semibold transition-all active:scale-95 border border-neutral-200"
             >
               <Phone className="h-3.5 w-3.5 text-[#D91E2A]" />
               Call Rider
@@ -373,10 +373,10 @@ function OrderConfirmationContent() {
           {/* Secure Delivery OTP Box */}
           <div className="mt-3.5 p-3 rounded-xl bg-neutral-50 border-2 border-dashed border-red-200 flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#680114]/75 block">
                 Secure Handover OTP
               </span>
-              <span className="text-[10px] text-neutral-600">
+              <span className="text-[10px] text-[#680114]">
                 Share only with delivery rider upon handover
               </span>
             </div>
@@ -395,7 +395,7 @@ function OrderConfirmationContent() {
               <ShoppingBag className="h-4 w-4 text-[#D91E2A]" />
               Items in Order ({items.length} {items.length === 1 ? "item" : "items"})
             </h2>
-            <span className="text-[10px] font-semibold text-neutral-400">
+            <span className="text-[10px] font-semibold text-[#680114]/75">
               Invoice #{displayOrderNumber}
             </span>
           </div>
@@ -409,11 +409,11 @@ function OrderConfirmationContent() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     {item.variantTitle && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider bg-neutral-100 px-1.5 py-0.2 rounded text-neutral-600">
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-neutral-100 px-1.5 py-0.2 rounded text-[#680114]">
                         {item.variantTitle}
                       </span>
                     )}
-                    <span className="text-[10px] font-medium text-neutral-400">
+                    <span className="text-[10px] font-medium text-[#680114]/75">
                       Qty: {item.quantity}
                     </span>
                   </div>
@@ -425,7 +425,7 @@ function OrderConfirmationContent() {
                       {formatPrice(item.pricePaise)}
                     </span>
                     {item.mrpPaise > item.pricePaise && (
-                      <span className="text-[10px] text-neutral-400 line-through">
+                      <span className="text-[10px] text-[#680114]/75 line-through">
                         {formatPrice(item.mrpPaise)}
                       </span>
                     )}
@@ -437,7 +437,7 @@ function OrderConfirmationContent() {
 
           {/* Pricing Breakdown */}
           <div className="mt-4 pt-3.5 border-t border-neutral-100 space-y-1.5 text-xs">
-            <div className="flex justify-between text-neutral-600">
+            <div className="flex justify-between text-[#680114]">
               <span>Items Total (MRP)</span>
               <span className="font-medium text-[#680114]">{formatPrice(totalMrpPaise)}</span>
             </div>
@@ -453,7 +453,7 @@ function OrderConfirmationContent() {
                 <span className="font-medium">-{formatPrice(discountPaise)}</span>
               </div>
             )}
-            <div className="flex justify-between text-neutral-600">
+            <div className="flex justify-between text-[#680114]">
               <span>
                 {isBhopal ? "Express 2-Hour Delivery" : "Standard Nationwide Shipping"}
               </span>
@@ -461,7 +461,7 @@ function OrderConfirmationContent() {
                 {deliveryFeePaise === 0 ? (
                   <>
                     FREE{" "}
-                    <span className="text-[10px] text-neutral-400 line-through font-normal">
+                    <span className="text-[10px] text-[#680114]/75 line-through font-normal">
                       {isBhopal ? "₹49" : "₹79"}
                     </span>
                   </>
@@ -494,7 +494,7 @@ function OrderConfirmationContent() {
         {/* 6. DELIVERY ADDRESS CARD */}
         <section className="bg-white rounded-2xl p-4 border border-neutral-200 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider flex items-center gap-1">
+            <h2 className="text-xs font-bold text-[#680114]/75 uppercase tracking-wider flex items-center gap-1">
               <MapPin className="h-3.5 w-3.5 text-[#D91E2A]" />
               Delivering To
             </h2>
@@ -503,8 +503,8 @@ function OrderConfirmationContent() {
             </span>
           </div>
           <p className="text-xs font-bold text-[#680114]">{recipientName}</p>
-          <p className="text-xs text-neutral-600 mt-0.5 leading-relaxed">{deliveryAddressLine}</p>
-          <div className="flex items-center gap-2 mt-1.5 text-xs text-neutral-500">
+          <p className="text-xs text-[#680114] mt-0.5 leading-relaxed">{deliveryAddressLine}</p>
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-[#680114]/75">
             <span>{recipientMobile}</span>
           </div>
         </section>
@@ -528,7 +528,7 @@ function OrderConfirmationContent() {
             Continue Shopping
           </Link>
           <div className="p-3.5 rounded-xl bg-neutral-100 border border-neutral-200 text-center">
-            <p className="text-[11px] text-neutral-500">Need assistance with your order?</p>
+            <p className="text-[11px] text-[#680114]/75">Need assistance with your order?</p>
             <div className="flex items-center justify-center gap-1.5 mt-1">
               <Store className="h-4 w-4 text-[#D91E2A]" />
               <a
@@ -538,7 +538,7 @@ function OrderConfirmationContent() {
                 Store Help Desk: 0755-4209999
               </a>
             </div>
-            <span className="text-[10px] text-neutral-500 block mt-0.5">
+            <span className="text-[10px] text-[#680114]/75 block mt-0.5">
               Available daily (9:00 AM - 10:00 PM)
             </span>
           </div>

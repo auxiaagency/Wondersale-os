@@ -29,14 +29,14 @@ export const OrderTimeline: React.FC<OrderTimelineProps> = ({ currentStep }) => 
                     ? "bg-[#1E9E5A] text-white"
                     : isCurrent
                       ? "bg-[#D91E2A] text-white ring-4 ring-red-100"
-                      : "bg-slate-200 text-slate-400"
+                      : "bg-slate-200 text-[#680114]/75"
                 }`}
               >
                 {isDone ? "✓" : idx + 1}
               </div>
               <span
                 className={`text-[10px] mt-1 font-semibold ${
-                  isCurrent ? "text-[#D91E2A]" : isDone ? "text-slate-700" : "text-slate-400"
+                  isCurrent ? "text-[#D91E2A]" : isDone ? "text-[#680114]" : "text-[#680114]/75"
                 }`}
               >
                 {step.label}

@@ -12,6 +12,7 @@ import {
   Clock,
   ShieldCheck,
   ArrowRight,
+  ChevronRight,
 } from "lucide-react";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
@@ -87,6 +88,19 @@ export default function OffersPage() {
     <div className="min-h-screen bg-[#FDF8EE] text-[#680114] flex flex-col justify-between font-sans">
       <GlobalHeader />
 
+      {/* Desktop Breadcrumbs */}
+      <div className="hidden md:block bg-[#F6E9C8] border-b border-[#680114]/15">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-1.5 md:py-2">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base font-serif font-bold text-[#680114] whitespace-nowrap overflow-x-auto no-scrollbar">
+            <Link href="/" className="hover:text-[#88091E] flex items-center transition-colors shrink-0">
+              <span>Home</span>
+            </Link>
+            <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-60 shrink-0 text-[#680114]" />
+            <span className="text-[#680114] font-extrabold shrink-0">Offers &amp; Deals</span>
+          </nav>
+        </div>
+      </div>
+
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 space-y-6">
         {/* Banner Section */}
         <div className="relative overflow-hidden rounded-3xl bg-[#5A0A10] border border-[#7A0C16] text-[#FDF8EE] p-6 sm:p-8 shadow-md">
@@ -117,7 +131,7 @@ export default function OffersPage() {
                   <span className="text-[10px] font-black uppercase tracking-wider bg-[#FAF3E0] text-[#7A0C16] px-2.5 py-0.5 rounded-full border border-[#EADFC7]">
                     {offer.badge}
                   </span>
-                  <div className="flex items-center gap-1 text-[11px] text-[#735A4A] font-medium">
+                  <div className="flex items-center gap-1 text-[11px] text-[#680114]/80 font-medium">
                     <Clock className="w-3.5 h-3.5" />
                     <span>{offer.validity}</span>
                   </div>
@@ -125,7 +139,7 @@ export default function OffersPage() {
 
                 <h2 className="font-bold text-base text-[#680114] font-serif">{offer.title}</h2>
                 <p className="text-xs text-[#4A3428] leading-relaxed">{offer.description}</p>
-                <p className="text-[11px] font-semibold text-[#735A4A]">{offer.minOrder}</p>
+                <p className="text-[11px] font-semibold text-[#680114]/80">{offer.minOrder}</p>
               </div>
 
               <div className="pt-3 border-t border-[#EADFC7] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -135,7 +149,7 @@ export default function OffersPage() {
                   className="flex items-center justify-between sm:justify-start gap-2 bg-[#F4ECDC] hover:bg-[#EADFC7] text-[#680114] px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer border border-[#EADFC7]"
                 >
                   <span className="text-[#7A0C16] font-extrabold">{offer.code}</span>
-                  <div className="flex items-center gap-1 text-[#735A4A] text-[11px] font-sans">
+                  <div className="flex items-center gap-1 text-[#680114]/80 text-[11px] font-sans">
                     <Copy className="w-3.5 h-3.5" />
                     <span>{copiedCode === offer.code ? "Copied! ✓" : "Copy"}</span>
                   </div>

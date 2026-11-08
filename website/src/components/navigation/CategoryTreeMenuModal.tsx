@@ -342,7 +342,7 @@ export const CategoryTreeMenuModal: React.FC = () => {
           </div>
 
           {/* Minimalist Bottom Bar */}
-          <div className="px-8 py-3 bg-[#EFE0BC] border-t border-[#DBC599]/90 flex items-center justify-between text-xs sm:text-sm text-[#735A4A] shrink-0">
+          <div className="px-8 py-3 bg-[#EFE0BC] border-t border-[#DBC599]/90 flex items-center justify-between text-xs sm:text-sm text-[#680114]/80 shrink-0">
             <span>Click any category or subcategory to view matching store products</span>
             <Link
               href="/categories"
@@ -445,7 +445,7 @@ export const CategoryTreeMenuModal: React.FC = () => {
           </div>
 
           {/* Mobile Bottom Footer Strip: "View Full Directory" */}
-          <div className="px-4 py-2.5 bg-[#EFE0BC] border-t border-[#DBC599]/90 flex items-center justify-between text-xs text-[#735A4A] shrink-0">
+          <div className="px-4 py-2.5 bg-[#EFE0BC] border-t border-[#DBC599]/90 flex items-center justify-between text-xs text-[#680114]/80 shrink-0">
             <span>Tap subcategory to view products</span>
             <Link
               href="/categories"

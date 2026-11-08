@@ -151,7 +151,7 @@ function TrackOrderContent() {
             <Link
               href="/account"
               aria-label="Back to Account"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 hover:bg-neutral-100 transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#680114] hover:bg-neutral-100 transition-colors active:scale-95"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -162,7 +162,7 @@ function TrackOrderContent() {
 
           <a
             href="tel:07554209999"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-800 transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-[#680114] transition-colors"
           >
             <Store className="h-3.5 w-3.5 text-[#D91E2A]" />
             <span className="text-[11px]">24x7 Help</span>
@@ -179,7 +179,7 @@ function TrackOrderContent() {
                 : "Live Status: Out for Delivery"}
             </span>
           </div>
-          <span className="text-[10px] font-medium text-neutral-500">
+          <span className="text-[10px] font-medium text-[#680114]/75">
             Fulfillment Hub Dispatch
           </span>
         </div>
@@ -190,7 +190,7 @@ function TrackOrderContent() {
         {/* Quick Shipment Switcher Card */}
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-neutral-100">
-            <span className="text-xs font-semibold text-neutral-600">Quick Shipment Switcher</span>
+            <span className="text-xs font-semibold text-[#680114]">Quick Shipment Switcher</span>
             <span className="text-[10px] font-bold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded border border-red-100">
               {isBhopal ? "Express 2-Hour Delivery" : "Pan-India Courier"}
             </span>
@@ -198,7 +198,7 @@ function TrackOrderContent() {
 
           <form onSubmit={handleSearch} className="space-y-2">
             <div className="relative">
-              <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">
+              <label className="text-[10px] font-bold text-[#680114]/75 uppercase tracking-wider block mb-1">
                 Order Tracking ID
               </label>
               <div className="relative flex items-center">
@@ -284,11 +284,11 @@ function TrackOrderContent() {
               </svg>
 
               <div className="relative z-10 flex justify-between items-start text-[10px]">
-                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-xs border border-neutral-200 font-semibold text-neutral-800">
+                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-xs border border-neutral-200 font-semibold text-[#680114]">
                   <span className="w-2 h-2 rounded-full bg-[#D91E2A] inline-block mr-1"></span>
                   <span>Fulfillment Hub</span>
                 </div>
-                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-xs border border-neutral-200 font-semibold text-neutral-800">
+                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-xs border border-neutral-200 font-semibold text-[#680114]">
                   <MapPin className="h-3 w-3 text-[#D91E2A] inline-block mr-0.5" />
                   <span>{activeOrder?.address?.line1 || "Customer Address"}</span>
                 </div>
@@ -309,7 +309,7 @@ function TrackOrderContent() {
                 </div>
               </div>
 
-              <div className="relative z-10 flex justify-between items-end text-[10px] text-neutral-500 font-medium">
+              <div className="relative z-10 flex justify-between items-end text-[10px] text-[#680114]/75 font-medium">
                 <span>Via Link Road No. 1</span>
                 <span className="bg-red-50 text-[#D91E2A] font-bold px-1.5 py-0.5 rounded">
                   Traffic: Clear
@@ -323,7 +323,7 @@ function TrackOrderContent() {
         <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200 space-y-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="relative w-12 h-12 rounded-full bg-neutral-200 border-2 border-red-200 flex items-center justify-center font-bold text-xs text-neutral-700">
+              <div className="relative w-12 h-12 rounded-full bg-neutral-200 border-2 border-red-200 flex items-center justify-center font-bold text-xs text-[#680114]">
                 {isBhopal ? "MS" : "WS"}
                 <span className="absolute -bottom-0.5 -right-0.5 bg-emerald-600 text-white p-0.5 rounded-full border border-white">
                   <Check className="h-2.5 w-2.5 stroke-[3]" />
@@ -338,9 +338,9 @@ function TrackOrderContent() {
                     Express Partner
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-0.5">
+                <div className="flex items-center gap-2 text-[11px] text-[#680114]/75 mt-0.5">
                   <span className="text-amber-600 font-bold">
-                    ★ 4.8 <span className="font-normal text-neutral-400">(1,240 deliveries)</span>
+                    ★ 4.8 <span className="font-normal text-[#680114]/75">(1,240 deliveries)</span>
                   </span>
                   <span>•</span>
                   <span>EV: MP-04-ZY-8841</span>
@@ -352,7 +352,7 @@ function TrackOrderContent() {
           <div className="grid grid-cols-2 gap-2 pt-1">
             <a
               href="tel:+919826012345"
-              className="flex items-center justify-center gap-1.5 py-2 px-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-semibold text-xs rounded-lg transition-colors border border-neutral-200 active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-2 px-3 bg-neutral-100 hover:bg-neutral-200 text-[#680114] font-semibold text-xs rounded-lg transition-colors border border-neutral-200 active:scale-95"
             >
               <Phone className="h-3.5 w-3.5 text-[#D91E2A]" />
               <span>Call Rider</span>
@@ -375,7 +375,7 @@ function TrackOrderContent() {
                 <Lock className="h-3.5 w-3.5 text-[#D91E2A]" />
                 <span>Handover Delivery OTP</span>
               </div>
-              <p className="text-[10px] text-neutral-500">
+              <p className="text-[10px] text-[#680114]/75">
                 Share this 4-digit code ONLY when package arrives
               </p>
             </div>
@@ -393,7 +393,7 @@ function TrackOrderContent() {
             <h3 className="font-bold text-xs uppercase tracking-wider text-[#680114]">
               Timeline &amp; Milestones
             </h3>
-            <span className="text-[10px] font-semibold text-neutral-400">
+            <span className="text-[10px] font-semibold text-[#680114]/75">
               #{displayOrderNumber}
             </span>
           </div>
@@ -405,9 +405,9 @@ function TrackOrderContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-bold text-[#680114]">Order Placed</span>
-                <span className="text-[10px] text-neutral-400">01:15 PM</span>
+                <span className="text-[10px] text-[#680114]/75">01:15 PM</span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 Payment via PhonePe UPI Verified
               </p>
             </div>
@@ -420,9 +420,9 @@ function TrackOrderContent() {
                 <span className="text-xs font-bold text-[#680114]">
                   Order Confirmed &amp; Packed
                 </span>
-                <span className="text-[10px] text-neutral-400">01:30 PM</span>
+                <span className="text-[10px] text-[#680114]/75">01:30 PM</span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 Packed at Central Fulfillment Hub
               </p>
             </div>
@@ -433,9 +433,9 @@ function TrackOrderContent() {
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-xs font-bold text-[#680114]">Dispatched with Rider</span>
-                <span className="text-[10px] text-neutral-400">01:50 PM</span>
+                <span className="text-[10px] text-[#680114]/75">01:50 PM</span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 Handed to Mukesh S. via EV Scooter MP-04-ZY-8841
               </p>
             </div>
@@ -449,21 +449,21 @@ function TrackOrderContent() {
                   <span className="text-xs font-bold text-[#D91E2A]">Out for Delivery</span>
                   <span className="text-[10px] font-bold text-[#D91E2A]">Active</span>
                 </div>
-                <p className="text-[11px] text-neutral-800 mt-0.5">
+                <p className="text-[11px] text-[#680114] mt-0.5">
                   Moving along Chetak Bridge to Arera Colony
                 </p>
               </div>
             </div>
 
             <div className="relative opacity-60">
-              <div className="absolute -left-6 top-0 w-5 h-5 rounded-full bg-neutral-200 text-neutral-500 flex items-center justify-center">
+              <div className="absolute -left-6 top-0 w-5 h-5 rounded-full bg-neutral-200 text-[#680114]/75 flex items-center justify-center">
                 <MapPin className="h-3 w-3" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-semibold text-neutral-800">Delivered</span>
-                <span className="text-[10px] text-neutral-400">Est. 4:15 PM</span>
+                <span className="text-xs font-semibold text-[#680114]">Delivered</span>
+                <span className="text-[10px] text-[#680114]/75">Est. 4:15 PM</span>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#680114]/75 mt-0.5">
                 Handover OTP required upon arrival: <strong>{deliveryOtp}</strong>
               </p>
             </div>
@@ -492,7 +492,7 @@ function TrackOrderContent() {
                   <h4 className="text-xs font-bold text-[#680114] truncate">
                     {item.productName}
                   </h4>
-                  <p className="text-[10px] text-neutral-500">Qty: {item.quantity}</p>
+                  <p className="text-[10px] text-[#680114]/75">Qty: {item.quantity}</p>
                   <div className="text-xs font-bold text-[#680114] mt-0.5">
                     {formatPrice(item.pricePaise)}
                   </div>
@@ -502,7 +502,7 @@ function TrackOrderContent() {
           </div>
 
           <div className="mt-3.5 pt-3 border-t border-neutral-100 text-xs space-y-1.5">
-            <div className="flex justify-between text-neutral-600">
+            <div className="flex justify-between text-[#680114]">
               <span>Items Total (MRP)</span>
               <span>{formatPrice(totalMrpPaise)}</span>
             </div>
@@ -525,7 +525,7 @@ function TrackOrderContent() {
         <section className="space-y-2 pt-1">
           <Link
             href="/order-confirmation"
-            className="w-full py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-xl text-xs font-bold tracking-tight flex items-center justify-center gap-1.5 border border-neutral-200 transition-all"
+            className="w-full py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200 text-[#680114] rounded-xl text-xs font-bold tracking-tight flex items-center justify-center gap-1.5 border border-neutral-200 transition-all"
           >
             <Download className="h-4 w-4 text-[#D91E2A]" />
             <span>Download Invoice (PDF)</span>

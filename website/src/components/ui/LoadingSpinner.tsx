@@ -4,12 +4,35 @@ import React, { useId } from "react";
 
 export interface LoadingSpinnerProps {
   /**
-   * Optional custom width/height override (e.g. 200, "240px", "60vh").
-   * Defaults to responsive mobile: 160px / desktop: 250px (or mobile: min(50vh, 300px) / desktop: min(68vh, 500px) for fullscreen).
+   * Optional custom scale factor or sizing override.
    */
   size?: number | string;
   /**
-   * Optional status message rendered below the spinner.
+   * Custom scale factor directly applied to the loader animation (default 2.30).
+   */
+  scale?: number;
+  /**
+   * Circle diameter in px (default 21).
+   */
+  circleSize?: number;
+  /**
+   * Distance between balls in px (default 31).
+   */
+  spread?: number;
+  /**
+   * Animation rotation and translation speed in seconds (default 1.90).
+   */
+  speed?: number;
+  /**
+   * Dots animation cycle duration in seconds (default 2.30).
+   */
+  dotsSpeed?: number;
+  /**
+   * Font size in rem or px for the title text (default "24px").
+   */
+  fontSize?: string;
+  /**
+   * Text rendered below the spinner.
    */
   text?: string;
   /**
@@ -22,113 +45,166 @@ export interface LoadingSpinnerProps {
   className?: string;
 }
 
-const COUNT = 16;
-const SPEED = 12; // 12s total duration base
-
 export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   size,
+  scale: propScale,
+  circleSize = 21,
+  spread = 31,
+  speed = 1.9,
+  dotsSpeed = 2.3,
+  fontSize = "24px",
   text,
   fullScreen = false,
   className = "",
 }) => {
   const uid = useId().replace(/:/g, "");
-  const scopeClass = `gyro-scope-${uid}`;
+  const scopeClass = `custom-loader-${uid}`;
 
-  // Default sizes: significantly bigger on desktop
-  const mobileSize = fullScreen ? "min(50vh, 300px)" : "160px";
-  const desktopSize = fullScreen ? "min(68vh, 500px)" : "250px";
+  // Default to user's exact chosen scale of 2.30x
+  let effectiveScale = 2.3;
+  if (propScale !== undefined) {
+    effectiveScale = propScale;
+  } else if (size !== undefined) {
+    effectiveScale = typeof size === "number" ? (size > 10 ? size / 50 : size) : 2.3;
+  }
 
-  const resolvedMobileSize = size ? (typeof size === "number" ? `${size}px` : size) : mobileSize;
-  const resolvedDesktopSize = size
-    ? typeof size === "number"
-      ? `${Math.round(size * 1.35)}px`
-      : size
-    : desktopSize;
-
-  const step = 100 / COUNT; // 6.25% per step
+  // The 4-circle bounding box width is circleSize + spread, height is 2 * circleSize + 10px margin
+  const boxWidth = circleSize + spread;
+  const boxHeight = circleSize * 2 + 10;
+  const ballHalfSpread = spread / 2;
 
   return (
     <div
-      className={`flex flex-col items-center justify-center bg-[#F6E9C8] ${scopeClass} ${
+      className={`flex flex-col items-center justify-center bg-[#F6E9C8] w-full h-full ${scopeClass} ${
         fullScreen ? "fixed inset-0 w-screen h-screen z-[9999] overflow-hidden" : ""
       } ${className}`}
       role="status"
       aria-label={text || "Loading"}
     >
       <style>{`
-        .${scopeClass} {
-          --gyro-size: ${resolvedMobileSize};
-          --gyro-border: 2px;
+        .${scopeClass} .loader-wrapper {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: ${boxWidth * effectiveScale}px;
+          height: ${boxHeight * effectiveScale}px;
         }
-        @media (min-width: 768px) {
-          .${scopeClass} {
-            --gyro-size: ${resolvedDesktopSize};
-            --gyro-border: 3.5px;
-          }
+
+        .${scopeClass} .loader {
+          position: relative;
+          height: ${boxHeight}px;
+          width: ${boxWidth}px;
+          transform: scale(${effectiveScale});
+          transform-origin: center center;
+          animation: ${scopeClass}-rotate ${speed}s infinite;
         }
-        @keyframes gyroSpin {
+
+        .${scopeClass} .loader:before,
+        .${scopeClass} .loader:after {
+          border-radius: 50%;
+          content: '';
+          display: block;
+          height: ${circleSize}px;
+          width: ${circleSize}px;
+        }
+
+        .${scopeClass} .loader:before {
+          animation: ${scopeClass}-ball1 ${speed}s infinite;
+          background-color: #680114;
+          box-shadow: ${spread}px 0 0 #680114;
+          margin-bottom: 10px;
+        }
+
+        .${scopeClass} .loader:after {
+          animation: ${scopeClass}-ball2 ${speed}s infinite;
+          background-color: #680114;
+          box-shadow: ${spread}px 0 0 #680114;
+        }
+
+        @keyframes ${scopeClass}-rotate {
           0% {
-            transform: rotateX(0deg);
+            transform: scale(${effectiveScale}) rotate(0deg) scale(0.8);
+            -webkit-transform: scale(${effectiveScale}) rotate(0deg) scale(0.8);
+          }
+          50% {
+            transform: scale(${effectiveScale}) rotate(360deg) scale(1.2);
+            -webkit-transform: scale(${effectiveScale}) rotate(360deg) scale(1.2);
           }
           100% {
-            transform: rotateX(360deg);
+            transform: scale(${effectiveScale}) rotate(720deg) scale(0.8);
+            -webkit-transform: scale(${effectiveScale}) rotate(720deg) scale(0.8);
           }
+        }
+
+        @keyframes ${scopeClass}-ball1 {
+          0% {
+            box-shadow: ${spread}px 0 0 #680114;
+          }
+          50% {
+            box-shadow: 0 0 0 #680114;
+            margin-bottom: 0;
+            transform: translate(${ballHalfSpread}px, ${ballHalfSpread}px);
+            -webkit-transform: translate(${ballHalfSpread}px, ${ballHalfSpread}px);
+          }
+          100% {
+            box-shadow: ${spread}px 0 0 #680114;
+            margin-bottom: 10px;
+          }
+        }
+
+        @keyframes ${scopeClass}-ball2 {
+          0% {
+            box-shadow: ${spread}px 0 0 #680114;
+          }
+          50% {
+            box-shadow: 0 0 0 #680114;
+            margin-top: -${circleSize}px;
+            transform: translate(${ballHalfSpread}px, ${ballHalfSpread}px);
+            -webkit-transform: translate(${ballHalfSpread}px, ${ballHalfSpread}px);
+          }
+          100% {
+            box-shadow: ${spread}px 0 0 #680114;
+            margin-top: 0;
+          }
+        }
+
+        .${scopeClass} .dots-anim {
+          position: absolute;
+          left: 100%;
+          bottom: 0;
+          white-space: nowrap;
+        }
+
+        .${scopeClass} .dots-anim::after {
+          content: '';
+          display: inline-block;
+          animation: ${scopeClass}-dots ${dotsSpeed}s infinite steps(4, jump-none);
+        }
+
+        @keyframes ${scopeClass}-dots {
+          0% { content: ''; }
+          25% { content: '.'; }
+          50% { content: '..'; }
+          75% { content: '...'; }
+          100% { content: '....'; }
         }
       `}</style>
 
-      {/* 3D Preserved Perspective Container */}
-      <div
-        style={{
-          position: "relative",
-          display: "block",
-          width: "var(--gyro-size)",
-          height: "var(--gyro-size)",
-          transformStyle: "preserve-3d",
-          WebkitTransformStyle: "preserve-3d",
-          transform: "perspective(1000px) rotateY(45deg) rotateX(45deg)",
-          WebkitTransform: "perspective(1000px) rotateY(45deg) rotateX(45deg)",
-          pointerEvents: "none",
-        }}
-      >
-        {Array.from({ length: COUNT }).map((_, idx) => {
-          const n = idx + 1; // 1 to 16
-          const localSize = 100 - step * n;
-          const offset = (step * n) / 2;
-          const duration = SPEED / n;
-          const isEven = n % 2 === 0;
-          const isLast = n === COUNT;
-
-          return (
-            <div
-              key={idx}
-              data-index={idx}
-              style={{
-                position: "absolute",
-                background: "transparent",
-                borderStyle: isEven ? "dashed" : "solid",
-                borderWidth: "var(--gyro-border)",
-                borderColor: isEven ? "rgba(104, 1, 20, 0.55)" : "#680114",
-                borderRadius: "50%",
-                boxSizing: "border-box",
-                left: `${offset}%`,
-                top: `${offset}%`,
-                width: `${localSize}%`,
-                height: `${localSize}%`,
-                animation: `gyroSpin ${duration}s infinite linear`,
-                WebkitAnimation: `gyroSpin ${duration}s infinite linear`,
-                display: isLast ? "none" : "block",
-                willChange: "transform",
-              }}
-            />
-          );
-        })}
+      {/* Centered Bounding Wrapper for the Scaled Rotating Animation */}
+      <div className="loader-wrapper">
+        <div className="loader" />
       </div>
 
-      {text && (
-        <p className="mt-6 md:mt-10 text-xs md:text-sm font-serif font-bold text-[#680114] tracking-wide animate-pulse text-center px-4">
-          {text}
-        </p>
-      )}
+      {/* True-Centered Title Text with absolute dots overlay so text never shifts off-center */}
+      <div className="mt-8 px-4 flex justify-center w-full">
+        <div
+          className="relative inline-block font-serif font-black tracking-tight text-[#680114] select-none text-center leading-none"
+          style={fontSize ? { fontSize } : undefined}
+        >
+          <span>{text ? text.replace(/\.{2,}$/, "") : "Loading"}</span>
+          <span className="dots-anim" />
+        </div>
+      </div>
     </div>
   );
 };

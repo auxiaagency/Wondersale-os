@@ -24,7 +24,7 @@ export const MobileNumberInput: React.FC<MobileNumberInputProps> = ({
 
   return (
     <div className="w-full">
-      {label && <label className="block text-xs font-semibold text-slate-700 mb-1">{label}</label>}
+      {label && <label className="block text-xs font-semibold text-[#680114] mb-1">{label}</label>}
       <div
         className={`flex h-11 rounded-lg border bg-white overflow-hidden transition-all focus-within:ring-1 ${
           error
@@ -32,7 +32,7 @@ export const MobileNumberInput: React.FC<MobileNumberInputProps> = ({
             : "border-slate-300 focus-within:border-[#D91E2A] focus-within:ring-[#D91E2A]"
         }`}
       >
-        <div className="bg-slate-50 px-3 flex items-center border-r border-slate-200 space-x-1.5 text-xs font-semibold text-slate-700 select-none">
+        <div className="bg-slate-50 px-3 flex items-center border-r border-slate-200 space-x-1.5 text-xs font-semibold text-[#680114] select-none">
           <span className="text-sm">🇮🇳</span>
           <span>+91</span>
         </div>

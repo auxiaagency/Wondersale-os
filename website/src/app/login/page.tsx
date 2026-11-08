@@ -7,8 +7,6 @@ import {
   ArrowLeft,
   Store,
   HelpCircle,
-  Zap,
-  CheckCircle,
   Phone,
   Edit2,
   Clock,
@@ -111,123 +109,104 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative mx-auto min-h-screen w-full max-w-[390px] bg-neutral-50 shadow-2xl flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F6E9C8] text-[#680114] flex flex-col font-sans selection:bg-[#680114]/20 selection:text-[#680114]">
       {/* 1. TOP NAVIGATION BAR */}
-      <header className="sticky top-0 z-40 bg-white px-4 py-3 flex items-center justify-between shadow-xs border-b border-neutral-200">
-        <div className="flex items-center gap-2.5">
+      <header className="sticky top-0 z-40 bg-[#F6E9C8] px-4 sm:px-6 py-3.5 flex items-center justify-between border-b-2 border-[#680114]/20 shadow-xs backdrop-blur-md">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
             aria-label="Go Back"
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-neutral-100 text-neutral-800 hover:bg-neutral-200 transition-transform active:scale-90"
+            className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-all active:scale-90 cursor-pointer shadow-2xs"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4" />
           </button>
           <WondersaleLogo size="sm" />
         </div>
 
         <a
           href="tel:07554209999"
-          className="inline-flex items-center gap-1 py-1 px-2.5 rounded-full bg-neutral-100 text-neutral-600 hover:text-[#D91E2A] transition-colors text-xs font-medium"
+          className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-all text-xs font-serif font-bold shadow-2xs"
         >
-          <HelpCircle className="h-3.5 w-3.5 text-[#D91E2A]" />
+          <HelpCircle className="h-3.5 w-3.5" />
           <span>Help</span>
         </a>
       </header>
 
       {/* CONTENT BODY */}
-      <div className="flex-1 px-4 pt-3 pb-8 flex flex-col">
-        {/* 2. HERO WELCOME SECTION */}
-        <section className="rounded-2xl p-4 bg-gradient-to-br from-red-50/60 via-white to-neutral-50 border border-red-100 shadow-xs relative overflow-hidden mb-4">
-          <div className="flex items-center gap-1.5 mb-2.5">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-[#D91E2A]">
-              <Zap className="h-3 w-3 fill-current" />
-              Retail Superstore
-            </span>
-          </div>
-          <h1 className="font-extrabold text-[22px] tracking-tight text-[#680114] leading-snug mb-1.5">
+      <div className="flex-1 w-full max-w-md mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col justify-center">
+        {/* 2. HERO WELCOME CARD */}
+        <section className="rounded-2xl p-5 bg-[#EFE0BC] border-2 border-[#680114] shadow-xs relative overflow-hidden mb-5">
+          <h1 className="font-serif font-extrabold text-2xl tracking-tight text-[#680114] leading-snug mb-1.5">
             Sign In / Register
           </h1>
-          <p className="text-xs text-neutral-600 leading-relaxed mb-3">
-            Get access to express doorstep deliveries, tracked orders, and exclusive store
-            member deals.
+          <p className="text-xs text-[#680114]/80 leading-relaxed">
+            Get access to express doorstep deliveries, live tracked orders, and exclusive store member deals.
           </p>
-
-          {/* Mini Value Props Row */}
-          <div className="grid grid-cols-3 gap-1.5 pt-2.5 border-t border-neutral-100 text-[10px] font-semibold text-neutral-800">
-            <div className="flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>2-Hr Delivery</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>₹150 Off First</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>Easy Returns</span>
-            </div>
-          </div>
         </section>
 
         {/* 3. AUTHENTICATION WORKFLOW */}
         <section className="space-y-4">
           {/* Step 1: Mobile Input Container */}
-          <div className="bg-white border border-neutral-200 rounded-2xl p-3.5 shadow-xs">
+          <div className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl p-4 shadow-xs">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-[#680114] block">
+              <label className="text-xs font-serif font-bold text-[#680114] block">
                 Enter Mobile Number
               </label>
-              <span className="text-[10px] text-neutral-400 font-medium">
-                OTP will be sent for verification
+              <span className="text-[10px] text-[#680114]/80 font-medium">
+                OTP verification code
               </span>
             </div>
             <form onSubmit={handleSendOtp} className="flex items-center gap-2">
               {/* Country Code */}
-              <div className="flex items-center gap-1.5 px-2.5 py-2.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-semibold text-[#680114] shrink-0">
+              <div className="flex items-center gap-1.5 px-3 py-2.5 bg-[#F6E9C8] border-2 border-[#680114] rounded-xl text-xs font-serif font-bold text-[#680114] shrink-0">
                 <span>🇮🇳</span>
                 <span>+91</span>
               </div>
               {/* Number Input */}
-              <div className="flex-1 flex items-center justify-between bg-white border border-neutral-300 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-[#D91E2A] focus-within:border-transparent transition-all">
+              <div className="flex-1 flex items-center justify-between bg-[#F6E9C8] border-2 border-[#680114] rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-[#680114] focus-within:border-[#680114] transition-all">
                 <input
                   type="tel"
                   maxLength={12}
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
                   placeholder="Enter 10-digit number"
-                  className="w-full bg-transparent p-0 text-sm font-semibold tracking-wide text-[#680114] focus:outline-none border-none ring-0"
+                  className="w-full bg-transparent p-0 text-sm font-semibold tracking-wide text-[#680114] placeholder-[#735A4A]/60 focus:outline-none border-none ring-0"
                 />
                 {phoneNumber && (
                   <button
                     type="button"
                     onClick={() => setPhoneNumber("")}
                     aria-label="Clear field"
-                    className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-200 text-neutral-600 hover:text-[#680114]"
+                    className="w-5 h-5 rounded-full flex items-center justify-center bg-[#E8D7B0] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-colors cursor-pointer"
                   >
                     <X className="h-3 w-3" />
                   </button>
                 )}
               </div>
             </form>
-            {errorMsg && <p className="text-[11px] text-red-600 font-medium mt-1">{errorMsg}</p>}
+            {errorMsg && (
+              <p className="text-[11px] font-semibold text-[#88091E] mt-2 flex items-center gap-1">
+                <span>⚠️</span> {errorMsg}
+              </p>
+            )}
           </div>
 
           {/* Step 2: OTP Verification Card */}
           {isOtpSent && (
-            <div className="bg-gradient-to-b from-neutral-50 to-white border-2 border-red-200 rounded-2xl p-4 shadow-xs relative">
+            <div className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl p-4 sm:p-5 shadow-xs relative">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex flex-col">
-                  <span className="text-xs font-bold text-[#680114]">
+                  <span className="text-xs font-serif font-bold text-[#680114]">
                     Enter 6-digit OTP sent to
                   </span>
-                  <span className="text-xs font-semibold text-[#D91E2A] mt-0.5 tracking-wide">
+                  <span className="text-xs font-semibold text-[#680114] mt-0.5 tracking-wide">
                     +91 {phoneNumber}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsOtpSent(false)}
-                  className="inline-flex items-center gap-0.5 text-xs font-semibold text-[#D91E2A] hover:underline px-2 py-1 bg-red-50 rounded-lg"
+                  className="inline-flex items-center gap-1 text-xs font-serif font-bold text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] px-2.5 py-1 bg-[#F6E9C8] border-2 border-[#680114] rounded-lg transition-all cursor-pointer shadow-2xs"
                 >
                   <Edit2 className="h-3 w-3" />
                   <span>Edit</span>
@@ -235,7 +214,7 @@ export default function LoginPage() {
               </div>
 
               {/* 6-digit PIN Boxes */}
-              <div className="flex justify-between items-center gap-1.5 my-3">
+              <div className="flex justify-between items-center gap-1.5 sm:gap-2 my-3">
                 {otp.map((digit, idx) => (
                   <input
                     key={idx}
@@ -244,10 +223,10 @@ export default function LoginPage() {
                     maxLength={1}
                     value={digit}
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    className={`w-11 h-12 text-center rounded-xl font-bold text-lg text-[#680114] border transition-all ${
+                    className={`w-11 h-12 text-center rounded-xl font-bold text-lg text-[#680114] transition-all border-2 ${
                       idx === 4 && !digit
-                        ? "border-2 border-[#D91E2A] ring-2 ring-red-100 bg-white"
-                        : "border-neutral-300 bg-white"
+                        ? "border-[#680114] ring-2 ring-[#680114]/30 bg-[#F6E9C8]"
+                        : "border-[#680114] bg-[#F6E9C8] focus:bg-white focus:border-[#680114]"
                     }`}
                   />
                 ))}
@@ -255,31 +234,31 @@ export default function LoginPage() {
 
               {/* Resend Timer */}
               <div className="flex items-center justify-between text-[11px] pt-1">
-                <span className="text-neutral-500 flex items-center gap-1 font-medium">
-                  <Clock className="h-3.5 w-3.5 text-neutral-400" />
+                <span className="text-[#680114]/80 flex items-center gap-1 font-medium">
+                  <Clock className="h-3.5 w-3.5 text-[#680114]/70" />
                   Resend OTP in{" "}
-                  <strong className="text-neutral-800 font-semibold">0:{countdown}</strong>
+                  <strong className="text-[#680114] font-bold">0:{countdown}</strong>
                 </span>
                 <button
                   type="button"
                   onClick={() => setCountdown(30)}
-                  className="font-semibold text-[#D91E2A] hover:underline"
+                  className="font-serif font-bold text-[#680114] hover:underline cursor-pointer"
                 >
                   Resend via SMS
                 </button>
               </div>
 
               {/* WhatsApp Alternative */}
-              <div className="mt-2.5 pt-2 border-t border-neutral-100 flex items-center justify-between">
-                <span className="text-[11px] text-neutral-500 font-medium">
+              <div className="mt-3 pt-2.5 border-t border-[#680114]/20 flex items-center justify-between">
+                <span className="text-[11px] text-[#680114]/80 font-medium">
                   {devOtpHint ? `Dev OTP: ${devOtpHint}` : "Didn't receive SMS?"}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCountdown(30)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                  className="inline-flex items-center gap-1 text-[11px] font-serif font-bold text-[#1E824C] bg-[#EAF7EE] px-2.5 py-1 rounded-full border-2 border-[#1E824C] hover:bg-[#1E824C] hover:text-white transition-all cursor-pointer shadow-2xs"
                 >
-                  <MessageCircle className="h-3 w-3 text-emerald-700" />
+                  <MessageCircle className="h-3 w-3" />
                   <span>Send via WhatsApp</span>
                 </button>
               </div>
@@ -290,10 +269,10 @@ export default function LoginPage() {
           <button
             onClick={isOtpSent ? handleVerifyOtp : () => handleSendOtp()}
             disabled={loading}
-            className="w-full py-3.5 px-4 bg-[#D91E2A] text-white font-bold text-sm rounded-xl shadow-lg shadow-red-600/20 flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-[#B31520]"
+            className="w-full py-3.5 px-4 bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] font-serif font-bold text-sm rounded-xl border-2 border-[#680114] shadow-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
           >
             {loading ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#F6E9C8] border-t-transparent" />
             ) : isOtpSent ? (
               <>
                 <span>Verify &amp; Proceed</span>
@@ -311,8 +290,8 @@ export default function LoginPage() {
         {/* 4. ALTERNATIVE SIGN IN */}
         <section className="mt-6 mb-2">
           <div className="relative flex items-center justify-center mb-4">
-            <div className="border-t border-neutral-200 w-full absolute"></div>
-            <span className="bg-neutral-50 px-3 text-[11px] font-medium text-neutral-400 relative z-10">
+            <div className="border-t border-[#680114]/20 w-full absolute"></div>
+            <span className="bg-[#F6E9C8] px-3 text-[11px] font-serif font-bold text-[#680114]/80 relative z-10">
               Or continue with
             </span>
           </div>
@@ -320,7 +299,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => router.push("/account")}
-            className="w-full py-2.5 px-4 bg-white border border-neutral-300 rounded-xl flex items-center justify-center gap-2.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 transition-all active:scale-95 shadow-2xs"
+            className="w-full py-2.5 px-4 bg-[#EFE0BC] border-2 border-[#680114] rounded-xl flex items-center justify-center gap-2.5 text-xs font-serif font-bold text-[#680114] hover:bg-[#E8D7B0] transition-all active:scale-95 shadow-2xs cursor-pointer"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path
@@ -343,10 +322,10 @@ export default function LoginPage() {
             <span>Continue with Google</span>
           </button>
 
-          <div className="text-center mt-3">
+          <div className="text-center mt-3.5">
             <Link
               href="/"
-              className="text-xs font-semibold text-neutral-500 hover:text-[#D91E2A] transition-colors py-1"
+              className="text-xs font-serif font-bold text-[#680114]/80 hover:text-[#680114] transition-colors py-1"
             >
               Continue as Guest
             </Link>
@@ -355,17 +334,17 @@ export default function LoginPage() {
 
         {/* 5. TRUST & LEGAL FOOTER */}
         <footer className="mt-auto pt-6 text-center space-y-2.5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-[10px] font-medium text-neutral-500 border border-neutral-200">
-            <ShieldCheck className="h-3 w-3 text-[#D91E2A]" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EFE0BC] text-[10px] font-medium text-[#680114] border border-[#680114]/30 shadow-2xs">
+            <ShieldCheck className="h-3.5 w-3.5 text-[#680114]" />
             <span>100% Secure authentication via official telecom SMS gateway</span>
           </div>
-          <p className="text-[10px] leading-relaxed text-neutral-400 max-w-xs mx-auto">
+          <p className="text-[10px] leading-relaxed text-[#680114]/80 max-w-xs mx-auto">
             By continuing, you agree to Wondersale&apos;s{" "}
-            <span className="underline hover:text-[#D91E2A]">Terms of Service</span> and{" "}
-            <span className="underline hover:text-[#D91E2A]">Privacy Policy</span>.
+            <Link href="/terms" className="underline hover:text-[#680114] font-semibold">Terms of Service</Link> and{" "}
+            <Link href="/privacy" className="underline hover:text-[#680114] font-semibold">Privacy Policy</Link>.
           </p>
-          <div className="pt-2 text-[10px] text-neutral-600 font-medium flex items-center justify-center gap-1">
-            <Phone className="h-3 w-3 text-[#D91E2A]" />
+          <div className="pt-1 text-[10px] text-[#680114] font-medium flex items-center justify-center gap-1.5">
+            <Phone className="h-3 w-3" />
             <span>Store Help Desk: 0755-4209999 (9 AM - 10 PM)</span>
           </div>
         </footer>

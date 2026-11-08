@@ -904,7 +904,7 @@ function CategoryContent() {
                   <h3 className="font-serif font-bold text-base text-[#680114]">
                     No products found
                   </h3>
-                  <p className="text-xs text-[#735A4A] mt-1 mb-4">
+                  <p className="text-xs text-[#680114]/80 mt-1 mb-4">
                     We couldn&apos;t find any products matching your current filters or search term.
                   </p>
                   <button
@@ -976,7 +976,7 @@ function CategoryContent() {
 
                 {/* Backend Pagination Bar */}
                 {totalPages > 1 && (
-                  <div className="mt-8 pt-4 border-t border-[#680114]/20 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#735A4A]">
+                  <div className="mt-8 pt-4 border-t border-[#680114]/20 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#680114]/80">
                     <div>
                       Showing {(currentPage - 1) * pageSize + 1}–
                       {Math.min(currentPage * pageSize, totalCount)} of {totalCount} products
@@ -1008,7 +1008,7 @@ function CategoryContent() {
 
                           return (
                             <React.Fragment key={page}>
-                              {showEllipsis && <span className="px-1 text-[#735A4A]">...</span>}
+                              {showEllipsis && <span className="px-1 text-[#680114]/80">...</span>}
                               <button
                                 type="button"
                                 onClick={() => handlePageChange(page)}
@@ -1101,7 +1101,7 @@ function CategoryContent() {
             <div className="p-4 flex items-center justify-between border-b border-[#680114]/20">
               <div>
                 <h3 className="font-serif font-bold text-sm text-[#680114]">Filter Products</h3>
-                <span className="text-[11px] text-[#735A4A]">{totalCount} items in view</span>
+                <span className="text-[11px] text-[#680114]/80">{totalCount} items in view</span>
               </div>
               <button
                 type="button"

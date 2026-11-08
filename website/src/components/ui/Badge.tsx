@@ -19,7 +19,7 @@ export const Badge: React.FC<BadgeProps> = ({
     error: "bg-[#FEECEC] text-[#D91E2A] border border-red-200",
     info: "bg-[#EFF6FF] text-[#2563EB] border border-blue-200",
     brand: "bg-[#D91E2A] text-white",
-    neutral: "bg-slate-100 text-slate-700 border border-slate-200",
+    neutral: "bg-slate-100 text-[#680114] border border-slate-200",
   };
 
   const sizeStyles = {

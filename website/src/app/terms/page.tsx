@@ -15,20 +15,20 @@ export default function TermsPage() {
             <Link
               href="/"
               aria-label="Back to Home"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 hover:bg-neutral-100 transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#680114] hover:bg-neutral-100 transition-colors active:scale-95"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
             <div className="flex items-center gap-2">
               <WondersaleLogo size="sm" showSubtitle={false} />
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 uppercase tracking-wider">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-[#680114] uppercase tracking-wider">
                 Legal
               </span>
             </div>
           </div>
           <a
             href="tel:07554209999"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-800 transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-[#680114] transition-colors"
           >
             <Store className="h-3.5 w-3.5 text-[#D91E2A]" />
             <span className="text-[11px]">Help Desk</span>
@@ -36,7 +36,7 @@ export default function TermsPage() {
         </div>
       </header>
 
-      <main className="flex-1 px-3.5 py-3 space-y-3.5 text-xs text-neutral-700 leading-relaxed">
+      <main className="flex-1 px-3.5 py-3 space-y-3.5 text-xs text-[#680114] leading-relaxed">
         <section className="bg-white rounded-xl p-4 shadow-xs border border-neutral-200 space-y-2">
           <h2 className="font-bold text-sm text-[#680114]">1. Commercial Terms &amp; Scope</h2>
           <p>

@@ -61,7 +61,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt={title} className="w-full h-full object-contain p-1 group-hover:scale-105 transition-transform duration-200" />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-[#E8D7B0] flex items-center justify-center text-[#735A4A] font-bold text-xs">
+            <div className="w-10 h-10 rounded-full bg-[#E8D7B0] flex items-center justify-center text-[#680114]/80 font-bold text-xs">
               WS
             </div>
           )}
@@ -80,7 +80,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 {formatPrice(sellingPricePaise)}
               </span>
               {discount > 0 && (
-                <span className="text-[10px] text-[#735A4A] line-through ml-1">
+                <span className="text-[10px] text-[#680114]/80 line-through ml-1">
                   {formatPrice(mrpPaise)}
                 </span>
               )}
@@ -103,7 +103,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 </button>
               </div>
             ) : (
-              <span className="text-[10px] font-semibold text-[#735A4A]">Out of Stock</span>
+              <span className="text-[10px] font-semibold text-[#680114]/80">Out of Stock</span>
             )}
           </div>
         </div>
@@ -182,7 +182,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   }`}
                 />
               ) : (
-                <div className="text-[#735A4A] flex flex-col items-center">
+                <div className="text-[#680114]/80 flex flex-col items-center">
                   <span className="text-[10px] font-bold">WS</span>
                 </div>
               )}
@@ -200,7 +200,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               }`}
             />
           ) : (
-            <div className="text-[#735A4A] flex flex-col items-center">
+            <div className="text-[#680114]/80 flex flex-col items-center">
               <span className="text-[10px] font-bold">WS</span>
             </div>
           )}
@@ -220,14 +220,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {slug ? (
             <Link href={`/product/${slug}`} className="hover:text-[#7A0C16] transition-colors w-full">
               <h3 className={`text-[9.5px] sm:text-[10.5px] md:text-[11px] font-semibold line-clamp-2 leading-tight ${
-                !inStock ? "text-[#735A4A]" : "text-[#680114]"
+                !inStock ? "text-[#680114]/80" : "text-[#680114]"
               }`}>
                 {title}
               </h3>
             </Link>
           ) : (
             <h3 className={`text-[9.5px] sm:text-[10.5px] md:text-[11px] font-semibold line-clamp-2 leading-tight w-full ${
-              !inStock ? "text-[#735A4A]" : "text-[#680114]"
+              !inStock ? "text-[#680114]/80" : "text-[#680114]"
             }`}>
               {title}
             </h3>
@@ -243,7 +243,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {formatPrice(sellingPricePaise)}
         </span>
         {discount > 0 && (
-          <span className="text-[8px] sm:text-[9.5px] font-medium text-[#735A4A] line-through leading-tight opacity-80 whitespace-nowrap">
+          <span className="text-[8px] sm:text-[9.5px] font-medium text-[#680114]/80 line-through leading-tight opacity-80 whitespace-nowrap">
             {formatPrice(mrpPaise)}
           </span>
         )}

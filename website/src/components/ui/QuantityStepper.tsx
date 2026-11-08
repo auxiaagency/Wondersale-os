@@ -33,7 +33,7 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
         type="button"
         disabled={disabled || value <= min}
         onClick={handleDecrement}
-        className="w-8 h-8 rounded-md bg-slate-100 hover:bg-red-50 hover:text-[#D91E2A] text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+        className="w-8 h-8 rounded-md bg-slate-100 hover:bg-red-50 hover:text-[#D91E2A] text-[#680114] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
         aria-label="Decrease quantity"
       >
         −

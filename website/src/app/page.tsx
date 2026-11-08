@@ -652,7 +652,7 @@ export default function HomePage() {
                     <div className="p-2 sm:p-3">
                       <h3 className="text-xs sm:text-sm md:text-base text-[#680114] font-serif font-bold leading-tight">{card.title}</h3>
                       {card.subtitle && (
-                        <p className="text-[10px] sm:text-xs text-[#735A4A] mt-0.5 font-sans leading-tight">{card.subtitle}</p>
+                        <p className="text-[10px] sm:text-xs text-[#680114]/80 mt-0.5 font-sans leading-tight">{card.subtitle}</p>
                       )}
                     </div>
                   </Link>

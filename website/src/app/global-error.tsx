@@ -25,7 +25,7 @@ export default function GlobalError({
             !
           </div>
           <h1 className="text-xl font-bold tracking-tight mb-2">Something went wrong</h1>
-          <p className="text-sm text-neutral-600 mb-6">
+          <p className="text-sm text-[#680114] mb-6">
             We encountered an unexpected error. Our engineering team has been notified.
           </p>
           <div className="flex gap-3 justify-center">
@@ -37,7 +37,7 @@ export default function GlobalError({
             </button>
             <Link
               href="/"
-              className="px-5 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-100 text-neutral-800 font-medium text-sm transition-colors inline-block text-center"
+              className="px-5 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-100 text-[#680114] font-medium text-sm transition-colors inline-block text-center"
             >
               Return Home
             </Link>

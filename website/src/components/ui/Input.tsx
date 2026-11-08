@@ -13,13 +13,13 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-xs font-semibold text-slate-700 mb-1">
+          <label htmlFor={inputId} className="block text-xs font-semibold text-[#680114] mb-1">
             {label}
           </label>
         )}
         <div className="relative rounded-lg shadow-2xs">
           {icon && (
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#680114]/75">
               {icon}
             </div>
           )}

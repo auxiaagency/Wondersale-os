@@ -204,7 +204,7 @@ export const ProductCarouselSection: React.FC<ProductCarouselSectionProps> = ({
               <div className="flex items-center">{badge}</div>
             </div>
             {subtitle && (
-              <p className="text-[11px] sm:text-xs text-[#735A4A] truncate mt-0.5">
+              <p className="text-[11px] sm:text-xs text-[#680114]/80 truncate mt-0.5">
                 {subtitle}
               </p>
             )}

@@ -54,7 +54,7 @@ export default function ShippingPolicyPage() {
             <Link
               href="/"
               aria-label="Back to Home"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 hover:bg-neutral-100 transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#680114] hover:bg-neutral-100 transition-colors active:scale-95"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -68,7 +68,7 @@ export default function ShippingPolicyPage() {
 
           <a
             href="tel:07554209999"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-800 transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-[#680114] transition-colors"
           >
             <Store className="h-3.5 w-3.5 text-[#D91E2A]" />
             <span className="text-[11px]">Help Desk</span>
@@ -86,7 +86,7 @@ export default function ShippingPolicyPage() {
               Check Delivery Speed in Your Area
             </h2>
           </div>
-          <p className="text-[11px] text-neutral-500 mb-2.5">
+          <p className="text-[11px] text-[#680114]/75 mb-2.5">
             Enter your 6-digit postal pincode to see express speed, delivery slots, and thresholds.
           </p>
 
@@ -116,7 +116,7 @@ export default function ShippingPolicyPage() {
 
           {/* Quick Chips */}
           <div className="mt-3 pt-2.5 border-t border-neutral-100">
-            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1.5">
+            <p className="text-[10px] font-bold text-[#680114]/75 uppercase tracking-wider mb-1.5">
               Popular Localities (2-Hr Express):
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -133,7 +133,7 @@ export default function ShippingPolicyPage() {
                     setPincodeInput(loc.pin);
                     checkAndApplyPincode(loc.pin);
                   }}
-                  className="rounded-md bg-neutral-100 hover:bg-red-50 hover:text-[#D91E2A] hover:border-red-200 border border-neutral-200 px-2 py-1 text-[11px] font-medium text-neutral-700 transition-colors"
+                  className="rounded-md bg-neutral-100 hover:bg-red-50 hover:text-[#D91E2A] hover:border-red-200 border border-neutral-200 px-2 py-1 text-[11px] font-medium text-[#680114] transition-colors"
                 >
                   {loc.name} ({loc.pin})
                 </button>
@@ -144,7 +144,7 @@ export default function ShippingPolicyPage() {
 
         {/* 3 Delivery Tiers */}
         <section className="space-y-2.5">
-          <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider px-1">
+          <h2 className="text-xs font-bold text-[#680114]/75 uppercase tracking-wider px-1">
             Delivery Methods &amp; Fulfillment
           </h2>
 
@@ -161,7 +161,7 @@ export default function ShippingPolicyPage() {
                 Express Zone
               </span>
             </div>
-            <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
+            <p className="text-[11px] text-[#680114] mt-1 leading-relaxed">
               Rapid doorstep dispatch from Wondersale Fulfillment Hub for orders
               placed between 8:00 AM – 8:00 PM. Tamper-evident seal verified.
             </p>
@@ -176,11 +176,11 @@ export default function ShippingPolicyPage() {
                 </div>
                 <h3 className="text-xs font-bold text-[#680114]">Scheduled Evening Delivery</h3>
               </div>
-              <span className="text-[10px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-semibold text-[#680114] bg-neutral-100 px-2 py-0.5 rounded">
                 6:00 PM – 9:00 PM
               </span>
             </div>
-            <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
+            <p className="text-[11px] text-[#680114] mt-1 leading-relaxed">
               Order before 4:00 PM for scheduled evening delivery straight to your residential
               doorstep across serviceable zones.
             </p>
@@ -195,11 +195,11 @@ export default function ShippingPolicyPage() {
                 </div>
                 <h3 className="text-xs font-bold text-[#680114]">Standard Pan-India Shipping</h3>
               </div>
-              <span className="text-[10px] font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-semibold text-[#680114] bg-neutral-100 px-2 py-0.5 rounded">
                 3–5 Business Days
               </span>
             </div>
-            <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">
+            <p className="text-[11px] text-[#680114] mt-1 leading-relaxed">
               Tracked air and surface logistics across 19,000+ Indian postal codes via BlueDart,
               Delhivery, and Express courier partners.
             </p>
@@ -211,20 +211,20 @@ export default function ShippingPolicyPage() {
           <h2 className="text-xs font-bold text-[#680114] mb-2">Free Delivery Thresholds</h2>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-neutral-50 rounded-lg p-2.5 border border-neutral-200 text-center">
-              <span className="text-[10px] font-bold text-neutral-500 uppercase block">
+              <span className="text-[10px] font-bold text-[#680114]/75 uppercase block">
                 Express Zone
               </span>
               <span className="font-extrabold text-sm text-[#D91E2A] mt-0.5 block">FREE ₹499+</span>
-              <span className="text-[10px] text-neutral-400 block mt-0.5">
+              <span className="text-[10px] text-[#680114]/75 block mt-0.5">
                 ₹49 on smaller orders
               </span>
             </div>
             <div className="bg-neutral-50 rounded-lg p-2.5 border border-neutral-200 text-center">
-              <span className="text-[10px] font-bold text-neutral-500 uppercase block">
+              <span className="text-[10px] font-bold text-[#680114]/75 uppercase block">
                 Rest of India
               </span>
               <span className="font-extrabold text-sm text-[#D91E2A] mt-0.5 block">FREE ₹999+</span>
-              <span className="text-[10px] text-neutral-400 block mt-0.5">
+              <span className="text-[10px] text-[#680114]/75 block mt-0.5">
                 ₹79 on smaller orders
               </span>
             </div>
@@ -232,7 +232,7 @@ export default function ShippingPolicyPage() {
         </section>
 
         {/* Security & COD Policies */}
-        <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200 space-y-2.5 text-xs text-neutral-600">
+        <section className="bg-white rounded-xl p-3.5 shadow-xs border border-neutral-200 space-y-2.5 text-xs text-[#680114]">
           <h2 className="font-bold text-xs text-[#680114]">Order Security &amp; Payment Rules</h2>
           <div className="flex items-start gap-2">
             <ShieldCheck className="h-4 w-4 text-[#D91E2A] shrink-0 mt-0.5" />
@@ -260,7 +260,7 @@ export default function ShippingPolicyPage() {
             <ChevronRight className="h-4 w-4" />
           </Link>
           <div className="p-3 rounded-xl bg-neutral-100 border border-neutral-200 text-center">
-            <p className="text-[11px] text-neutral-500">Need specific shipping assistance?</p>
+            <p className="text-[11px] text-[#680114]/75">Need specific shipping assistance?</p>
             <a
               href="tel:07554209999"
               className="text-xs font-bold text-[#D91E2A] hover:underline block mt-0.5"

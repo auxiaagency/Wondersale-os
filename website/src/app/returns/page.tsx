@@ -28,7 +28,7 @@ export default function ReturnsPolicyPage() {
             <Link
               href="/"
               aria-label="Back to Home"
-              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-800 hover:bg-neutral-100 transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#680114] hover:bg-neutral-100 transition-colors active:scale-95"
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -42,7 +42,7 @@ export default function ReturnsPolicyPage() {
 
           <a
             href="tel:07554209999"
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-800 transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-[#680114] transition-colors"
           >
             <Store className="h-3.5 w-3.5 text-[#D91E2A]" />
             <span className="text-[11px]">Helpdesk</span>
@@ -79,7 +79,7 @@ export default function ReturnsPolicyPage() {
                 <span className="font-bold text-[#680114] block">
                   Kitchen &amp; Home Appliances
                 </span>
-                <span className="text-[10px] text-neutral-500">
+                <span className="text-[10px] text-[#680114]/75">
                   Cookers, Kettles, Irons, Mixers
                 </span>
               </div>
@@ -91,7 +91,7 @@ export default function ReturnsPolicyPage() {
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
                 <span className="font-bold text-[#680114] block">Electronics &amp; Audio</span>
-                <span className="text-[10px] text-neutral-500">
+                <span className="text-[10px] text-[#680114]/75">
                   Headphones, Wall Clocks, Gadgets
                 </span>
               </div>
@@ -103,7 +103,7 @@ export default function ReturnsPolicyPage() {
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
                 <span className="font-bold text-[#680114] block">Toys &amp; Games</span>
-                <span className="text-[10px] text-neutral-500">Educational Toys, Board Games</span>
+                <span className="text-[10px] text-[#680114]/75">Educational Toys, Board Games</span>
               </div>
               <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
                 7 Days Replacement
@@ -113,7 +113,7 @@ export default function ReturnsPolicyPage() {
             <div className="flex items-center justify-between p-2 rounded-lg bg-neutral-50 border border-neutral-100">
               <div>
                 <span className="font-bold text-[#680114] block">Packaged Food &amp; Snacks</span>
-                <span className="text-[10px] text-neutral-500">Hygiene &amp; Consumables</span>
+                <span className="text-[10px] text-[#680114]/75">Hygiene &amp; Consumables</span>
               </div>
               <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
                 Damage on Arrival Only
@@ -135,7 +135,7 @@ export default function ReturnsPolicyPage() {
               </div>
               <div>
                 <strong className="text-[#680114] block">Initiate via App or Helpline</strong>
-                <p className="text-[11px] text-neutral-600 mt-0.5">
+                <p className="text-[11px] text-[#680114] mt-0.5">
                   Go to{" "}
                   <Link href="/account" className="text-[#D91E2A] font-semibold underline">
                     Account &gt; My Orders
@@ -151,7 +151,7 @@ export default function ReturnsPolicyPage() {
               </div>
               <div>
                 <strong className="text-[#680114] block">Quick Doorstep Verification</strong>
-                <p className="text-[11px] text-neutral-600 mt-0.5">
+                <p className="text-[11px] text-[#680114] mt-0.5">
                   Our rider verifies the original box, brand MRP tags, and intact manufacturer
                   accessories.
                 </p>
@@ -164,7 +164,7 @@ export default function ReturnsPolicyPage() {
               </div>
               <div>
                 <strong className="text-[#680114] block">Instant Swap or Refund</strong>
-                <p className="text-[11px] text-neutral-600 mt-0.5">
+                <p className="text-[11px] text-[#680114] mt-0.5">
                   Fresh unit handed over immediately, or UPI refund credited to your source account
                   within 24–48 hours.
                 </p>
@@ -179,7 +179,7 @@ export default function ReturnsPolicyPage() {
             <Store className="h-4 w-4 text-[#D91E2A]" />
             <strong className="text-[#680114]">Prefer Instant In-Store Exchange?</strong>
           </div>
-          <p className="text-[11px] text-neutral-600 leading-relaxed">
+          <p className="text-[11px] text-[#680114] leading-relaxed">
             Visit any Wondersale Retail Superstore with your tax invoice for
             an immediate on-the-spot replacement or store credit.
           </p>
@@ -189,7 +189,7 @@ export default function ReturnsPolicyPage() {
         <section className="space-y-2 pt-1">
           <Link
             href="/track-order"
-            className="w-full py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-xl text-xs font-bold tracking-tight flex items-center justify-center gap-1.5 border border-neutral-200 transition-all"
+            className="w-full py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200 text-[#680114] rounded-xl text-xs font-bold tracking-tight flex items-center justify-center gap-1.5 border border-neutral-200 transition-all"
           >
             <span>Track Existing Order</span>
             <ChevronRight className="h-4 w-4" />

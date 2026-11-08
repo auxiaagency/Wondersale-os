@@ -38,6 +38,17 @@ export default function AccountPage() {
       {/* 1. Desktop Global Header */}
       <div className="hidden md:block">
         <GlobalHeader />
+        <div className="bg-[#F6E9C8] border-b border-[#680114]/15">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-1.5 md:py-2">
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base font-serif font-bold text-[#680114] whitespace-nowrap overflow-x-auto no-scrollbar">
+              <Link href="/" className="hover:text-[#88091E] flex items-center transition-colors shrink-0">
+                <span>Home</span>
+              </Link>
+              <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-60 shrink-0 text-[#680114]" />
+              <span className="text-[#680114] font-extrabold shrink-0">My Account</span>
+            </nav>
+          </div>
+        </div>
       </div>
 
       {/* Mobile Top Bar Header */}
@@ -48,7 +59,7 @@ export default function AccountPage() {
             {/* Notification Bell */}
             <button
               aria-label="Notifications"
-              className="relative p-2 rounded-full hover:bg-[#F4ECDC] text-[#735A4A] transition-transform active:scale-95"
+              className="relative p-2 rounded-full hover:bg-[#F4ECDC] text-[#680114]/80 transition-transform active:scale-95"
             >
               <Bell className="h-5 w-5" />
               <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[1rem] px-1 items-center justify-center rounded-full bg-[#7A0C16] text-[10px] font-bold text-[#FDF8EE] leading-none">
@@ -58,7 +69,7 @@ export default function AccountPage() {
             {/* Settings */}
             <button
               aria-label="Settings"
-              className="p-2 rounded-full hover:bg-[#F4ECDC] text-[#735A4A] transition-transform active:scale-95"
+              className="p-2 rounded-full hover:bg-[#F4ECDC] text-[#680114]/80 transition-transform active:scale-95"
             >
               <Settings className="h-5 w-5" />
             </button>
@@ -67,7 +78,7 @@ export default function AccountPage() {
 
         <div className="flex items-center justify-between pt-1">
           <h1 className="font-bold text-lg text-[#680114] tracking-tight font-serif">My Account</h1>
-          <div className="flex items-center gap-1 text-[11px] font-medium text-[#735A4A] bg-[#FAF3E0] px-2.5 py-0.5 rounded-full border border-[#EADFC7]">
+          <div className="flex items-center gap-1 text-[11px] font-medium text-[#680114]/80 bg-[#FAF3E0] px-2.5 py-0.5 rounded-full border border-[#EADFC7]">
             <MapPin className="h-3 w-3 text-[#7A0C16]" />
             <span>Active Account</span>
           </div>
@@ -102,13 +113,13 @@ export default function AccountPage() {
                 <span>Verified Wondersale Member</span>
               </div>
 
-              <div className="mt-2 text-xs text-neutral-500 space-y-0.5 font-normal">
+              <div className="mt-2 text-xs text-[#680114]/75 space-y-0.5 font-normal">
                 <div className="flex items-center gap-1.5 truncate">
-                  <Phone className="h-3.5 w-3.5 text-neutral-400" />
+                  <Phone className="h-3.5 w-3.5 text-[#680114]/75" />
                   <span>+91 98260 12345</span>
                 </div>
                 <div className="flex items-center gap-1.5 truncate">
-                  <Mail className="h-3.5 w-3.5 text-neutral-400" />
+                  <Mail className="h-3.5 w-3.5 text-[#680114]/75" />
                   <span className="truncate">rohit.verma@example.com</span>
                 </div>
               </div>
@@ -134,9 +145,9 @@ export default function AccountPage() {
                 style={{ width: "72%" }}
               ></div>
             </div>
-            <div className="flex justify-between items-center mt-1.5 text-[10px] text-neutral-500">
+            <div className="flex justify-between items-center mt-1.5 text-[10px] text-[#680114]/75">
               <span>₹5,710 spent in 2026</span>
-              <span className="font-medium text-neutral-800">
+              <span className="font-medium text-[#680114]">
                 ₹2,290 away from <strong>Platinum Tier</strong>
               </span>
             </div>
@@ -160,7 +171,7 @@ export default function AccountPage() {
             </div>
             <div className="mt-2.5">
               <div className="font-bold text-xs text-[#680114]">My Orders</div>
-              <div className="text-[11px] text-neutral-500">Track shipments &amp; history</div>
+              <div className="text-[11px] text-[#680114]/75">Track shipments &amp; history</div>
             </div>
           </Link>
 
@@ -173,13 +184,13 @@ export default function AccountPage() {
               <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center text-rose-600">
                 <Heart className="h-4 w-4" />
               </div>
-              <span className="text-xs font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">
+              <span className="text-xs font-bold text-[#680114] bg-neutral-100 px-2 py-0.5 rounded-full">
                 4 items
               </span>
             </div>
             <div className="mt-2.5">
               <div className="font-bold text-xs text-[#680114]">Wishlist</div>
-              <div className="text-[11px] text-neutral-500">Saved for later</div>
+              <div className="text-[11px] text-[#680114]/75">Saved for later</div>
             </div>
           </Link>
 
@@ -189,7 +200,7 @@ export default function AccountPage() {
               <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600">
                 <Home className="h-4 w-4" />
               </div>
-              <span className="text-[10px] font-semibold text-neutral-600 bg-neutral-100 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-semibold text-[#680114] bg-neutral-100 px-1.5 py-0.5 rounded">
                 Default
               </span>
             </div>
@@ -197,7 +208,7 @@ export default function AccountPage() {
               <div className="font-bold text-xs text-[#680114] truncate">
                 {location.locality || location.city} ({location.pincode})
               </div>
-              <div className="text-[11px] text-neutral-500">
+              <div className="text-[11px] text-[#680114]/75">
                 {location.isExpressAvailable
                   ? "Express Doorstep Zone"
                   : "Standard Shipping"}
@@ -217,7 +228,7 @@ export default function AccountPage() {
             </div>
             <div className="mt-2.5">
               <div className="font-bold text-xs text-[#680114]">₹350 Credits</div>
-              <div className="text-[11px] text-neutral-500">Wondersale Pay Balance</div>
+              <div className="text-[11px] text-[#680114]/75">Wondersale Pay Balance</div>
             </div>
           </div>
         </section>
@@ -233,7 +244,7 @@ export default function AccountPage() {
               <span className="font-bold text-xs text-[#680114] tracking-tight">
                 Active Delivery
               </span>
-              <span className="text-[11px] font-medium text-neutral-500">#WS-ORD-8921</span>
+              <span className="text-[11px] font-medium text-[#680114]/75">#WS-ORD-8921</span>
             </div>
             <span className="text-[10px] font-bold text-[#D91E2A] bg-red-50 px-2 py-0.5 rounded-full flex items-center gap-0.5 border border-red-100">
               <Zap className="h-3 w-3 fill-current" /> Express Delivery
@@ -246,7 +257,7 @@ export default function AccountPage() {
               Prestige 5L Cooker + Bajaj Electric Kettle
             </p>
             <p className="text-[11px] text-[#D91E2A] font-bold mt-0.5">Expected Today by 4:30 PM</p>
-            <p className="text-[10px] text-neutral-500">
+            <p className="text-[10px] text-[#680114]/75">
               Packed at Wondersale Fulfillment Hub
             </p>
           </div>
@@ -270,16 +281,16 @@ export default function AccountPage() {
                 <span className="text-[9px] font-bold text-[#D91E2A] mt-1">Packed</span>
               </div>
               <div className="relative z-10 flex flex-col items-center">
-                <div className="w-5 h-5 rounded-full bg-neutral-200 text-neutral-500 flex items-center justify-center text-[10px] font-medium">
+                <div className="w-5 h-5 rounded-full bg-neutral-200 text-[#680114]/75 flex items-center justify-center text-[10px] font-medium">
                   3
                 </div>
-                <span className="text-[9px] font-medium text-neutral-400 mt-1">On the way</span>
+                <span className="text-[9px] font-medium text-[#680114]/75 mt-1">On the way</span>
               </div>
               <div className="relative z-10 flex flex-col items-center">
-                <div className="w-5 h-5 rounded-full bg-neutral-200 text-neutral-500 flex items-center justify-center text-[10px] font-medium">
+                <div className="w-5 h-5 rounded-full bg-neutral-200 text-[#680114]/75 flex items-center justify-center text-[10px] font-medium">
                   4
                 </div>
-                <span className="text-[9px] font-medium text-neutral-400 mt-1">Delivered</span>
+                <span className="text-[9px] font-medium text-[#680114]/75 mt-1">Delivered</span>
               </div>
             </div>
           </div>
@@ -305,14 +316,14 @@ export default function AccountPage() {
               </div>
               <div>
                 <h3 className="font-bold text-xs text-[#680114]">Retail Member Desk</h3>
-                <p className="text-[10px] text-neutral-500">Exclusive Store Privileges</p>
+                <p className="text-[10px] text-[#680114]/75">Exclusive Store Privileges</p>
               </div>
             </div>
             <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
               Online &amp; Store Active
             </span>
           </div>
-          <div className="mt-3 bg-neutral-50 rounded-lg p-2.5 text-xs text-neutral-800 space-y-2 border border-neutral-100">
+          <div className="mt-3 bg-neutral-50 rounded-lg p-2.5 text-xs text-[#680114] space-y-2 border border-neutral-100">
             <div className="flex items-center gap-2 text-[11px]">
               <Zap className="h-3.5 w-3.5 text-[#D91E2A] shrink-0 fill-current" />
               <span>
@@ -332,43 +343,43 @@ export default function AccountPage() {
         <section className="bg-white rounded-xl border border-neutral-200 shadow-xs overflow-hidden divide-y divide-neutral-100">
           <div className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
-              <Home className="h-4 w-4 text-neutral-500" />
+              <Home className="h-4 w-4 text-[#680114]/75" />
               <div>
                 <div className="text-xs font-semibold text-[#680114]">Saved Addresses</div>
-                <div className="text-[10px] text-neutral-500">
+                <div className="text-[10px] text-[#680114]/75">
                   Manage primary and office delivery addresses
                 </div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-neutral-400" />
+            <ChevronRight className="h-4 w-4 text-[#680114]/75" />
           </div>
 
           <div className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
-              <CreditCard className="h-4 w-4 text-neutral-500" />
+              <CreditCard className="h-4 w-4 text-[#680114]/75" />
               <div>
                 <div className="text-xs font-semibold text-[#680114]">
                   Payment Methods &amp; UPI
                 </div>
-                <div className="text-[10px] text-neutral-500">
+                <div className="text-[10px] text-[#680114]/75">
                   PhonePe, Google Pay &amp; Cards
                 </div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-neutral-400" />
+            <ChevronRight className="h-4 w-4 text-[#680114]/75" />
           </div>
 
           <div className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors cursor-pointer">
             <div className="flex items-center gap-3">
-              <Globe className="h-4 w-4 text-neutral-500" />
+              <Globe className="h-4 w-4 text-[#680114]/75" />
               <div>
                 <div className="text-xs font-semibold text-[#680114]">App Language</div>
-                <div className="text-[10px] text-neutral-500">
+                <div className="text-[10px] text-[#680114]/75">
                   English (हिंदी / Hindi available)
                 </div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-neutral-400" />
+            <ChevronRight className="h-4 w-4 text-[#680114]/75" />
           </div>
 
           <Link
@@ -376,17 +387,17 @@ export default function AccountPage() {
             className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <Zap className="h-4 w-4 text-neutral-500" />
+              <Zap className="h-4 w-4 text-[#680114]/75" />
               <div>
                 <div className="text-xs font-semibold text-[#680114]">
                   Shipping &amp; Delivery Coverage
                 </div>
-                <div className="text-[10px] text-neutral-500">
+                <div className="text-[10px] text-[#680114]/75">
                   Express delivery zones &amp; shipping rules
                 </div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-neutral-400" />
+            <ChevronRight className="h-4 w-4 text-[#680114]/75" />
           </Link>
 
           <Link
@@ -394,17 +405,17 @@ export default function AccountPage() {
             className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <Building className="h-4 w-4 text-neutral-500" />
+              <Building className="h-4 w-4 text-[#680114]/75" />
               <div>
                 <div className="text-xs font-semibold text-[#680114]">
                   Returns &amp; Replacement
                 </div>
-                <div className="text-[10px] text-neutral-500">
+                <div className="text-[10px] text-[#680114]/75">
                   7-Day doorstep replacement guarantee
                 </div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-neutral-400" />
+            <ChevronRight className="h-4 w-4 text-[#680114]/75" />
           </Link>
 
           <a
@@ -412,15 +423,15 @@ export default function AccountPage() {
             className="flex items-center justify-between p-3.5 hover:bg-neutral-50 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <Phone className="h-4 w-4 text-neutral-500" />
+              <Phone className="h-4 w-4 text-[#680114]/75" />
               <div>
                 <div className="text-xs font-semibold text-[#680114]">
                   Help &amp; 24/7 Support
                 </div>
-                <div className="text-[10px] text-neutral-500">Call Support Desk: 0755-4209999</div>
+                <div className="text-[10px] text-[#680114]/75">Call Support Desk: 0755-4209999</div>
               </div>
             </div>
-            <ChevronRight className="h-4 w-4 text-neutral-400" />
+            <ChevronRight className="h-4 w-4 text-[#680114]/75" />
           </a>
         </section>
 
@@ -441,7 +452,7 @@ export default function AccountPage() {
             <LogOut className="h-4 w-4" />
             <span>Log Out from Account</span>
           </button>
-          <p className="text-center text-[10px] text-neutral-400 mt-2">
+          <p className="text-center text-[10px] text-[#680114]/75 mt-2">
             Wondersale v4.8.2 • Built with ❤️ for India
           </p>
         </div>
