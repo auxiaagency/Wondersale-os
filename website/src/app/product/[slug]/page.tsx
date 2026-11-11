@@ -25,6 +25,13 @@ import {
   ShoppingCart,
   Truck,
   Sparkles,
+  Info,
+  CheckCircle2,
+  Sliders,
+  Shield,
+  Layers,
+  Award,
+  Package,
 } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 import { useStorefront } from "@/context/StorefrontContext";
@@ -87,6 +94,220 @@ const DEFAULT_PRODUCT: ProductDetailData = {
     { label: "Availability", value: "In Stock" },
   ],
 };
+
+interface ParsedDescriptionSection {
+  title: string;
+  type: "overview" | "highlights" | "specifications" | "other";
+  paragraphs: string[];
+  bullets: { bold?: string; text: string }[];
+}
+
+function parseFormattedDescription(raw: string): {
+  overviewText: string;
+  highlights: { bold?: string; text: string }[];
+  specs: { label: string; value: string }[];
+  otherSections: ParsedDescriptionSection[];
+  isStructured: boolean;
+} {
+  const result = {
+    overviewText: "",
+    highlights: [] as { bold?: string; text: string }[],
+    specs: [] as { label: string; value: string }[],
+    otherSections: [] as ParsedDescriptionSection[],
+    isStructured: false,
+  };
+
+  if (!raw || !raw.trim()) return result;
+
+  // Check if text has Markdown section headings like ### Overview or ### Key Highlights
+  const hasMarkdownHeadings = /###\s+/i.test(raw);
+  if (!hasMarkdownHeadings) {
+    result.overviewText = raw.trim();
+    return result;
+  }
+
+  result.isStructured = true;
+  const lines = raw.split("\n");
+  let currentSectionTitle = "";
+  let currentType: "overview" | "highlights" | "specifications" | "other" = "overview";
+  let curParagraphs: string[] = [];
+  let curBullets: { bold?: string; text: string }[] = [];
+
+  const flushCurrent = () => {
+    if (!currentSectionTitle && curParagraphs.length === 0 && curBullets.length === 0) return;
+
+    if (currentType === "overview") {
+      result.overviewText = curParagraphs.join("\n\n").trim();
+    } else if (currentType === "highlights") {
+      result.highlights = [...curBullets];
+    } else if (currentType === "specifications") {
+      curBullets.forEach((b) => {
+        if (b.bold) {
+          result.specs.push({ label: b.bold.replace(/:$/, "").trim(), value: b.text.trim() });
+        } else if (b.text.includes(":")) {
+          const parts = b.text.split(":");
+          result.specs.push({
+            label: parts[0].trim(),
+            value: parts.slice(1).join(":").trim(),
+          });
+        }
+      });
+    } else {
+      result.otherSections.push({
+        title: currentSectionTitle,
+        type: currentType,
+        paragraphs: [...curParagraphs],
+        bullets: [...curBullets],
+      });
+    }
+
+    curParagraphs = [];
+    curBullets = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const headingMatch = trimmed.match(/^#{1,4}\s+(.+)$/);
+    if (headingMatch) {
+      flushCurrent();
+      currentSectionTitle = headingMatch[1].trim();
+      const lower = currentSectionTitle.toLowerCase();
+      if (lower.includes("overview") || lower.includes("about") || lower.includes("description")) {
+        currentType = "overview";
+      } else if (lower.includes("highlight") || lower.includes("feature")) {
+        currentType = "highlights";
+      } else if (lower.includes("spec") || lower.includes("detail")) {
+        currentType = "specifications";
+      } else {
+        currentType = "other";
+      }
+      continue;
+    }
+
+    // Bullet point
+    if (trimmed.startsWith("-") || trimmed.startsWith("*") || trimmed.startsWith("•")) {
+      const bulletContent = trimmed.replace(/^[-*•]\s*/, "").trim();
+      const boldMatch = bulletContent.match(/^\*\*([^*]+)\*\*[:\s-]*(.*)$/);
+      if (boldMatch) {
+        curBullets.push({
+          bold: boldMatch[1].trim(),
+          text: boldMatch[2].trim(),
+        });
+      } else {
+        curBullets.push({
+          text: bulletContent,
+        });
+      }
+    } else {
+      curParagraphs.push(trimmed);
+    }
+  }
+
+  flushCurrent();
+  return result;
+}
+
+function FormattedProductDescription({ description }: { description: string }) {
+  const parsed = parseFormattedDescription(description);
+
+  if (!parsed.isStructured) {
+    return (
+      <div className="text-xs text-[#680114] font-medium leading-relaxed whitespace-pre-line">
+        {description}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 1. Overview Section */}
+      {parsed.overviewText && (
+        <div className="rounded-xl bg-[#F6E9C8] p-3.5 border-2 border-[#680114]/30 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-1.5 text-xs font-serif font-bold text-[#680114]">
+            <Info className="w-3.5 h-3.5 text-[#680114] shrink-0" />
+            <span className="uppercase tracking-wider text-[11px]">Overview</span>
+          </div>
+          <p className="text-xs text-[#680114]/90 font-medium leading-relaxed">
+            {parsed.overviewText}
+          </p>
+        </div>
+      )}
+
+      {/* 2. Key Highlights & Features */}
+      {parsed.highlights.length > 0 && (
+        <div className="rounded-xl bg-[#F6E9C8] p-3.5 border-2 border-[#680114]/30 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-2.5 text-xs font-serif font-bold text-[#680114]">
+            <Sparkles className="w-3.5 h-3.5 text-[#680114] shrink-0" />
+            <span className="uppercase tracking-wider text-[11px]">Key Highlights &amp; Features</span>
+          </div>
+          <ul className="space-y-2">
+            {parsed.highlights.map((item, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-xs leading-relaxed">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#680114] shrink-0 mt-0.5" />
+                <span className="text-[#680114]/90">
+                  {item.bold && (
+                    <strong className="font-bold text-[#680114] mr-1">
+                      {item.bold}:
+                    </strong>
+                  )}
+                  {item.text}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* 3. Specifications */}
+      {parsed.specs.length > 0 && (
+        <div className="rounded-xl bg-[#F6E9C8] p-3.5 border-2 border-[#680114]/30 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-2 text-xs font-serif font-bold text-[#680114]">
+            <Sliders className="w-3.5 h-3.5 text-[#680114] shrink-0" />
+            <span className="uppercase tracking-wider text-[11px]">Product Specifications</span>
+          </div>
+          <div className="divide-y divide-[#680114]/15">
+            {parsed.specs.map((spec, idx) => (
+              <div key={idx} className="grid grid-cols-1 sm:grid-cols-2 py-1.5 text-xs">
+                <span className="text-[#680114]/80 font-medium">{spec.label}</span>
+                <span className="text-[#680114] font-semibold">{spec.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Other custom markdown sections */}
+      {parsed.otherSections.map((sec, sIdx) => (
+        <div key={sIdx} className="rounded-xl bg-[#F6E9C8] p-3.5 border-2 border-[#680114]/30 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-1.5 text-xs font-serif font-bold text-[#680114]">
+            <Package className="w-3.5 h-3.5 text-[#680114] shrink-0" />
+            <span className="uppercase tracking-wider text-[11px]">{sec.title}</span>
+          </div>
+          {sec.paragraphs.map((p, pIdx) => (
+            <p key={pIdx} className="text-xs text-[#680114]/90 font-medium leading-relaxed mb-2">
+              {p}
+            </p>
+          ))}
+          {sec.bullets.length > 0 && (
+            <ul className="space-y-1.5">
+              {sec.bullets.map((b, bIdx) => (
+                <li key={bIdx} className="flex items-start gap-2 text-xs leading-relaxed text-[#680114]/90">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#680114] shrink-0 mt-0.5" />
+                  <span>
+                    {b.bold && <strong className="font-bold text-[#680114] mr-1">{b.bold}:</strong>}
+                    {b.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function parseSpecsFromDescription(desc: string) {
   const specs: { label: string; value: string }[] = [];
@@ -435,12 +656,13 @@ function ProductDetailContent() {
 
   return (
     <div className="min-h-screen bg-[#F6E9C8] text-[#680114] font-sans flex flex-col justify-between">
+      {/* 1. Global Header (Standardized across desktop and mobile storefront) */}
+      <GlobalHeader />
+
       {/* ======================================================== */}
       {/* DESKTOP VIEWPORT LAYOUT (md: and above)                  */}
       {/* ======================================================== */}
-      <div className="hidden md:flex flex-col min-h-screen">
-        <GlobalHeader />
-
+      <div className="hidden md:flex flex-col flex-1">
         <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-5">
           {/* 1. Breadcrumbs */}
           <div className="bg-[#F6E9C8] py-1.5 md:py-2 px-1 mb-4 border-b border-[#680114]/15">
@@ -657,32 +879,15 @@ function ProductDetailContent() {
                 </div>
               )}
 
-              {/* Description Card (Moved Before Delivery & Actions, text color deep burgundy #680114) */}
+              {/* Description Card (Formatted with section icons, text color deep burgundy #680114) */}
               {product.description && (
                 <div className="bg-[#F6E9C8] p-5 rounded-2xl shadow-xs border-2 border-[#680114]">
-                  <h3 className="text-xs font-serif font-bold text-[#680114] uppercase tracking-wider mb-2">Description</h3>
-                  <div className="text-xs text-[#680114] font-medium leading-relaxed whitespace-pre-line">
-                    {product.description}
-                  </div>
+                  <h3 className="text-xs font-serif font-bold text-[#680114] uppercase tracking-wider mb-3">Product Details &amp; Highlights</h3>
+                  <FormattedProductDescription description={product.description} />
                 </div>
               )}
 
-              {/* Specifications Card (Moved Before Delivery & Actions) */}
-              {product.specs.length > 0 && (
-                <div className="bg-[#F6E9C8] p-5 rounded-2xl shadow-xs border-2 border-[#680114]">
-                  <h3 className="text-xs font-serif font-bold text-[#680114] uppercase tracking-wider mb-3">Specifications</h3>
-                  <div className="divide-y divide-[#680114]/20 text-xs">
-                    {product.specs.map((item, idx) => (
-                      <div key={idx} className="grid grid-cols-2 py-2">
-                        <span className="text-[#680114]/80 font-medium">{item.label}</span>
-                        <span className="text-[#680114] font-semibold">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Delivery & Pincode Card (Now Placed After Description & Specifications) */}
+              {/* Delivery & Pincode Card (Now Placed After Description) */}
               <div className="bg-[#F6E9C8] p-5 rounded-2xl shadow-xs border-2 border-[#680114]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-[#680114]">
@@ -803,27 +1008,23 @@ function ProductDetailContent() {
       {/* ======================================================== */}
       {/* MOBILE VIEWPORT LAYOUT (< md)                             */}
       {/* ======================================================== */}
-      <div className="md:hidden relative mx-auto min-h-screen w-full max-w-[480px] bg-[#F6E9C8] shadow-2xl flex flex-col pb-28 font-sans">
-        {/* 1. TOP BAR / APP HEADER */}
-        <header className="sticky top-0 z-40 flex items-center justify-between bg-[#F6E9C8]/95 backdrop-blur-md px-3.5 py-3 shadow-xs border-b-2 border-[#680114]">
-          <div className="flex items-center gap-2">
+      <div className="md:hidden relative mx-auto min-h-screen w-full max-w-[480px] bg-[#F6E9C8] flex flex-col pb-28 font-sans">
+        {/* Mobile Sub-Navigation Bar (Back, Category, Wishlist & Share) */}
+        <div className="sticky top-[118px] z-30 flex items-center justify-between gap-2 bg-[#F6E9C8]/95 backdrop-blur-md px-3.5 py-2 border-b-2 border-[#680114]/20 shadow-xs">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => router.back()}
               aria-label="Go back"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#680114]/10 active:scale-95 transition-transform cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] active:scale-95 transition-all cursor-pointer shadow-2xs shrink-0"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4" />
             </button>
-            <WondersaleLogo size="sm" showSubtitle={false} />
+            <span className="text-xs font-serif font-extrabold text-[#680114] truncate">
+              {product.category || "Product"}
+            </span>
           </div>
-          <div className="flex items-center gap-1">
-            <Link
-              href="/category/all"
-              aria-label="Search all products"
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#680114]/10 active:scale-95 transition-transform"
-            >
-              <Search className="h-5 w-5" />
-            </Link>
+
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               aria-label="Share product"
               onClick={() => {
@@ -831,226 +1032,190 @@ function ProductDetailContent() {
                   navigator.share({ title: product.title, url: window.location.href });
                 }
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#680114]/10 active:scale-95 transition-transform cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] active:scale-95 transition-all cursor-pointer shadow-2xs"
             >
-              <Share2 className="h-5 w-5" />
+              <Share2 className="h-3.5 w-3.5" />
             </button>
             <button
               aria-label="Add to wishlist"
               onClick={handleToggleWishlist}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#680114]/10 active:scale-90 transition-transform cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] active:scale-90 transition-all cursor-pointer shadow-2xs"
             >
               <Heart
-                className={`h-5 w-5 transition-colors ${
+                className={`h-3.5 w-3.5 transition-colors ${
                   isWishlisted ? "text-[#680114] fill-current" : "text-[#680114]"
                 }`}
               />
             </button>
-            <Link
-              href="/cart"
-              aria-label="Shopping Cart"
-              className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#680114] hover:bg-[#680114]/10 active:scale-95 transition-transform"
-            >
-              <ShoppingBag className="h-5 w-5" />
-              {isHydrated && cartCount > 0 && (
-                <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#680114] px-1 text-[10px] font-bold text-[#F6E9C8] shadow-xs">
-                  {cartCount}
-                </span>
+          </div>
+        </div>
+
+        {/* MAIN BODY STREAM WITH OUTLINED CARDS */}
+        <div className="p-3.5 space-y-3.5">
+          {/* 2. IMAGE GALLERY HERO CARD */}
+          <section className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl shadow-xs overflow-hidden">
+            <div className="relative mx-auto flex h-64 w-full items-center justify-center p-4 bg-[#F6E9C8]">
+              {savingsPercent > 0 && (
+                <div className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-full bg-[#680114] px-2.5 py-1 text-xs font-black uppercase tracking-wider text-[#F6E9C8] shadow-2xs">
+                  <Flame className="h-3.5 w-3.5 fill-current" />
+                  <span>SAVE {savingsPercent}%</span>
+                </div>
               )}
-            </Link>
-          </div>
-        </header>
 
-        {/* 2. IMAGE GALLERY HERO */}
-        <section className="relative w-full bg-[#F6E9C8] border-b-2 border-[#680114]">
-          <div className="relative mx-auto flex h-60 w-full items-center justify-center overflow-hidden p-4">
-            {savingsPercent > 0 && (
-              <div className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-full bg-[#680114] px-2.5 py-1 text-xs font-black uppercase tracking-wider text-[#F6E9C8] shadow-2xs">
-                <Flame className="h-3.5 w-3.5 fill-current" />
-                <span>SAVE {savingsPercent}%</span>
-              </div>
-            )}
-
-            {currentDisplayImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={currentDisplayImage}
-                alt={product.title}
-                className="h-full w-auto max-h-52 object-contain transition-transform duration-300"
-              />
-            ) : (
-              <div className="text-center text-[#680114]/80">
-                <Box className="w-12 h-12 mx-auto mb-1 text-[#680114]/40" />
-                <span className="text-xs font-semibold">No Image</span>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile Thumbnails */}
-          {galleryImages.length > 1 && (
-            <div className="flex items-center gap-2 px-3 pb-3 overflow-x-auto no-scrollbar">
-              {galleryImages.map((imgUrl, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveImageIdx(idx)}
-                  className={`w-14 h-14 rounded-lg overflow-hidden bg-[#F6E9C8] p-1 border-2 shrink-0 transition-all cursor-pointer ${
-                    activeImageIdx === idx ? "border-[#680114] shadow-2xs" : "border-[#680114]/30"
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imgUrl} alt="Thumbnail" className="w-full h-full object-contain" />
-                </button>
-              ))}
+              {currentDisplayImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={currentDisplayImage}
+                  alt={product.title}
+                  className="h-full w-auto max-h-56 object-contain transition-transform duration-300 drop-shadow-sm"
+                />
+              ) : (
+                <div className="text-center text-[#680114]/80">
+                  <Box className="w-12 h-12 mx-auto mb-1 text-[#680114]/40" />
+                  <span className="text-xs font-semibold">No Image</span>
+                </div>
+              )}
             </div>
-          )}
-        </section>
 
-        {/* 3. PRODUCT ESSENTIALS */}
-        <section className="bg-[#F6E9C8] p-4 border-b-2 border-[#680114]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-serif font-extrabold uppercase tracking-wider text-[#680114]">
-                {product.brand}
-              </span>
-              <span className="text-[#680114]/40">•</span>
-              <span className="text-[11px] font-medium text-[#680114]/80">{product.category}</span>
-            </div>
-            {product.bestsellerRank && (
-              <span className="rounded-full bg-[#F6E9C8] border-2 border-[#680114] px-2 py-0.5 text-[10px] font-bold text-[#680114]">
-                {product.bestsellerRank}
-              </span>
-            )}
-          </div>
-
-          <h1 className="mt-1.5 text-base font-serif font-extrabold text-[#680114] leading-snug">
-            {product.title}
-          </h1>
-
-          <div className="mt-3 flex items-baseline gap-2.5">
-            <span className="text-2xl font-black tracking-tight text-[#680114]">
-              {formatPrice(currentSellingPricePaise)}
-            </span>
-            {currentMrpPaise > currentSellingPricePaise && (
-              <span className="text-xs font-medium text-[#680114]/80 line-through">
-                MRP {formatPrice(currentMrpPaise)}
-              </span>
-            )}
-            {savingsPercent > 0 && (
-              <span className="inline-flex items-center rounded-full bg-[#680114] px-2 py-0.5 text-[11px] font-bold text-[#F6E9C8] shadow-2xs">
-                Save {formatPrice(savingsPaise)} ({savingsPercent}% OFF)
-              </span>
-            )}
-          </div>
-
-          <div className="mt-1 text-[11px] text-[#680114]/80">
-            <span>Inclusive of all taxes • GST Invoice Available</span>
-          </div>
-        </section>
-
-        {/* 4. SIZE & VARIANT SELECTOR */}
-        {product.variants.length > 1 && (
-          <section className="bg-[#F6E9C8] px-4 py-3.5 border-b-2 border-[#680114]">
-            <span className="text-xs font-serif font-bold text-[#680114]">
-              Select Option: <strong className="text-[#680114]">{selectedVariant?.capacity}</strong>
-            </span>
-            <div className="mt-2.5 grid grid-cols-3 gap-2">
-              {product.variants.map((v, idx) => {
-                const isSelected = selectedVariantIdx === idx;
-                return (
+            {/* Mobile Thumbnails Strip */}
+            {galleryImages.length > 1 && (
+              <div className="flex items-center gap-2 p-3 bg-[#EFE0BC] border-t-2 border-[#680114] overflow-x-auto no-scrollbar">
+                {galleryImages.map((imgUrl, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setSelectedVariantIdx(idx)}
-                    className={`relative flex flex-col items-center justify-center rounded-lg p-2 text-center transition-all active:scale-95 cursor-pointer ${
-                      isSelected
-                        ? "border-2 border-[#680114] bg-[#680114] text-[#F6E9C8] shadow-2xs"
-                        : "border-2 border-[#680114] bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10"
+                    type="button"
+                    onClick={() => setActiveImageIdx(idx)}
+                    className={`w-14 h-14 rounded-xl overflow-hidden bg-[#F6E9C8] p-1 border-2 shrink-0 transition-all cursor-pointer ${
+                      activeImageIdx === idx ? "border-[#680114] ring-2 ring-[#680114]/30 shadow-2xs" : "border-[#680114]/30 hover:border-[#680114]"
                     }`}
                   >
-                    <span
-                      className={`text-xs font-bold ${
-                        isSelected ? "text-[#F6E9C8]" : "text-[#680114]"
-                      }`}
-                    >
-                      {v.capacity}
-                    </span>
-                    <span className={`text-[11px] font-extrabold ${isSelected ? "text-[#F6E9C8]" : "text-[#680114]"}`}>
-                      {formatPrice(v.pricePaise)}
-                    </span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imgUrl} alt="Thumbnail" className="w-full h-full object-contain" />
                   </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* 5. DESCRIPTION (Collapsible Dropdown Accordion) */}
-        {product.description && (
-          <section className="bg-[#F6E9C8] border-b-2 border-[#680114]">
-            <button
-              type="button"
-              onClick={() => setIsMobileOverviewOpen(!isMobileOverviewOpen)}
-              className="w-full flex items-center justify-between px-4 py-3.5 text-left cursor-pointer transition-colors hover:bg-[#680114]/5"
-              aria-expanded={isMobileOverviewOpen}
-            >
-              <h2 className="text-sm font-serif font-bold text-[#680114]">
-                Product Overview
-              </h2>
-              <ChevronDown
-                className={`h-4 w-4 text-[#680114] transition-transform duration-200 ${
-                  isMobileOverviewOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            {isMobileOverviewOpen && (
-              <div className="px-4 pb-4 pt-1 text-xs text-[#680114] font-medium leading-relaxed whitespace-pre-line border-t border-[#680114]/20 animate-fadeIn">
-                {product.description}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* 6. SPECIFICATIONS TABLE (Collapsible Dropdown Accordion) */}
-        {product.specs.length > 0 && (
-          <section className="bg-[#F6E9C8] border-b-2 border-[#680114]">
-            <button
-              type="button"
-              onClick={() => setIsMobileSpecsOpen(!isMobileSpecsOpen)}
-              className="w-full flex items-center justify-between px-4 py-3.5 text-left cursor-pointer transition-colors hover:bg-[#680114]/5"
-              aria-expanded={isMobileSpecsOpen}
-            >
-              <h2 className="text-sm font-serif font-bold text-[#680114]">
-                Product Specifications
-              </h2>
-              <ChevronDown
-                className={`h-4 w-4 text-[#680114] transition-transform duration-200 ${
-                  isMobileSpecsOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-            {isMobileSpecsOpen && (
-              <div className="px-4 pb-4 pt-1 divide-y divide-[#680114]/20 text-xs border-t border-[#680114]/20 animate-fadeIn">
-                {product.specs.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-2 py-2">
-                    <span className="font-medium text-[#680114]/80">{item.label}</span>
-                    <span className="font-semibold text-[#680114]">{item.value}</span>
-                  </div>
                 ))}
               </div>
             )}
           </section>
-        )}
 
-        {/* 7. PINCODE & DELIVERY (Moved after Description and Specifications; removed Cash on Delivery, Return, Warranty badges) */}
-        <section className="p-3.5">
-          <div className="rounded-2xl border-2 border-[#680114] bg-[#F6E9C8] p-3.5 shadow-2xs">
-            <div className="flex items-center justify-between border-b border-[#680114]/20 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#F6E9C8] border-2 border-[#680114] text-[#680114]">
+          {/* 3. PRODUCT ESSENTIALS CARD */}
+          <section className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl p-4 shadow-xs">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-serif font-extrabold uppercase tracking-wider text-[#680114] bg-[#F6E9C8] border border-[#680114]/40 px-2 py-0.5 rounded-md">
+                  {product.brand}
+                </span>
+                <span className="text-xs font-medium text-[#680114]/80">{product.category}</span>
+              </div>
+              {product.bestsellerRank && (
+                <span className="rounded-full bg-[#680114] px-2.5 py-0.5 text-[10px] font-bold text-[#F6E9C8] shadow-2xs">
+                  {product.bestsellerRank}
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-base font-serif font-extrabold text-[#680114] leading-snug">
+              {product.title}
+            </h1>
+
+            <div className="mt-3.5 p-3 rounded-xl bg-[#F6E9C8] border-2 border-[#680114]/30">
+              <div className="flex items-baseline gap-2.5">
+                <span className="text-2xl font-black tracking-tight text-[#680114]">
+                  {formatPrice(currentSellingPricePaise)}
+                </span>
+                {currentMrpPaise > currentSellingPricePaise && (
+                  <span className="text-xs font-medium text-[#680114]/80 line-through">
+                    MRP {formatPrice(currentMrpPaise)}
+                  </span>
+                )}
+                {savingsPercent > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-[#680114] px-2 py-0.5 text-[11px] font-bold text-[#F6E9C8] shadow-2xs ml-auto">
+                    Save {formatPrice(savingsPaise)} ({savingsPercent}% OFF)
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[10px] text-[#680114]/80 font-medium">
+                Inclusive of all taxes • GST Invoice Available
+              </div>
+            </div>
+          </section>
+
+          {/* 4. SIZE & VARIANT SELECTOR CARD */}
+          {product.variants.length > 1 && (
+            <section className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-xs font-serif font-bold text-[#680114]">
+                  Select Option:
+                </span>
+                <span className="text-xs font-serif font-extrabold text-[#680114] bg-[#F6E9C8] border border-[#680114]/40 px-2 py-0.5 rounded-md">
+                  {selectedVariant?.capacity}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {product.variants.map((v, idx) => {
+                  const isSelected = selectedVariantIdx === idx;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedVariantIdx(idx)}
+                      className={`relative flex flex-col items-center justify-center rounded-xl p-2.5 text-center transition-all active:scale-95 cursor-pointer border-2 ${
+                        isSelected
+                          ? "border-[#680114] bg-[#680114] text-[#F6E9C8] shadow-2xs"
+                          : "border-[#680114] bg-[#F6E9C8] text-[#680114] hover:bg-[#680114]/10"
+                      }`}
+                    >
+                      <span className={`text-xs font-bold ${isSelected ? "text-[#F6E9C8]" : "text-[#680114]"}`}>
+                        {v.capacity}
+                      </span>
+                      <span className={`text-xs font-extrabold mt-0.5 ${isSelected ? "text-[#F6E9C8]" : "text-[#680114]"}`}>
+                        {formatPrice(v.pricePaise)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* 5. DESCRIPTION ACCORDION CARD */}
+          {product.description && (
+            <section className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl shadow-xs overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsMobileOverviewOpen(!isMobileOverviewOpen)}
+                className="w-full flex items-center justify-between p-4 text-left cursor-pointer transition-colors hover:bg-[#680114]/5"
+                aria-expanded={isMobileOverviewOpen}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-[#680114] text-[#F6E9C8] flex items-center justify-center">
+                    <Info className="h-3.5 w-3.5" />
+                  </div>
+                  <h2 className="text-xs font-serif font-bold uppercase tracking-wider text-[#680114]">
+                    Product Overview &amp; Highlights
+                  </h2>
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-[#680114] transition-transform duration-200 ${
+                    isMobileOverviewOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {isMobileOverviewOpen && (
+                <div className="p-4 pt-0 border-t-2 border-[#680114]/20 animate-fadeIn">
+                  <FormattedProductDescription description={product.description} />
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* 6. PINCODE & DELIVERY CARD */}
+          <section className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b-2 border-[#680114]/20 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#680114] text-[#F6E9C8] shadow-2xs">
                   <MapPin className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-medium text-[#680114]/80 uppercase tracking-wider">
+                  <p className="text-[10px] font-bold text-[#680114]/80 uppercase tracking-wider">
                     Deliver to
                   </p>
                   <p className="text-xs font-serif font-bold text-[#680114]">
@@ -1060,25 +1225,25 @@ function ProductDetailContent() {
               </div>
               <button
                 onClick={() => setIsChangingPincode(!isChangingPincode)}
-                className="rounded-lg border-2 border-[#680114] bg-[#F6E9C8] px-2.5 py-1 text-xs font-serif font-bold text-[#680114] hover:bg-[#680114]/10 active:scale-95 transition-all cursor-pointer"
+                className="rounded-lg border-2 border-[#680114] bg-[#F6E9C8] px-3 py-1 text-xs font-serif font-bold text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] active:scale-95 transition-all cursor-pointer shadow-2xs"
               >
                 {isChangingPincode ? "Cancel" : "Change"}
               </button>
             </div>
 
             {isChangingPincode && (
-              <form onSubmit={handlePincodeCheck} className="flex gap-2 pt-2.5 pb-1">
+              <form onSubmit={handlePincodeCheck} className="flex gap-2 pt-3 pb-1">
                 <input
                   type="text"
                   maxLength={6}
                   value={pincode}
                   onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
                   placeholder="Enter 6-digit Pincode"
-                  className="flex-1 rounded-lg border-2 border-[#680114] bg-[#F6E9C8] px-3 py-1 text-xs font-medium text-[#680114] focus:outline-none"
+                  className="flex-1 rounded-xl border-2 border-[#680114] bg-[#F6E9C8] px-3 py-1.5 text-xs font-bold text-[#680114] focus:outline-none"
                 />
                 <button
                   type="submit"
-                  className="rounded-lg bg-[#680114] px-3 py-1 text-xs font-serif font-bold text-[#F6E9C8] hover:bg-[#88091E] transition-colors cursor-pointer shadow-2xs"
+                  className="rounded-xl bg-[#680114] px-4 py-1.5 text-xs font-serif font-bold text-[#F6E9C8] hover:bg-[#88091E] transition-colors cursor-pointer shadow-2xs"
                 >
                   Apply
                 </button>
@@ -1086,89 +1251,91 @@ function ProductDetailContent() {
             )}
 
             <div
-              className={`mt-3 rounded-lg p-2.5 border-2 ${
+              className={`mt-3 rounded-xl p-3 border-2 ${
                 isPincodeValid
                   ? "bg-[#F6E9C8] border-[#680114] text-[#680114]"
                   : "bg-red-50 border-red-300 text-red-900"
               }`}
             >
-              <div className="flex items-center gap-1.5">
-                <Truck className="h-4 w-4 text-[#680114]" />
+              <div className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-[#680114] shrink-0" />
                 <span className="text-xs font-bold">{pincodeMessage}</span>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-800">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+            <div className="mt-3 flex items-center gap-2 text-xs font-bold text-emerald-800 bg-[#EAF7EE] border-2 border-emerald-600/30 rounded-xl p-2.5">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
               </span>
-              <span>{product.inStock ? "In Stock (Central Store)" : "Out of Stock"}</span>
-            </div>
-          </div>
-        </section>
-
-        {/* 9. SUGGESTED RELATED PRODUCTS (Mobile) */}
-        {suggestedProducts.length > 0 && (
-          <section className="bg-[#F6E9C8] px-3.5 py-4 border-t-2 border-[#680114] mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-[#680114]" />
-                <h2 className="text-xs font-serif font-extrabold uppercase tracking-wider text-[#680114]">
-                  You May Also Like
-                </h2>
-              </div>
-              <Link
-                href={`/category/${product.categorySlug || "all"}`}
-                className="text-[11px] font-serif font-bold text-[#680114] hover:underline"
-              >
-                View More →
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {suggestedProducts.map((sp) => (
-                <div key={sp.id} className="flex flex-col h-full">
-                  <ProductCard
-                    id={sp.id}
-                    slug={sp.slug}
-                    title={sp.title}
-                    brand={sp.brand}
-                    mrpPaise={sp.mrpPaise}
-                    sellingPricePaise={sp.sellingPricePaise}
-                    rating={4.5}
-                    ratingCount={18}
-                    imageUrl={sp.imageUrl}
-                    inStock={sp.inStock}
-                    badge={sp.badge}
-                    variant="grid"
-                    onAddToCart={() =>
-                      addToCart({
-                        id: sp.id,
-                        slug: sp.slug,
-                        title: sp.title,
-                        sellingPricePaise: sp.sellingPricePaise,
-                        mrpPaise: sp.mrpPaise,
-                        imageUrl: sp.imageUrl,
-                      })
-                    }
-                    onToggleWishlist={() =>
-                      toggleWishlist({
-                        id: sp.id,
-                        slug: sp.slug,
-                        title: sp.title,
-                        sellingPricePaise: sp.sellingPricePaise,
-                        mrpPaise: sp.mrpPaise,
-                        imageUrl: sp.imageUrl,
-                        inStock: sp.inStock,
-                      })
-                    }
-                  />
-                </div>
-              ))}
+              <span>{product.inStock ? "In Stock (Central Bhopal Store)" : "Out of Stock"}</span>
             </div>
           </section>
-        )}
+
+          {/* 8. SUGGESTED RELATED PRODUCTS (Mobile) */}
+          {suggestedProducts.length > 0 && (
+            <section className="bg-[#EFE0BC] border-2 border-[#680114] rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between mb-3.5 pb-2.5 border-b-2 border-[#680114]/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-[#680114] text-[#F6E9C8] flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <h2 className="text-xs font-serif font-extrabold uppercase tracking-wider text-[#680114]">
+                    You May Also Like
+                  </h2>
+                </div>
+                <Link
+                  href={`/category/${product.categorySlug || "all"}`}
+                  className="text-xs font-serif font-bold text-[#680114] hover:underline"
+                >
+                  View More →
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {suggestedProducts.map((sp) => (
+                  <div key={sp.id} className="flex flex-col h-full">
+                    <ProductCard
+                      id={sp.id}
+                      slug={sp.slug}
+                      title={sp.title}
+                      brand={sp.brand}
+                      mrpPaise={sp.mrpPaise}
+                      sellingPricePaise={sp.sellingPricePaise}
+                      rating={4.5}
+                      ratingCount={18}
+                      imageUrl={sp.imageUrl}
+                      inStock={sp.inStock}
+                      badge={sp.badge}
+                      variant="grid"
+                      onAddToCart={() =>
+                        addToCart({
+                          id: sp.id,
+                          slug: sp.slug,
+                          title: sp.title,
+                          sellingPricePaise: sp.sellingPricePaise,
+                          mrpPaise: sp.mrpPaise,
+                          imageUrl: sp.imageUrl,
+                        })
+                      }
+                      onToggleWishlist={() =>
+                        toggleWishlist({
+                          id: sp.id,
+                          slug: sp.slug,
+                          title: sp.title,
+                          sellingPricePaise: sp.sellingPricePaise,
+                          mrpPaise: sp.mrpPaise,
+                          imageUrl: sp.imageUrl,
+                          inStock: sp.inStock,
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
 
         {/* 10. STICKY MOBILE BOTTOM ACTION BAR */}
         <div className="fixed bottom-0 inset-x-0 z-50 mx-auto w-full max-w-[480px] bg-[#F6E9C8]/95 backdrop-blur-md px-3.5 py-2.5 shadow-[0_-4px_16px_rgba(44,24,16,0.1)] border-t-2 border-[#680114]">

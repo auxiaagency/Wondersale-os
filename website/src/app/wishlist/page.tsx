@@ -47,8 +47,8 @@ export default function WishlistPage() {
       {/* 1. Global Header (Exact same header as Home Page & Categories) */}
       <GlobalHeader />
 
-      {/* 2. Desktop Breadcrumb Navigation */}
-      <div className="hidden md:block bg-[#F6E9C8] border-b border-[#680114]/15">
+      {/* 2. Breadcrumb Navigation */}
+      <div className="bg-[#F6E9C8] border-b border-[#680114]/15">
         <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-1.5 md:py-2">
           <nav aria-label="Breadcrumb" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-base font-serif font-bold text-[#680114] whitespace-nowrap overflow-x-auto no-scrollbar">
             <Link href="/" className="hover:text-[#88091E] flex items-center transition-colors shrink-0">
@@ -61,35 +61,6 @@ export default function WishlistPage() {
           </nav>
         </div>
       </div>
-
-      {/* 3. Mobile Header Bar (Sticky on phones) */}
-      <header className="md:hidden sticky top-0 z-40 bg-[#FDF8EE] px-4 py-3 flex items-center justify-between shadow-xs border-b border-[#EADFC7]">
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => router.back()}
-            aria-label="Go back"
-            className="w-9 h-9 rounded-full flex items-center justify-center bg-[#F4ECDC] text-[#680114] hover:bg-[#EADFC7] transition-transform active:scale-90"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div>
-            <h1 className="font-bold text-base text-[#680114] leading-tight font-serif">My Wishlist</h1>
-            <p className="text-[11px] text-[#680114]/80">{items.length} Saved Items</p>
-          </div>
-        </div>
-
-        <Link
-          href="/cart"
-          className="relative p-2 rounded-full hover:bg-[#F4ECDC] text-[#680114] transition-transform active:scale-95"
-        >
-          <ShoppingBag className="h-5 w-5" />
-          {isHydrated && cartCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[1rem] px-1 items-center justify-center rounded-full bg-[#7A0C16] text-[10px] font-bold text-[#FDF8EE] leading-none">
-              {cartCount}
-            </span>
-          )}
-        </Link>
-      </header>
 
       {/* 4. Main Body Content (Responsive Container: Grid on Desktop, Card Stack on Mobile) */}
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-6 pb-24 space-y-6">

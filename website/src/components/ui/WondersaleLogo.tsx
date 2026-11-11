@@ -5,11 +5,12 @@ import Link from "next/link";
 export interface WondersaleLogoProps {
   /**
    * Size presets:
+   * - 'xs': compact mobile headers (height ~24px, single-row fit)
    * - 'sm': mobile headers, subpages (height ~28px)
    * - 'md': default desktop header (height ~36px)
    * - 'lg': footer / splash / auth hero (height ~44px)
    */
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   /** Whether to show the subtitle tag line */
   showSubtitle?: boolean;
   /** Custom subtitle text (defaults to 'Bhopal Store & Online Pan-India') */
@@ -34,6 +35,7 @@ export const WondersaleLogo: React.FC<WondersaleLogoProps> = ({
 
   // Dimension mapping calibrated with tighter spacing and prominent logo badge
   const dimensions = {
+    xs: { imgW: 36, imgH: 27, title: "text-[16px]", gap: "gap-1" },
     sm: { imgW: 56, imgH: 42, title: "text-[22px]", gap: "gap-1.5" },
     md: { imgW: 78, imgH: 58, title: "text-[28px]", gap: "gap-2" },
     lg: { imgW: 96, imgH: 72, title: "text-[36px]", gap: "gap-2.5" },

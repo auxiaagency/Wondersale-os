@@ -316,13 +316,14 @@ export default function CartPage() {
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-[#F6E9C8] text-[#680114] font-sans flex flex-col justify-between selection:bg-[#680114]/20 selection:text-[#680114]">
+      {/* 1. Global Header (Unified standard across desktop and mobile storefront) */}
+      <GlobalHeader />
+
       {/* ======================================================== */}
       {/* DESKTOP VIEWPORT LAYOUT (>= md, Full Width Responsive)   */}
       {/* ======================================================== */}
-      <div className="hidden md:flex min-h-screen flex-col bg-[#F6E9C8] text-[#680114] font-sans">
-        <GlobalHeader />
-
+      <div className="hidden md:flex flex-1 flex-col">
         {/* Desktop Breadcrumbs */}
         <div className="bg-[#F6E9C8] border-b border-[#680114]/15">
           <div className="max-w-[1600px] mx-auto px-4 sm:px-6 md:px-8 xl:px-12 py-1.5 md:py-2">
@@ -845,38 +846,35 @@ export default function CartPage() {
       {/* MOBILE VIEWPORT LAYOUT (< md, Clean & Simple Experience) */}
       {/* ======================================================== */}
       <div className="md:hidden relative mx-auto min-h-screen w-full max-w-[440px] bg-[#F6E9C8] text-[#680114] flex flex-col pb-32 font-sans selection:bg-[#680114]/20 selection:text-[#680114]">
-        {/* 1. CLEAN TOP HEADER */}
-        <header className="sticky top-0 z-40 bg-[#EFE0BC] border-b-2 border-[#680114]/20 shadow-xs backdrop-blur-md">
-          <div className="px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => router.back()}
-                aria-label="Go back"
-                className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F6E9C8] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-all active:scale-90 cursor-pointer shadow-2xs"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div>
-                <h1 className="font-serif font-extrabold text-base text-[#680114] leading-none">
-                  Shopping Cart
-                </h1>
-                <p className="text-[11px] text-[#680114]/80 mt-0.5 font-medium">
-                  {totalQuantity} {totalQuantity === 1 ? "item" : "items"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Link
-                href="/wishlist"
-                className="w-9 h-9 rounded-xl flex items-center justify-center bg-[#F6E9C8] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-all active:scale-90 shadow-2xs"
-                aria-label="Wishlist"
-              >
-                <Heart className="h-4 w-4" />
-              </Link>
-              <WondersaleLogo size="sm" showSubtitle={false} />
+        {/* 1. CLEAN TOP SUB-BAR */}
+        <div className="sticky top-0 z-30 bg-[#F6E9C8]/95 border-b-2 border-[#680114]/20 shadow-xs backdrop-blur-md px-3.5 py-2 flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <button
+              onClick={() => router.back()}
+              aria-label="Go back"
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-all active:scale-90 cursor-pointer shadow-2xs"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div>
+              <h1 className="font-serif font-extrabold text-sm text-[#680114] leading-tight">
+                Shopping Cart
+              </h1>
+              <p className="text-[10.5px] text-[#680114]/80 font-medium">
+                {totalQuantity} {totalQuantity === 1 ? "item" : "items"}
+              </p>
             </div>
           </div>
-        </header>
+          <div className="flex items-center space-x-2">
+            <Link
+              href="/wishlist"
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#EFE0BC] border-2 border-[#680114] text-[#680114] hover:bg-[#680114] hover:text-[#F6E9C8] transition-all active:scale-90 shadow-2xs"
+              aria-label="Wishlist"
+            >
+              <Heart className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
 
         {/* SCROLLABLE CART CONTENT */}
         <div className="px-4 pt-3.5 space-y-3.5">
@@ -1653,6 +1651,6 @@ export default function CartPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
