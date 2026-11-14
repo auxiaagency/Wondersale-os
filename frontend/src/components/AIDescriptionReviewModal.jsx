@@ -37,6 +37,9 @@ import {
   discardAIName,
   bulkApplyAINames,
   stopActiveAIDescriptionJob,
+  bulkAIGenerateNamesOnly,
+  bulkAIGenerateDescriptionsOnly,
+  bulkAIGenerateDescriptions,
 } from '../api';
 
 export default function AIDescriptionReviewModal({
@@ -67,7 +70,7 @@ export default function AIDescriptionReviewModal({
     setStoppingJob(true);
     try {
       await stopActiveAIDescriptionJob(job?.id);
-      showToast("Generation stopped to preserve API quota/credits.");
+      showToast("AI generation job stopped.");
       await loadJobData();
       window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
     } catch (err) {
@@ -77,6 +80,11 @@ export default function AIDescriptionReviewModal({
     }
   };
   const [bulkApplyingNames, setBulkApplyingNames] = useState(false);
+  const [bulkGeneratingNamesOnly, setBulkGeneratingNamesOnly] = useState(false);
+  const [bulkGeneratingDescsOnly, setBulkGeneratingDescsOnly] = useState(false);
+  const [bulkGeneratingBoth, setBulkGeneratingBoth] = useState(false);
+  const [bulkApplyingBoth, setBulkApplyingBoth] = useState(false);
+  const [applyingBoth, setApplyingBoth] = useState({}); // { [itemId]: boolean }
   const [toastMessage, setToastMessage] = useState(null);
   const [imageModalItem, setImageModalItem] = useState(null);
 
@@ -121,7 +129,7 @@ export default function AIDescriptionReviewModal({
       }
     } catch (err) {
       console.error("Failed to load AI Studio data:", err);
-      setErrorMessage(err.message || "Failed to connect to AI server. Please verify your connection or Gemini API keys.");
+      setErrorMessage(err.message || "Failed to load AI Studio status. Please check server connectivity or the local Vision worker.");
     } finally {
       setLoading(false);
     }
@@ -198,11 +206,19 @@ export default function AIDescriptionReviewModal({
     setActionLoading(prev => ({ ...prev, [item.id]: true }));
     try {
       const res = await singleAIGenerateDescription(item.id);
-      showToast(`Regenerated draft for "${item.name}"`);
-      setDraftEdits(prev => ({ ...prev, [item.id]: res.description }));
-      setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_description_draft: res.description, ai_description_status: 'ready' } : it));
+      if (res.queued || res.status === 'pending') {
+        showToast(res.message || `Queued "${item.name}" for local Vision AI`);
+        setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_description_status: res.item?.ai_description_status || 'pending' } : it));
+      } else {
+        showToast(`Regenerated draft for "${item.name}"`);
+        setDraftEdits(prev => ({ ...prev, [item.id]: res.description }));
+        setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_description_draft: res.description, ai_description_status: 'ready' } : it));
+      }
+      if (res.job) {
+        window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
+      }
       window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
-      if (onItemUpdated) onItemUpdated(res.item);
+      if (onItemUpdated && res.item) onItemUpdated(res.item);
     } catch (err) {
       showToast(err.message || 'Failed to generate description.');
     } finally {
@@ -249,13 +265,18 @@ export default function AIDescriptionReviewModal({
   const handleGenerateSingleName = async (item) => {
     setNameActionLoading(prev => ({ ...prev, [item.id]: true }));
     try {
-      showToast(`Generating AI product name for "${item.name}"...`);
+      showToast(`Queueing AI product name for "${item.name}"...`);
       const res = await singleAIGenerateName(item.id);
-      showToast(`✨ Generated AI title: "${res.name}"`);
-      setNameEdits(prev => ({ ...prev, [item.id]: res.name }));
-      setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_name_draft: res.name, ai_name_status: 'ready' } : it));
+      if (res.queued || res.status === 'pending') {
+        showToast(res.message || `Queued AI title generation for "${item.name}"`);
+        setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_name_status: res.item?.ai_name_status || 'pending' } : it));
+      } else {
+        showToast(`✨ Generated AI title: "${res.name}"`);
+        setNameEdits(prev => ({ ...prev, [item.id]: res.name }));
+        setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...res.item, ai_name_draft: res.name, ai_name_status: 'ready' } : it));
+      }
       window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
-      if (onItemUpdated) onItemUpdated(res.item);
+      if (onItemUpdated && res.item) onItemUpdated(res.item);
     } catch (err) {
       showToast(err.message || 'Failed to generate product name.');
     } finally {
@@ -304,6 +325,36 @@ export default function AIDescriptionReviewModal({
     }
   };
 
+  const handleBulkApplyBoth = async () => {
+    const readyDescItems = items.filter(it => it.ai_description_status === 'ready' || (draftEdits[it.id] && it.ai_description_status !== 'applied'));
+    const readyNameItems = items.filter(it => it.ai_name_status === 'ready' || (nameEdits[it.id] && it.ai_name_status !== 'applied'));
+    if (readyDescItems.length === 0 && readyNameItems.length === 0) {
+      showToast("No ready drafts to apply.");
+      return;
+    }
+    setBulkApplyingBoth(true);
+    try {
+      let descCount = 0;
+      let nameCount = 0;
+      if (readyNameItems.length > 0) {
+        const resNames = await bulkApplyAINames(readyNameItems.map(it => it.id));
+        nameCount = resNames.applied_count || readyNameItems.length;
+      }
+      if (readyDescItems.length > 0) {
+        const resDesc = await bulkApplyAIDescriptions(readyDescItems.map(it => it.id));
+        descCount = resDesc.applied_count || readyDescItems.length;
+      }
+      showToast(`Applied ${nameCount} names & ${descCount} descriptions!`);
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      await loadJobData();
+      if (onItemUpdated) onItemUpdated();
+    } catch (err) {
+      showToast(err.message || 'Failed to bulk apply names and descriptions.');
+    } finally {
+      setBulkApplyingBoth(false);
+    }
+  };
+
   const handleImageModalUpdated = async (updatedItem) => {
     if (!updatedItem) return;
     setItems(prev => prev.map(it => it.id === updatedItem.id ? { ...it, ...updatedItem } : it));
@@ -313,22 +364,100 @@ export default function AIDescriptionReviewModal({
     if (hasPhoto) {
       setActionLoading(prev => ({ ...prev, [updatedItem.id]: true }));
       try {
-        showToast(`Generating AI description for "${updatedItem.name}"...`);
+        showToast(`Queueing AI description for "${updatedItem.name}"...`);
         const res = await singleAIGenerateDescription(updatedItem.id);
-        showToast(`✨ AI description ready for "${updatedItem.name}"!`);
-        setDraftEdits(prev => ({ ...prev, [updatedItem.id]: res.description }));
-        setItems(prev => prev.map(it => it.id === updatedItem.id ? { ...it, ...res.item, ai_description_draft: res.description, ai_description_status: 'ready' } : it));
+        if (res.queued || res.status === 'pending') {
+          showToast(res.message || `Queued "${updatedItem.name}" for local Vision AI`);
+          setItems(prev => prev.map(it => it.id === updatedItem.id ? { ...it, ...res.item, ai_description_status: res.item?.ai_description_status || 'pending' } : it));
+        } else {
+          showToast(`✨ AI description ready for "${updatedItem.name}"!`);
+          setDraftEdits(prev => ({ ...prev, [updatedItem.id]: res.description }));
+          setItems(prev => prev.map(it => it.id === updatedItem.id ? { ...it, ...res.item, ai_description_draft: res.description, ai_description_status: 'ready' } : it));
+        }
         if (res.job) {
           window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
         }
         window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
-        if (onItemUpdated) onItemUpdated(res.item);
+        if (onItemUpdated && res.item) onItemUpdated(res.item);
       } catch (err) {
         showToast(err.message || 'Failed to generate description.');
         window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
       } finally {
         setActionLoading(prev => ({ ...prev, [updatedItem.id]: false }));
       }
+    }
+  };
+
+  const handleBulkGenerateNamesOnly = async () => {
+    setBulkGeneratingNamesOnly(true);
+    try {
+      const res = await bulkAIGenerateNamesOnly([], job?.store);
+      showToast(res.message || `Queued items for AI name generation.`);
+      window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
+      await loadJobData();
+    } catch (err) {
+      showToast(err.message || 'Failed to queue name generation.');
+    } finally {
+      setBulkGeneratingNamesOnly(false);
+    }
+  };
+
+  const handleBulkGenerateDescsOnly = async () => {
+    setBulkGeneratingDescsOnly(true);
+    try {
+      const res = await bulkAIGenerateDescriptionsOnly([], job?.store);
+      showToast(res.message || `Queued items for AI description generation.`);
+      window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
+      await loadJobData();
+    } catch (err) {
+      showToast(err.message || 'Failed to queue description generation.');
+    } finally {
+      setBulkGeneratingDescsOnly(false);
+    }
+  };
+
+  const handleBulkGenerateBoth = async () => {
+    setBulkGeneratingBoth(true);
+    try {
+      const itemIdsForNames = items.filter(it => it.needs_better_name || it.ai_name_status === 'none' || it.ai_name_status === 'failed').map(it => it.id);
+      const allIds = items.map(it => it.id);
+      const res = await bulkAIGenerateDescriptions({ item_ids: allIds, generate_name_ids: itemIdsForNames, store_id: job?.store });
+      showToast(res.message || `Queued items for AI name + description generation.`);
+      window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
+      await loadJobData();
+    } catch (err) {
+      showToast(err.message || 'Failed to queue generation.');
+    } finally {
+      setBulkGeneratingBoth(false);
+    }
+  };
+
+  const handleApplyBoth = async (item) => {
+    const nameToApply = nameEdits[item.id] !== undefined ? nameEdits[item.id] : item.ai_name_draft;
+    const descToApply = draftEdits[item.id] !== undefined ? draftEdits[item.id] : item.ai_description_draft;
+    if (!nameToApply && !descToApply) {
+      showToast('No name or description draft to apply.');
+      return;
+    }
+    setApplyingBoth(prev => ({ ...prev, [item.id]: true }));
+    try {
+      let updatedItem = item;
+      if (nameToApply && item.ai_name_status === 'ready') {
+        const nameRes = await applyAIName(item.id, nameToApply);
+        updatedItem = nameRes.item;
+      }
+      if (descToApply && item.ai_description_status === 'ready') {
+        const descRes = await applyAIDescription(item.id, descToApply);
+        updatedItem = descRes.item;
+      }
+      setItems(prev => prev.map(it => it.id === item.id ? { ...it, ...updatedItem } : it));
+      showToast(`Applied name & description for "${item.name}"`);
+      window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
+      if (onItemUpdated) onItemUpdated(updatedItem);
+    } catch (err) {
+      showToast(err.message || 'Failed to apply both.');
+    } finally {
+      setApplyingBoth(prev => ({ ...prev, [item.id]: false }));
     }
   };
 
@@ -591,55 +720,153 @@ export default function AIDescriptionReviewModal({
               </button>
             )}
 
-            {readyNameCount > 0 && (
+            {/* Bulk Generate Mode Buttons */}
+            {!(job?.status === 'running' || inProgressCount > 0) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '10px' }}>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginRight: '2px' }}>Generate:</span>
+                <button
+                  type="button"
+                  onClick={handleBulkGenerateNamesOnly}
+                  disabled={bulkGeneratingNamesOnly || bulkGeneratingDescsOnly || bulkGeneratingBoth}
+                  title="Queue AI name generation for all products (keeps existing descriptions)"
+                  style={{
+                    background: 'rgba(124, 58, 237, 0.15)',
+                    border: '1px solid rgba(124, 58, 237, 0.4)',
+                    borderRadius: 'var(--radius-pill)',
+                    color: '#c084fc',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '5px 10px',
+                    cursor: bulkGeneratingNamesOnly ? 'wait' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    opacity: (bulkGeneratingDescsOnly || bulkGeneratingBoth) ? 0.5 : 1,
+                  }}
+                >
+                  {bulkGeneratingNamesOnly ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  <span>Names Only</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkGenerateDescsOnly}
+                  disabled={bulkGeneratingDescsOnly || bulkGeneratingNamesOnly || bulkGeneratingBoth}
+                  title="Queue AI description generation for all products (keeps existing names)"
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    borderRadius: 'var(--radius-pill)',
+                    color: '#34d399',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '5px 10px',
+                    cursor: bulkGeneratingDescsOnly ? 'wait' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    opacity: (bulkGeneratingNamesOnly || bulkGeneratingBoth) ? 0.5 : 1,
+                  }}
+                >
+                  {bulkGeneratingDescsOnly ? <RefreshCw size={12} className="animate-spin" /> : <FileText size={12} />}
+                  <span>Desc Only</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkGenerateBoth}
+                  disabled={bulkGeneratingBoth || bulkGeneratingNamesOnly || bulkGeneratingDescsOnly}
+                  title="Queue AI name + description generation for all products"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(168,85,247,0.15) 100%)',
+                    border: '1px solid rgba(99,102,241,0.4)',
+                    borderRadius: 'var(--radius-pill)',
+                    color: '#a5b4fc',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '5px 10px',
+                    cursor: bulkGeneratingBoth ? 'wait' : 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px',
+                    opacity: (bulkGeneratingNamesOnly || bulkGeneratingDescsOnly) ? 0.5 : 1,
+                  }}
+                >
+                  {bulkGeneratingBoth ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  <span>Name + Desc</span>
+                </button>
+              </div>
+            )}
+
+            {/* Bulk Apply Mode Group (Top for All Products) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '8px' }}>
               <button
                 type="button"
                 onClick={handleBulkApplyAllNames}
-                disabled={bulkApplyingNames}
-                className="btn btn-primary"
+                disabled={readyNameCount === 0 || bulkApplyingNames}
+                title={readyNameCount > 0 ? `Apply upgraded names for ${readyNameCount} ready product(s)` : "No AI product names ready to apply"}
                 style={{
-                  background: 'linear-gradient(135deg, #7C3AED 0%, #6366F1 100%)',
-                  borderColor: '#7C3AED',
+                  background: readyNameCount > 0 ? 'linear-gradient(135deg, #7C3AED 0%, #6366F1 100%)' : 'rgba(255, 255, 255, 0.05)',
+                  border: readyNameCount > 0 ? '1px solid #7C3AED' : '1px solid rgba(255, 255, 255, 0.12)',
+                  color: readyNameCount > 0 ? '#fff' : 'rgba(255, 255, 255, 0.35)',
                   borderRadius: 'var(--radius-pill)',
-                  padding: '8px 16px',
-                  fontSize: '0.82rem',
-                  fontWeight: 800,
+                  padding: '7px 13px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(124, 58, 237, 0.35)',
+                  gap: '5px',
+                  cursor: readyNameCount > 0 ? 'pointer' : 'not-allowed',
+                  opacity: readyNameCount > 0 ? 1 : 0.45,
+                  boxShadow: readyNameCount > 0 ? '0 4px 14px rgba(124, 58, 237, 0.35)' : 'none',
                 }}
               >
-                {bulkApplyingNames ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {bulkApplyingNames ? <RefreshCw size={13} className="animate-spin" /> : <Sparkles size={13} />}
                 <span>Apply All Names ({readyNameCount})</span>
               </button>
-            )}
 
-            {readyCount > 0 && (
               <button
                 type="button"
                 onClick={handleBulkApplyAll}
-                disabled={bulkApplying}
-                className="btn btn-primary"
+                disabled={readyCount === 0 || bulkApplying}
+                title={readyCount > 0 ? `Apply descriptions for ${readyCount} ready product(s)` : "No AI descriptions ready to apply"}
                 style={{
-                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                  borderColor: '#10B981',
+                  background: readyCount > 0 ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)' : 'rgba(255, 255, 255, 0.05)',
+                  border: readyCount > 0 ? '1px solid #10B981' : '1px solid rgba(255, 255, 255, 0.12)',
+                  color: readyCount > 0 ? '#fff' : 'rgba(255, 255, 255, 0.35)',
                   borderRadius: 'var(--radius-pill)',
-                  padding: '8px 16px',
-                  fontSize: '0.82rem',
+                  padding: '7px 13px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  cursor: readyCount > 0 ? 'pointer' : 'not-allowed',
+                  opacity: readyCount > 0 ? 1 : 0.45,
+                  boxShadow: readyCount > 0 ? '0 4px 14px rgba(16, 185, 129, 0.35)' : 'none',
+                }}
+              >
+                {bulkApplying ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                <span>Apply All Desc ({readyCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBulkApplyBoth}
+                disabled={(readyNameCount === 0 && readyCount === 0) || bulkApplyingBoth}
+                title={(readyNameCount > 0 || readyCount > 0) ? `Apply all ready names and descriptions across all products` : "No AI drafts ready to apply"}
+                style={{
+                  background: (readyNameCount > 0 || readyCount > 0) ? 'linear-gradient(135deg, #7C3AED 0%, #10B981 100%)' : 'rgba(255, 255, 255, 0.05)',
+                  border: (readyNameCount > 0 || readyCount > 0) ? 'none' : '1px solid rgba(255, 255, 255, 0.12)',
+                  color: (readyNameCount > 0 || readyCount > 0) ? '#fff' : 'rgba(255, 255, 255, 0.35)',
+                  borderRadius: 'var(--radius-pill)',
+                  padding: '7px 14px',
+                  fontSize: '0.78rem',
                   fontWeight: 800,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                  gap: '5px',
+                  cursor: (readyNameCount > 0 || readyCount > 0) ? 'pointer' : 'not-allowed',
+                  opacity: (readyNameCount > 0 || readyCount > 0) ? 1 : 0.45,
+                  boxShadow: (readyNameCount > 0 || readyCount > 0) ? '0 4px 14px rgba(124, 58, 237, 0.35)' : 'none',
                 }}
               >
-                {bulkApplying ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                <span>Apply All Ready ({readyCount})</span>
+                {bulkApplyingBoth ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                <span>Apply All Both</span>
               </button>
-            )}
+            </div>
 
             <button
               type="button"
@@ -940,15 +1167,15 @@ export default function AIDescriptionReviewModal({
           {job?.status_message && (
             <div
               style={{
-                background: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped')
+                background: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped') || job.status_message.toLowerCase().includes('waiting') || job.status_message.toLowerCase().includes('offline')
                   ? 'rgba(245, 158, 11, 0.12)'
                   : 'rgba(99, 102, 241, 0.12)',
-                border: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped')
+                border: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped') || job.status_message.toLowerCase().includes('waiting') || job.status_message.toLowerCase().includes('offline')
                   ? '1px solid rgba(245, 158, 11, 0.4)'
                   : '1px solid rgba(99, 102, 241, 0.4)',
                 borderRadius: '14px',
                 padding: '12px 16px',
-                color: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped')
+                color: job.status_message.toLowerCase().includes('daily') || job.status_message.toLowerCase().includes('preserve') || job.status_message.toLowerCase().includes('stopped') || job.status_message.toLowerCase().includes('waiting') || job.status_message.toLowerCase().includes('offline')
                   ? '#fcd34d'
                   : '#a5b4fc',
                 display: 'flex',
@@ -1079,6 +1306,18 @@ export default function AIDescriptionReviewModal({
               const isReady = item.ai_description_status === 'ready';
               const isApplied = item.ai_description_status === 'applied';
               const isFailed = item.ai_description_status === 'failed';
+
+              const canApplyName = Boolean(
+                item.ai_name_status === 'ready' || 
+                (nameEdits[item.id] !== undefined ? nameEdits[item.id].trim() : item.ai_name_draft)
+              ) && item.ai_name_status !== 'applied';
+
+              const canApplyDesc = Boolean(
+                item.ai_description_status === 'ready' || 
+                (draftEdits[item.id] !== undefined ? draftEdits[item.id].trim() : item.ai_description_draft)
+              ) && item.ai_description_status !== 'applied';
+
+              const canApplyBoth = canApplyName && canApplyDesc;
 
               return (
                 <div
@@ -1243,7 +1482,7 @@ export default function AIDescriptionReviewModal({
                             gap: '4px',
                             cursor: 'pointer',
                           }}
-                          title="Regenerate from photo using Gemini AI"
+                          title="Regenerate from photo using local Vision AI"
                         >
                           <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
                           <span>Regenerate</span>
@@ -1276,31 +1515,83 @@ export default function AIDescriptionReviewModal({
                         </button>
                       )}
 
-                      {(isReady || (currentDraft && !isApplied)) && (
+                      {/* Three Apply Buttons: Apply Name, Apply Desc, Apply Both (always present; greyed out when not ready) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleApplySingleName(item)}
+                          disabled={!canApplyName || nameActionLoading[item.id]}
+                          title={canApplyName ? "Apply upgraded AI product name" : (item.ai_name_status === 'applied' ? "AI name already applied" : "AI name draft not ready")}
+                          style={{
+                            background: canApplyName ? 'linear-gradient(135deg, #7C3AED 0%, #6366F1 100%)' : 'rgba(255, 255, 255, 0.04)',
+                            border: canApplyName ? '1px solid #7C3AED' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: canApplyName ? '#fff' : 'rgba(255, 255, 255, 0.35)',
+                            borderRadius: 'var(--radius-pill)',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            padding: '6px 12px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: canApplyName ? 'pointer' : 'not-allowed',
+                            opacity: canApplyName ? 1 : 0.45,
+                            boxShadow: canApplyName ? '0 2px 8px rgba(124, 58, 237, 0.25)' : 'none',
+                          }}
+                        >
+                          {nameActionLoading[item.id] ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
+                          <span>Apply Name</span>
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => handleApplySingle(item)}
-                          disabled={isLoading || !currentDraft.trim()}
-                          className="btn btn-primary btn-sm"
+                          disabled={!canApplyDesc || isLoading}
+                          title={canApplyDesc ? "Apply AI description draft" : (item.ai_description_status === 'applied' ? "AI description already applied" : "AI description draft not ready")}
                           style={{
-                            background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                            borderColor: '#10B981',
-                            color: '#fff',
+                            background: canApplyDesc ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)' : 'rgba(255, 255, 255, 0.04)',
+                            border: canApplyDesc ? '1px solid #10B981' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: canApplyDesc ? '#fff' : 'rgba(255, 255, 255, 0.35)',
                             borderRadius: 'var(--radius-pill)',
-                            fontSize: '0.76rem',
-                            fontWeight: 800,
-                            padding: '6px 16px',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            padding: '6px 12px',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '6px',
-                            cursor: 'pointer',
-                            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                            gap: '4px',
+                            cursor: canApplyDesc ? 'pointer' : 'not-allowed',
+                            opacity: canApplyDesc ? 1 : 0.45,
+                            boxShadow: canApplyDesc ? '0 2px 8px rgba(16, 185, 129, 0.25)' : 'none',
                           }}
                         >
-                          <Check size={14} />
-                          <span>Apply &amp; Overwrite</span>
+                          {isLoading ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
+                          <span>Apply Desc</span>
                         </button>
-                      )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleApplyBoth(item)}
+                          disabled={!canApplyBoth || applyingBoth[item.id]}
+                          title={canApplyBoth ? "Apply both AI product name and description" : "Requires both AI name and description drafts to be ready"}
+                          style={{
+                            background: canApplyBoth ? 'linear-gradient(135deg, #7C3AED 0%, #10B981 100%)' : 'rgba(255, 255, 255, 0.04)',
+                            border: canApplyBoth ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
+                            color: canApplyBoth ? '#fff' : 'rgba(255, 255, 255, 0.35)',
+                            borderRadius: 'var(--radius-pill)',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            padding: '6px 14px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            cursor: canApplyBoth ? 'pointer' : 'not-allowed',
+                            opacity: canApplyBoth ? 1 : 0.45,
+                            boxShadow: canApplyBoth ? '0 4px 12px rgba(124, 58, 237, 0.3)' : 'none',
+                          }}
+                        >
+                          {applyingBoth[item.id] ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                          <span>Apply Both</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1324,7 +1615,7 @@ export default function AIDescriptionReviewModal({
                           Generating AI Content in Background...
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#c084fc', marginTop: '2px' }}>
-                          Gemini Vision is inspecting product image labels, packaging, and metadata. Drafts will appear here automatically.
+                          Local Vision AI is queued to inspect product image labels, packaging, and metadata. Drafts will appear here automatically.
                         </div>
                       </div>
                     </div>
@@ -1378,7 +1669,7 @@ export default function AIDescriptionReviewModal({
                               alignItems: 'center',
                               gap: '4px'
                             }}
-                            title="Regenerate name with Gemini Vision"
+                            title="Regenerate name with local Vision AI"
                           >
                             <RefreshCw size={11} className={nameActionLoading[item.id] ? 'animate-spin' : ''} />
                             <span>Regenerate Name</span>

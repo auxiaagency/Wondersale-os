@@ -128,7 +128,11 @@ export default function ProductDetailView({ item, onBack, onUpdateItem, onOpenBa
     try {
       const res = await singleAIGenerateDescription(pItem.id);
       setPItem(res.item);
-      setAiFeedback('AI draft ready! Click "Apply Draft" below to overwrite the product description.');
+      if (res.queued || res.status === 'pending') {
+        setAiFeedback(res.message || 'Queued for local Vision AI. Draft will appear once the GPU laptop processes it.');
+      } else {
+        setAiFeedback('AI draft ready! Click "Apply Draft" below to overwrite the product description.');
+      }
       if (res.job) {
         window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
       }
@@ -363,7 +367,7 @@ export default function ProductDetailView({ item, onBack, onUpdateItem, onOpenBa
                   cursor: 'pointer',
                   boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
                 }}
-                title="Generate e-commerce description from photo using Gemini Vision"
+                title="Generate e-commerce description from photo using Local Vision AI"
               >
                 <Sparkles size={12} className={generatingAI ? 'animate-spin' : ''} />
                 <span>{generatingAI ? 'Generating...' : '✨ AI Generate'}</span>

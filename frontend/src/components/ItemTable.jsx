@@ -1351,7 +1351,7 @@ export default function ItemTable({
       onItemsChanged?.();
     } catch (err) {
       console.error("AI Generation error:", err);
-      const errMsg = err.message || 'Failed to connect to AI Description server. Please verify your connection or Gemini API keys.';
+      const errMsg = err.message || 'Failed to connect to AI Description server. Please verify your connection or local Vision worker.';
       setError(errMsg);
       setAiErrorDialogMessage(errMsg);
     } finally {
@@ -4740,7 +4740,7 @@ export default function ItemTable({
               cursor: 'pointer',
               whiteSpace: 'nowrap',
             }}
-            title="Launch AI Studio to generate names and descriptions using Gemini Vision"
+            title="Launch AI Studio to generate names and descriptions using Local Vision AI"
           >
             <Sparkles size={16} className={`inv-float-icon ${generatingAI ? 'animate-spin' : ''}`} />
             <span className="inv-btn-text-full">
@@ -5079,7 +5079,7 @@ export default function ItemTable({
                 lineHeight: 1.4,
               }}
             >
-              💡 <strong>Note:</strong> Product descriptions require an active backend connection and Gemini Vision API keys. If your daily quota limit is reached (HTTP 429), the system will retry automatically or you can add extra keys.
+              💡 <strong>Note:</strong> Product catalog descriptions and names are processed by the local Vision AI worker. If the local Vision worker is offline, jobs remain safely pending in the queue.
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

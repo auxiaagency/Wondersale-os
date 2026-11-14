@@ -63,6 +63,67 @@ def get_configured_gemini_api_keys() -> List[str]:
     return keys
 
 
+def get_vision_worker_config() -> Dict[str, Any]:
+    """
+    Dynamically reads local Vision pull-worker configuration from backend/.env,
+    os.environ, and Django settings so runtime .env updates take effect immediately.
+    """
+    from django.conf import settings
+
+    env_keys = (
+        'VISION_WORKER_TOKEN',
+        'VISION_LEASE_SECONDS',
+        'VISION_MAX_RETRIES',
+        'VISION_WORKER_MODEL',
+    )
+    if not getattr(settings, 'TESTING', False):
+        try:
+            env_file = settings.BASE_DIR / '.env'
+            if env_file.exists():
+                with open(env_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#') or '=' not in line:
+                            continue
+                        k, v = line.split('=', 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k in env_keys and (v or k not in os.environ):
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+    def _read_setting(name: str, default: str = '') -> str:
+        if getattr(settings, 'TESTING', False):
+            val = getattr(settings, name, None)
+            if val not in (None, ''):
+                return str(val).strip()
+        env_val = os.environ.get(name, '').strip()
+        if env_val:
+            return env_val
+        settings_val = getattr(settings, name, None)
+        if settings_val not in (None, ''):
+            return str(settings_val).strip()
+        return default
+
+    try:
+        lease_seconds = max(10, int(_read_setting('VISION_LEASE_SECONDS', '180')))
+    except (TypeError, ValueError):
+        lease_seconds = 180
+
+    try:
+        max_retries = max(0, int(_read_setting('VISION_MAX_RETRIES', '2')))
+    except (TypeError, ValueError):
+        max_retries = 2
+
+    return {
+        'worker_token': _read_setting('VISION_WORKER_TOKEN', ''),
+        'lease_seconds': lease_seconds,
+        'max_retries': max_retries,
+        'model': _read_setting('VISION_WORKER_MODEL', 'qwen2.5vl:7b'),
+    }
+
+
 # Models to attempt in priority order:
 # Google has migrated newly issued API keys to the 3.x series, deprecating older 1.5/2.0 endpoints with HTTP 404.
 # Models are attempted in order: flash-lite for speed and higher throughput, followed by standard flash models.

@@ -195,6 +195,11 @@ STATIC_ROOT.mkdir(parents=True, exist_ok=True)
 # Image upload & WebP conversion settings
 WEBP_QUALITY = int(os.environ.get('WEBP_QUALITY', 80))
 
+# Local Vision Pull Worker settings (Product Names & Descriptions)
+VISION_WORKER_TOKEN = os.environ.get('VISION_WORKER_TOKEN', '')
+VISION_LEASE_SECONDS = int(os.environ.get('VISION_LEASE_SECONDS', 180))
+VISION_MAX_RETRIES = int(os.environ.get('VISION_MAX_RETRIES', 2))
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

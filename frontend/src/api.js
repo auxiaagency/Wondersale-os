@@ -3082,6 +3082,34 @@ export async function stopActiveAIDescriptionJob(jobId = null, storeId = null) {
   return data;
 }
 
+export async function bulkAIGenerateNamesOnly(itemIds = [], storeId = null) {
+  const body = {};
+  if (itemIds && itemIds.length > 0) body.item_ids = itemIds;
+  if (storeId) body.store_id = storeId;
+  const res = await fetch(`${API_BASE}/items/bulk-ai-generate-names-only/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.detail || 'Failed to queue name generation');
+  return data;
+}
+
+export async function bulkAIGenerateDescriptionsOnly(itemIds = [], storeId = null) {
+  const body = {};
+  if (itemIds && itemIds.length > 0) body.item_ids = itemIds;
+  if (storeId) body.store_id = storeId;
+  const res = await fetch(`${API_BASE}/items/bulk-ai-generate-descriptions-only/`, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.detail || 'Failed to queue description generation');
+  return data;
+}
+
 
 // -----------------------------------------------------------------------------
 // Variant / Batch Management

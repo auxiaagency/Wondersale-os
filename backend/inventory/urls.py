@@ -20,6 +20,8 @@ from .views import (
     WhatsAppWebhookView,
     SupplierOrderViewSet,
     SupplierLedgerEntryViewSet,
+    VisionJobClaimView,
+    VisionJobCompleteView,
 )
 
 router = DefaultRouter()
@@ -45,6 +47,8 @@ urlpatterns = [
     path('dashboard-analytics/', DashboardAnalyticsView.as_view(), name='dashboard-analytics'),
     path('expiry-analytics/', ExpiryAnalyticsView.as_view(), name='expiry-analytics'),
     path('whatsapp/webhook/', WhatsAppWebhookView.as_view(), name='whatsapp-webhook'),
+    path('vision-jobs/claim/', VisionJobClaimView.as_view(), name='vision-job-claim'),
+    path('vision-jobs/<str:job_id>/complete/', VisionJobCompleteView.as_view(), name='vision-job-complete'),
 ]
 
 

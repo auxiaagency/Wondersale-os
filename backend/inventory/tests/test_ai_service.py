@@ -377,24 +377,20 @@ class AIDescriptionServiceAndEndpointTests(TestCase):
         self.assertIn("Premium 100% cotton oxford shirt", res['description'])
         self.assertFalse(res['description'].startswith("```"))
 
-    @patch('inventory.views.generate_product_description')
-    def test_single_ai_generate_description_endpoint(self, mock_gen):
-        mock_gen.return_value = {
-            "success": True,
-            "description": "### Overview\nGreat quality shirt.\n\n### Key Highlights\n- Soft cotton",
-            "model_used": "gemini-2.0-flash"
-        }
-
+    @patch('inventory.ai_service.call_gemini_api')
+    def test_single_ai_generate_description_endpoint(self, mock_gemini):
         url = reverse('item-single-ai-generate-description', kwargs={'pk': self.item1.pk})
         response = self.client.post(url, format='json')
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['description'], "### Overview\nGreat quality shirt.\n\n### Key Highlights\n- Soft cotton")
+        self.assertTrue(response.data['queued'])
+        self.assertEqual(response.data['status'], 'pending')
 
         self.item1.refresh_from_db()
-        self.assertEqual(self.item1.ai_description_status, 'ready')
-        self.assertIn("Great quality shirt", self.item1.ai_description_draft)
+        self.assertEqual(self.item1.ai_description_status, 'pending')
+        self.assertEqual(self.item1.vision_job_type, 'description_only')
+        mock_gemini.assert_not_called()
 
     def test_single_ai_generate_description_no_image(self):
         # item2 has no images uploaded
@@ -418,8 +414,8 @@ class AIDescriptionServiceAndEndpointTests(TestCase):
         self.assertEqual(self.item1.description, "### Overview\nUser edited and applied.")
         self.assertEqual(self.item1.ai_description_status, 'applied')
 
-    @patch('inventory.views.start_background_batch_description_job')
-    def test_bulk_ai_generate_descriptions_endpoint(self, mock_start_job):
+    @patch('inventory.ai_service.call_gemini_api')
+    def test_bulk_ai_generate_descriptions_endpoint(self, mock_gemini):
         url = reverse('item-bulk-ai-generate-descriptions')
         response = self.client.post(url, {
             'item_ids': [self.item1.pk, self.item2.pk],
@@ -430,7 +426,11 @@ class AIDescriptionServiceAndEndpointTests(TestCase):
         self.assertTrue(response.data['success'])
         job_data = response.data['job']
         self.assertEqual(job_data['total_items'], 2)
-        mock_start_job.assert_called_once()
+        self.item1.refresh_from_db()
+        self.item2.refresh_from_db()
+        self.assertEqual(self.item1.ai_description_status, 'pending')
+        self.assertEqual(self.item2.ai_description_status, 'skipped_no_image')
+        mock_gemini.assert_not_called()
 
     def test_bulk_apply_ai_descriptions_endpoint(self):
         self.item1.ai_description_draft = "Description for item 1"
@@ -572,19 +572,16 @@ class AIDescriptionServiceAndEndpointTests(TestCase):
         self.assertTrue(res['success'])
         self.assertEqual(res['name'], "Cascaded Healthy Product Name")
 
-    @patch('inventory.views.generate_product_name')
-    def test_single_ai_generate_name_endpoint(self, mock_gen_name):
-        mock_gen_name.return_value = {
-            "success": True,
-            "name": "Men's Classic Slim Fit Cotton Shirt",
-            "model_used": "gemini-flash-lite-latest"
-        }
+    @patch('inventory.ai_service.call_gemini_api')
+    def test_single_ai_generate_name_endpoint(self, mock_gemini):
         url = reverse('item-single-ai-generate-name', kwargs={'pk': self.item1.pk})
         resp = self.client.post(url, {}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.status_code, status.HTTP_202_ACCEPTED)
+        self.assertTrue(resp.data['queued'])
         self.item1.refresh_from_db()
-        self.assertEqual(self.item1.ai_name_status, 'ready')
-        self.assertEqual(self.item1.ai_name_draft, "Men's Classic Slim Fit Cotton Shirt")
+        self.assertEqual(self.item1.ai_name_status, 'pending')
+        self.assertEqual(self.item1.vision_job_type, 'name_only')
+        mock_gemini.assert_not_called()
 
     def test_apply_ai_name_endpoint(self):
         self.item1.ai_name_draft = "Upgraded Oxford Shirt"

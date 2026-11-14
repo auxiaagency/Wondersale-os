@@ -216,7 +216,7 @@ export default function AIGenerateLaunchModal({
         >
           <Info size={16} style={{ flexShrink: 0, color: 'var(--brand-primary)' }} />
           <span style={{ lineHeight: 1.45 }}>
-            <strong style={{ color: 'var(--text-primary)' }}>Workflow:</strong> Products with <strong style={{ color: 'var(--brand-primary)' }}>New Name</strong> enabled will first have Gemini Vision generate a polished, SEO-friendly e-commerce product title from their photo, followed by a rich product description.
+            <strong style={{ color: 'var(--text-primary)' }}>Workflow:</strong> Products with <strong style={{ color: 'var(--brand-primary)' }}>New Name</strong> enabled will first have Local Vision AI generate a polished, SEO-friendly e-commerce product title from their photo, followed by a rich product description.
           </span>
         </div>
 

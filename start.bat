@@ -128,6 +128,19 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo.
+if exist "backend\meilisearch.exe" (
+    set "MEILI_KEY=wondersale_meili_secret_key_2026"
+    if exist "backend\.env" (
+        for /f "usebackq tokens=1,* delims==" %%A in ("backend\.env") do (
+            if "%%A"=="MEILISEARCH_MASTER_KEY" if not "%%B"=="" set "MEILI_KEY=%%B"
+        )
+    )
+    echo [*] Starting Meilisearch Engine on http://127.0.0.1:7700/
+    start "Wondersale Search (Meilisearch)" /D "%~dp0backend" cmd /k "meilisearch.exe --db-path meili_data --http-addr 127.0.0.1:7700 --master-key !MEILI_KEY! --no-analytics"
+) else (
+    echo [!] Warning: backend\meilisearch.exe not found. Skipping Meilisearch startup.
+)
+
 echo [*] Starting Django API Backend on http://127.0.0.1:8000/
 start "Wondersale Backend (Django)" /D "%~dp0backend" cmd /k ".\venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000"
 
@@ -152,11 +165,13 @@ echo   OS App (Staff):    http://localhost:5173/
 echo   Website (Public):  http://localhost:3000/
 echo   REST API:          http://127.0.0.1:8000/api/
 echo   Admin Panel:       http://127.0.0.1:8000/admin/
+echo   Meilisearch:       http://127.0.0.1:7700/
 echo.
-echo   Three background windows opened:
-echo     1. Django Backend
-echo     2. OS App (Vite)
-echo     3. Public Website (Next.js)
+echo   Background windows opened:
+echo     1. Meilisearch Engine (if present)
+echo     2. Django Backend
+echo     3. OS App (Vite)
+echo     4. Public Website (Next.js)
 echo   Close any window to stop that service.
 echo ===================================================
 echo.

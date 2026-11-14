@@ -261,12 +261,16 @@ export default function ItemDetailModal({
     setErrorMsg('');
     try {
       const res = await singleAIGenerateName(item.id);
-      const cleanName = (res.name || '').slice(0, 150);
-      setName(cleanName);
-      setAiNameDraft(cleanName);
-      setFeedbackMsg('✨ AI product title generated successfully!');
+      if (res.queued || res.status === 'pending') {
+        setFeedbackMsg(res.message || '⏳ Queued for local Vision AI name generation. Check AI Studio once the GPU laptop is online.');
+      } else {
+        const cleanName = (res.name || '').slice(0, 150);
+        setName(cleanName);
+        setAiNameDraft(cleanName);
+        setFeedbackMsg('✨ AI product title generated successfully!');
+      }
       window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
-      if (onUpdateItem) onUpdateItem(res.item);
+      if (onUpdateItem && res.item) onUpdateItem(res.item);
     } catch (err) {
       setErrorMsg(err.message || 'Failed to generate AI product name.');
     } finally {
@@ -284,16 +288,21 @@ export default function ItemDetailModal({
     setErrorMsg('');
     try {
       const res = await singleAIGenerateDescription(item.id);
-      const cleanDesc = (res.description || '').slice(0, 1500);
-      setDescription(cleanDesc);
-      setAiDraft(cleanDesc);
-      setAiStatus('ready');
-      setFeedbackMsg('✨ AI description generated successfully!');
+      if (res.queued || res.status === 'pending') {
+        setAiStatus(res.item?.ai_description_status || 'pending');
+        setFeedbackMsg(res.message || '⏳ Queued for local Vision AI. Draft will appear in AI Studio once processed.');
+      } else {
+        const cleanDesc = (res.description || '').slice(0, 1500);
+        setDescription(cleanDesc);
+        setAiDraft(cleanDesc);
+        setAiStatus('ready');
+        setFeedbackMsg('✨ AI description generated successfully!');
+      }
       if (res.job) {
         window.dispatchEvent(new CustomEvent('ai-job-started', { detail: res.job }));
       }
       window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
-      if (onUpdateItem) onUpdateItem(res.item);
+      if (onUpdateItem && res.item) onUpdateItem(res.item);
     } catch (err) {
       setErrorMsg(err.message || 'Failed to generate AI description.');
       window.dispatchEvent(new CustomEvent('ai-drafts-updated'));
@@ -855,7 +864,7 @@ export default function ItemDetailModal({
                       cursor: 'pointer',
                       boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)',
                     }}
-                    title="Generate an attractive, SEO-friendly product title from photo using Gemini AI"
+                    title="Generate an attractive, SEO-friendly product title from photo using Local Vision AI"
                   >
                     <Sparkles size={11} className={generatingAIName ? 'animate-spin' : ''} />
                     <span>{generatingAIName ? 'Generating...' : '✨ AI Upgrade Name'}</span>
@@ -1309,7 +1318,7 @@ export default function ItemDetailModal({
                       cursor: 'pointer',
                       boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
                     }}
-                    title="Generate product description from image using Gemini Vision"
+                    title="Generate product description from image using Local Vision AI"
                   >
                     <Sparkles size={13} className={generatingAI ? 'animate-spin' : ''} />
                     <span>{generatingAI ? 'Generating...' : '✨ AI Generate'}</span>

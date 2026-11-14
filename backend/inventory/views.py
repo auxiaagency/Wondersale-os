@@ -2,6 +2,8 @@ import json
 from decimal import Decimal
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse, Http404
 from django.db import transaction
 from django.db.models import Q, Sum, F, Count, Avg
@@ -110,11 +112,17 @@ from .services import (
 from .ai_service import (
     extract_products_from_bill,
     test_gemini_api_key,
-    generate_product_description,
-    generate_product_name,
-    start_background_batch_description_job,
     get_configured_gemini_api_keys,
-    GeminiRateLimitError,
+)
+from .vision_worker_service import (
+    claim_next_vision_job,
+    complete_vision_job,
+    enqueue_bulk_catalog_vision_job,
+    enqueue_single_catalog_vision_item,
+    reclaim_stale_vision_leases,
+    sync_batch_job_progress,
+    verify_vision_worker_token,
+    WAITING_FOR_WORKER_MSG,
 )
 from staff.services.auth import get_current_staff, ensure_default_store
 
@@ -1808,51 +1816,24 @@ class ItemViewSet(viewsets.ModelViewSet):
             # Auto-include items marked with needs_better_name
             valid_gen_name_ids = list(target_items.filter(needs_better_name=True).values_list('id', flat=True))
 
-        # Mark target items as pending
-        Item.objects.filter(id__in=target_ids).update(
-            ai_description_status='pending',
-            ai_description_error=''
-        )
-        if valid_gen_name_ids:
-            Item.objects.filter(id__in=valid_gen_name_ids).update(
-                ai_name_status='pending',
-                ai_name_error=''
-            )
-
-        # Create batch job record
-        job = AIDescriptionBatchJob.objects.create(
+        # Enqueue items for the local Vision pull worker (never calls Gemini)
+        job = enqueue_bulk_catalog_vision_job(
             store=store,
-            status=AIDescriptionBatchJob.STATUS_RUNNING,
-            total_items=len(target_ids),
-            completed_items=0,
-            failed_items=0,
-            skipped_items=0,
-            item_ids=target_ids,
-            generate_name_ids=valid_gen_name_ids
+            target_ids=target_ids,
+            valid_gen_name_ids=valid_gen_name_ids,
         )
-
-        # Parse optional custom API keys passed by client
-        custom_keys = request.data.get('api_keys')
-        if isinstance(custom_keys, str):
-            custom_keys = [k.strip() for k in custom_keys.split(',') if k.strip()]
-        elif not isinstance(custom_keys, list):
-            custom_keys = []
-
-        # Launch background async worker thread
-        start_background_batch_description_job(str(job.id), custom_api_keys=custom_keys)
 
         return Response({
             'success': True,
             'job': AIDescriptionBatchJobSerializer(job).data,
-            'message': f"Background description generation started for {len(target_ids)} items."
+            'message': f"Queued {len(target_ids)} item(s) for local Vision AI generation."
         }, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=False, methods=['post'], url_path='stop-ai-description-job')
     def stop_ai_description_job(self, request):
         """
-        Safely halts and cancels an active running background AI description job,
-        preventing continuous looping and conserving API quota/credits.
-        Resets remaining in-progress items to pending.
+        Safely halts and cancels an active running AI description job so the
+        local Vision pull worker stops claiming remaining items from this batch.
         """
         member = get_current_staff(request)
         store = member.store if member and member.store else None
@@ -1872,19 +1853,26 @@ class ItemViewSet(viewsets.ModelViewSet):
             return Response({'error': 'No active AI generation job found to stop.'}, status=status.HTTP_404_NOT_FOUND)
 
         job.status = AIDescriptionBatchJob.STATUS_CANCELLED
-        job.status_message = 'Generation stopped by user to preserve API quota/credits.'
+        job.status_message = 'Generation stopped by user.'
         job.save(update_fields=['status', 'status_message', 'updated_at'])
 
-        # Reset any stuck generating or pending items in this batch to pending
+        # Mark remaining pending/generating items as failed/stopped so the pull worker won't claim them
         if job.item_ids:
             Item.objects.filter(id__in=job.item_ids, ai_description_status__in=['generating', 'pending']).update(
-                ai_description_status='pending',
-                ai_description_error='Generation halted by user.'
+                ai_description_status='failed',
+                ai_description_error='Generation halted by user.',
+                vision_job_id='',
+                vision_lease_expires_at=None,
+                vision_claimed_at=None,
             )
             Item.objects.filter(id__in=job.item_ids, ai_name_status__in=['generating', 'pending']).update(
-                ai_name_status='pending',
-                ai_name_error='Generation halted by user.'
+                ai_name_status='failed',
+                ai_name_error='Generation halted by user.',
+                vision_job_id='',
+                vision_lease_expires_at=None,
+                vision_claimed_at=None,
             )
+            sync_batch_job_progress(job)
 
         return Response({
             'success': True,
@@ -1897,6 +1885,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         """
         Polls the status of the current or most recent AI description batch generation job.
         """
+        reclaim_stale_vision_leases()
         member = get_current_staff(request)
         store = member.store if member and member.store else None
         store_id = request.query_params.get('store') or (store.id if store else None)
@@ -1920,6 +1909,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                     skipped_items=Item.objects.filter(id__in=store_ai_ids, ai_description_status='skipped_no_image').count(),
                     item_ids=store_ai_ids
                 )
+                sync_batch_job_progress(job)
             else:
                 return Response({'active_job': None})
         else:
@@ -1933,11 +1923,8 @@ class ItemViewSet(viewsets.ModelViewSet):
             if dirty:
                 job.item_ids = current_ids
                 job.total_items = len(current_ids)
-                all_items = Item.objects.filter(id__in=current_ids)
-                job.completed_items = all_items.filter(ai_description_status__in=['ready', 'applied']).count()
-                job.failed_items = all_items.filter(ai_description_status='failed').count()
-                job.skipped_items = all_items.filter(ai_description_status='skipped_no_image').count()
-                job.save()
+                job.save(update_fields=['item_ids', 'total_items', 'updated_at'])
+            sync_batch_job_progress(job)
 
         return Response({
             'active_job': AIDescriptionBatchJobSerializer(job).data
@@ -1948,6 +1935,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         """
         Fetches detailed report and item list for a specific AI description batch job for review modal.
         """
+        reclaim_stale_vision_leases()
         member = get_current_staff(request)
         store = member.store if member and member.store else None
         store_id = request.query_params.get('store') or (store.id if store else None)
@@ -1977,6 +1965,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                     skipped_items=Item.objects.filter(id__in=store_ai_ids, ai_description_status='skipped_no_image').count(),
                     item_ids=store_ai_ids
                 )
+                sync_batch_job_progress(job)
             else:
                 return Response({'error': 'AI Description job not found.'}, status=status.HTTP_404_NOT_FOUND)
         else:
@@ -1990,11 +1979,8 @@ class ItemViewSet(viewsets.ModelViewSet):
             if dirty:
                 job.item_ids = current_ids
                 job.total_items = len(current_ids)
-                all_items = Item.objects.filter(id__in=current_ids)
-                job.completed_items = all_items.filter(ai_description_status__in=['ready', 'applied']).count()
-                job.failed_items = all_items.filter(ai_description_status='failed').count()
-                job.skipped_items = all_items.filter(ai_description_status='skipped_no_image').count()
-                job.save()
+                job.save(update_fields=['item_ids', 'total_items', 'updated_at'])
+            sync_batch_job_progress(job)
 
         item_pks = job.item_ids or []
         items = Item.objects.filter(id__in=item_pks).select_related('store').prefetch_related('subcategories', 'subcategories__category', 'images')
@@ -2009,13 +1995,13 @@ class ItemViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='ai-generate-description')
     def single_ai_generate_description(self, request, pk=None):
         """
-        Generates an AI description draft for a single item immediately using Gemini Vision,
-        and adds it into the store's AI Description Studio review list.
+        Queues a single item as 'pending' for the local Qwen2.5-VL pull worker
+        without blocking Gunicorn or calling Gemini.
         """
         item = self.get_object()
         primary_img = item.primary_image
 
-        def _sync_item_to_job(item_obj):
+        def _sync_item_to_job(item_obj, mark_running=False):
             target_store = item_obj.store or Store.objects.first()
             if not target_store:
                 return None
@@ -2023,7 +2009,7 @@ class ItemViewSet(viewsets.ModelViewSet):
             if not job_obj:
                 job_obj = AIDescriptionBatchJob.objects.create(
                     store=target_store,
-                    status=AIDescriptionBatchJob.STATUS_COMPLETED,
+                    status=AIDescriptionBatchJob.STATUS_RUNNING if mark_running else AIDescriptionBatchJob.STATUS_COMPLETED,
                     total_items=0,
                     completed_items=0,
                     failed_items=0,
@@ -2033,19 +2019,16 @@ class ItemViewSet(viewsets.ModelViewSet):
             c_ids = list(job_obj.item_ids or [])
             if item_obj.id not in c_ids:
                 c_ids.insert(0, item_obj.id)
-            # Sync all non-none items
             store_ids = list(Item.objects.filter(store=target_store).exclude(ai_description_status='none').values_list('id', flat=True))
             for sid in store_ids:
                 if sid not in c_ids:
                     c_ids.append(sid)
             job_obj.item_ids = c_ids
             job_obj.total_items = len(c_ids)
-            all_i = Item.objects.filter(id__in=c_ids)
-            job_obj.completed_items = all_i.filter(ai_description_status__in=['ready', 'applied']).count()
-            job_obj.failed_items = all_i.filter(ai_description_status='failed').count()
-            job_obj.skipped_items = all_i.filter(ai_description_status='skipped_no_image').count()
-            job_obj.save()
-            return job_obj
+            if mark_running:
+                job_obj.status = AIDescriptionBatchJob.STATUS_RUNNING
+            job_obj.save(update_fields=['item_ids', 'total_items', 'status', 'updated_at'])
+            return sync_batch_job_progress(job_obj)
 
         if not primary_img or not primary_img.image:
             item.ai_description_status = 'skipped_no_image'
@@ -2059,129 +2042,24 @@ class ItemViewSet(viewsets.ModelViewSet):
                 'item': ItemSerializer(item, context={'request': request}).data
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            img_file = primary_img.image.open('rb')
-            img_bytes = img_file.read()
-            img_file.close()
-        except Exception as file_err:
-            item.ai_description_status = 'failed'
-            item.ai_description_error = f"Failed to read image file: {str(file_err)}"
-            item.save(update_fields=['ai_description_status', 'ai_description_error'])
-            job_synced = _sync_item_to_job(item)
-            return Response({
-                'error': f"Failed to read product image: {str(file_err)}",
-                'job': AIDescriptionBatchJobSerializer(job_synced).data if job_synced else None,
-                'item': ItemSerializer(item, context={'request': request}).data
-            }, status=status.HTTP_400_BAD_REQUEST)
+        should_generate_name = bool(request.data.get('generate_name', False)) or item.needs_better_name
+        job_type = 'name_and_description' if should_generate_name else 'description_only'
+        enqueue_single_catalog_vision_item(item, job_type=job_type)
+        job_synced = _sync_item_to_job(item, mark_running=True)
 
-        cat_name = item.effective_primary_category.name if item.effective_primary_category else ''
-        subcat_name = item.effective_primary_subcategory.name if item.effective_primary_subcategory else ''
-
-        item_data = {
-            'name': item.name,
-            'category_name': cat_name,
-            'subcategory_name': subcat_name,
-            'description': item.description,
-            'selling_price': str(item.selling_price),
-            'mrp': str(item.mrp) if item.mrp else ''
-        }
-
-        # Parse optional custom API keys passed by client
-        custom_keys = request.data.get('api_keys')
-        if isinstance(custom_keys, str):
-            custom_keys = [k.strip() for k in custom_keys.split(',') if k.strip()]
-
-        try:
-            should_generate_name = bool(request.data.get('generate_name', False)) or item.needs_better_name
-            generated_name = None
-            if should_generate_name:
-                try:
-                    item.ai_name_status = 'generating'
-                    item.save(update_fields=['ai_name_status'])
-                    name_res = generate_product_name(
-                        image_bytes=img_bytes,
-                        mime_type='image/jpeg',
-                        item_data=item_data,
-                        custom_api_keys=custom_keys
-                    )
-                    if name_res.get('success') and name_res.get('name'):
-                        generated_name = name_res['name'].strip()
-                        item.ai_name_draft = generated_name
-                        item.ai_name_status = 'ready'
-                        item.ai_name_error = ''
-                        item.ai_name_updated_at = timezone.now()
-                        item.save(update_fields=['ai_name_draft', 'ai_name_status', 'ai_name_error', 'ai_name_updated_at'])
-                        item_data['name'] = generated_name
-                except Exception as name_err:
-                    logger.warning(f"Single AI name generation error for item {item.id}: {name_err}")
-                    item.ai_name_status = 'failed'
-                    item.ai_name_error = str(name_err)
-                    item.save(update_fields=['ai_name_status', 'ai_name_error'])
-
-            item.ai_description_status = 'generating'
-            item.save(update_fields=['ai_description_status'])
-            _sync_item_to_job(item)
-
-            gen_res = generate_product_description(
-                image_bytes=img_bytes,
-                mime_type='image/jpeg',
-                item_data=item_data,
-                custom_api_keys=custom_keys
-            )
-
-            desc = gen_res.get('description', '')
-            if desc:
-                clean_desc = str(desc).strip()[:1500]
-                item.ai_description_draft = clean_desc
-                item.ai_description_status = 'ready'
-                item.ai_description_error = ''
-                item.ai_description_updated_at = timezone.now()
-                item.save(update_fields=[
-                    'ai_description_draft',
-                    'ai_description_status',
-                    'ai_description_error',
-                    'ai_description_updated_at'
-                ])
-                job_synced = _sync_item_to_job(item)
-                return Response({
-                    'success': True,
-                    'description': clean_desc,
-                    'model_used': gen_res.get('model_used'),
-                    'item': ItemSerializer(item, context={'request': request}).data,
-                    'job': AIDescriptionBatchJobSerializer(job_synced).data if job_synced else None
-                })
-            else:
-                item.ai_description_status = 'failed'
-                item.ai_description_error = 'Gemini returned an empty description.'
-                item.save(update_fields=['ai_description_status', 'ai_description_error'])
-                job_synced = _sync_item_to_job(item)
-                return Response({
-                    'error': 'AI returned an empty description.',
-                    'job': AIDescriptionBatchJobSerializer(job_synced).data if job_synced else None,
-                    'item': ItemSerializer(item, context={'request': request}).data
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        except GeminiRateLimitError as rate_err:
-            item.ai_description_status = 'failed'
-            item.ai_description_error = rate_err.message
-            item.save(update_fields=['ai_description_status', 'ai_description_error'])
-            job_synced = _sync_item_to_job(item)
-            return Response({
-                'error': rate_err.message,
-                'is_daily': rate_err.is_daily,
-                'job': AIDescriptionBatchJobSerializer(job_synced).data if job_synced else None,
-                'item': ItemSerializer(item, context={'request': request}).data
-            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
-        except Exception as ex:
-            item.ai_description_status = 'failed'
-            item.ai_description_error = str(ex)
-            item.save(update_fields=['ai_description_status', 'ai_description_error'])
-            job_synced = _sync_item_to_job(item)
-            return Response({
-                'error': str(ex),
-                'job': AIDescriptionBatchJobSerializer(job_synced).data if job_synced else None,
-                'item': ItemSerializer(item, context={'request': request}).data
-            }, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'success': True,
+            'queued': True,
+            'status': 'pending',
+            'description': '',
+            'message': (
+                job_synced.status_message
+                if job_synced and job_synced.status_message
+                else 'Queued for local Vision AI generation.'
+            ),
+            'item': ItemSerializer(item, context={'request': request}).data,
+            'job': AIDescriptionBatchJobSerializer(job_synced).data if job_synced else None
+        }, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=['post'], url_path='apply-ai-description')
     def apply_ai_description(self, request, pk=None):
@@ -2289,7 +2167,8 @@ class ItemViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='ai-generate-name')
     def single_ai_generate_name(self, request, pk=None):
         """
-        Generates an AI product name draft for a single item immediately using Gemini Vision.
+        Queues a single item for AI product name generation via the local
+        Qwen2.5-VL pull worker without blocking Gunicorn or calling Gemini.
         """
         item = self.get_object()
         primary_img = item.primary_image
@@ -2304,91 +2183,15 @@ class ItemViewSet(viewsets.ModelViewSet):
                 'item': ItemSerializer(item, context={'request': request}).data
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            img_file = primary_img.image.open('rb')
-            img_bytes = img_file.read()
-            img_file.close()
-        except Exception as file_err:
-            item.ai_name_status = 'failed'
-            item.ai_name_error = f"Failed to read image file: {str(file_err)}"
-            item.save(update_fields=['ai_name_status', 'ai_name_error'])
-            return Response({
-                'error': f"Failed to read product image: {str(file_err)}",
-                'item': ItemSerializer(item, context={'request': request}).data
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        cat_name = item.effective_primary_category.name if item.effective_primary_category else ''
-        subcat_name = item.effective_primary_subcategory.name if item.effective_primary_subcategory else ''
-
-        item_data = {
-            'name': item.name,
-            'category_name': cat_name,
-            'subcategory_name': subcat_name,
-            'description': item.description,
-            'selling_price': str(item.selling_price),
-            'mrp': str(item.mrp) if item.mrp else ''
-        }
-
-        custom_keys = request.data.get('api_keys')
-        if isinstance(custom_keys, str):
-            custom_keys = [k.strip() for k in custom_keys.split(',') if k.strip()]
-
-        try:
-            item.ai_name_status = 'generating'
-            item.save(update_fields=['ai_name_status'])
-
-            gen_res = generate_product_name(
-                image_bytes=img_bytes,
-                mime_type='image/jpeg',
-                item_data=item_data,
-                custom_api_keys=custom_keys
-            )
-
-            name_val = gen_res.get('name', '')
-            if name_val:
-                clean_name = str(name_val).strip()[:150]
-                item.ai_name_draft = clean_name
-                item.ai_name_status = 'ready'
-                item.ai_name_error = ''
-                item.ai_name_updated_at = timezone.now()
-                item.save(update_fields=[
-                    'ai_name_draft',
-                    'ai_name_status',
-                    'ai_name_error',
-                    'ai_name_updated_at'
-                ])
-                return Response({
-                    'success': True,
-                    'name': clean_name,
-                    'model_used': gen_res.get('model_used'),
-                    'item': ItemSerializer(item, context={'request': request}).data,
-                })
-            else:
-                item.ai_name_status = 'failed'
-                item.ai_name_error = 'Gemini returned an empty product name.'
-                item.save(update_fields=['ai_name_status', 'ai_name_error'])
-                return Response({
-                    'error': 'AI returned an empty product name.',
-                    'item': ItemSerializer(item, context={'request': request}).data
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        except GeminiRateLimitError as rate_err:
-            item.ai_name_status = 'failed'
-            item.ai_name_error = rate_err.message
-            item.save(update_fields=['ai_name_status', 'ai_name_error'])
-            return Response({
-                'error': rate_err.message,
-                'is_daily': rate_err.is_daily,
-                'item': ItemSerializer(item, context={'request': request}).data
-            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
-        except Exception as ex:
-            item.ai_name_status = 'failed'
-            item.ai_name_error = str(ex)
-            item.save(update_fields=['ai_name_status', 'ai_name_error'])
-            return Response({
-                'error': str(ex),
-                'item': ItemSerializer(item, context={'request': request}).data
-            }, status=status.HTTP_400_BAD_REQUEST)
+        enqueue_single_catalog_vision_item(item, job_type='name_only')
+        return Response({
+            'success': True,
+            'queued': True,
+            'status': 'pending',
+            'name': '',
+            'message': 'Queued for local Vision AI name generation.',
+            'item': ItemSerializer(item, context={'request': request}).data,
+        }, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=True, methods=['post'], url_path='apply-ai-name')
     def apply_ai_name(self, request, pk=None):
@@ -2465,6 +2268,90 @@ class ItemViewSet(viewsets.ModelViewSet):
             'applied_count': applied_count,
             'message': f"Successfully applied AI product names to {applied_count} products."
         })
+
+    @action(detail=False, methods=['post'], url_path='bulk-ai-generate-names-only')
+    def bulk_ai_generate_names_only(self, request):
+        """
+        Queues selected items for AI product NAME generation only (no description).
+        Returns 202 Accepted immediately; the local Vision pull worker handles inference.
+        """
+        item_ids = request.data.get('item_ids', [])
+        store_id = request.data.get('store_id')
+        member = get_current_staff(request)
+        store = member.store if member and member.store else None
+        if not store and store_id:
+            store = Store.objects.filter(pk=store_id).first()
+        if not store:
+            store = Store.objects.first()
+        if not store:
+            return Response({'error': 'No active store found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if item_ids and isinstance(item_ids, list) and len(item_ids) > 0:
+            target_items = Item.objects.filter(id__in=item_ids, store=store)
+        else:
+            target_items = Item.objects.filter(store=store)
+
+        target_ids = list(target_items.values_list('id', flat=True))
+        if not target_ids:
+            return Response({'error': 'No eligible products found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Enqueue as name_only for all targets
+        job = enqueue_bulk_catalog_vision_job(
+            store=store,
+            target_ids=target_ids,
+            valid_gen_name_ids=target_ids,  # all targets get name generation
+        )
+        # Override job types to name_only (enqueue_bulk sets name_and_description when in gen_name_set)
+        from inventory.models import Item as _Item
+        _Item.objects.filter(id__in=target_ids, ai_name_status='pending').update(
+            vision_job_type='name_only',
+            ai_description_status='none',
+        )
+
+        return Response({
+            'success': True,
+            'job': AIDescriptionBatchJobSerializer(job).data,
+            'message': f"Queued {len(target_ids)} item(s) for AI product name generation.",
+        }, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=False, methods=['post'], url_path='bulk-ai-generate-descriptions-only')
+    def bulk_ai_generate_descriptions_only(self, request):
+        """
+        Queues selected items for AI DESCRIPTION generation only (keeps existing names).
+        Returns 202 Accepted immediately; the local Vision pull worker handles inference.
+        """
+        item_ids = request.data.get('item_ids', [])
+        store_id = request.data.get('store_id')
+        member = get_current_staff(request)
+        store = member.store if member and member.store else None
+        if not store and store_id:
+            store = Store.objects.filter(pk=store_id).first()
+        if not store:
+            store = Store.objects.first()
+        if not store:
+            return Response({'error': 'No active store found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if item_ids and isinstance(item_ids, list) and len(item_ids) > 0:
+            target_items = Item.objects.filter(id__in=item_ids, store=store)
+        else:
+            target_items = Item.objects.filter(store=store)
+
+        target_ids = list(target_items.values_list('id', flat=True))
+        if not target_ids:
+            return Response({'error': 'No eligible products found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Enqueue as description_only for all targets (pass empty gen_name_ids)
+        job = enqueue_bulk_catalog_vision_job(
+            store=store,
+            target_ids=target_ids,
+            valid_gen_name_ids=[],  # no name generation
+        )
+
+        return Response({
+            'success': True,
+            'job': AIDescriptionBatchJobSerializer(job).data,
+            'message': f"Queued {len(target_ids)} item(s) for AI description generation (names kept).",
+        }, status=status.HTTP_202_ACCEPTED)
 
     # ─── Variant & Batch Management Actions ──────────────────────────────────
 
@@ -5546,4 +5433,48 @@ class WhatsAppWebhookView(APIView):
         process_whatsapp_webhook_event(request.data)
         # Meta requires an immediate 200 OK response to prevent retry bombardment
         return Response({'status': 'received'}, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class VisionJobClaimView(APIView):
+    """
+    Machine-to-machine endpoint for the local Qwen2.5-VL pull worker:
+    POST /api/inventory/vision-jobs/claim/
+    Authenticated exclusively via Authorization: Bearer <VISION_WORKER_TOKEN>.
+    """
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = []
+
+    def post(self, request, *args, **kwargs):
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if not verify_vision_worker_token(auth_header):
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        worker_id = str(request.data.get('worker_id') or 'default-worker').strip()
+        job_payload = claim_next_vision_job(worker_id=worker_id)
+        if not job_payload:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(job_payload, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class VisionJobCompleteView(APIView):
+    """
+    Machine-to-machine endpoint for the local Qwen2.5-VL pull worker:
+    POST /api/inventory/vision-jobs/<job_id>/complete/
+    Authenticated exclusively via Authorization: Bearer <VISION_WORKER_TOKEN>.
+    """
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = []
+
+    def post(self, request, job_id, *args, **kwargs):
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if not verify_vision_worker_token(auth_header):
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        payload = request.data if isinstance(request.data, dict) else {}
+        http_status, body = complete_vision_job(job_id=job_id, payload=payload)
+        return Response(body, status=http_status)
 

@@ -631,6 +631,40 @@ class Item(models.Model):
         blank=True,
         help_text="Timestamp when AI name was last generated or updated."
     )
+    vision_job_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Unique active lease job ID assigned when claimed by a local Vision worker."
+    )
+    vision_job_type = models.CharField(
+        max_length=30,
+        blank=True,
+        default="name_and_description",
+        help_text="Requested local Vision job scope: name_only, description_only, or name_and_description."
+    )
+    vision_worker_id = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="Identifier of the Vision worker that last claimed this item."
+    )
+    vision_claimed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when this item was claimed by a local Vision worker."
+    )
+    vision_lease_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Lease expiration timestamp after which stale generating items are reclaimed."
+    )
+    vision_retry_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of lease-recovery or transient retry attempts for this item."
+    )
     source = models.CharField(
         max_length=20,
         choices=SOURCE_CHOICES,
@@ -1211,6 +1245,24 @@ class AIDescriptionBatchJob(models.Model):
 
     def __str__(self):
         return f"AI Job {self.id} ({self.status}) - {self.completed_items}/{self.total_items}"
+
+
+class VisionWorkerStatus(models.Model):
+    """
+    Tracks heartbeat timestamps for remote/local GPU Vision pull workers
+    across multi-process Gunicorn workers without requiring Redis.
+    """
+    worker_id = models.CharField(max_length=120, primary_key=True)
+    last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_model = models.CharField(max_length=120, blank=True, default='')
+
+    class Meta:
+        ordering = ['-last_seen_at']
+        verbose_name = 'Vision Worker Status'
+        verbose_name_plural = 'Vision Worker Statuses'
+
+    def __str__(self):
+        return f"{self.worker_id} (last seen: {self.last_seen_at})"
 
 
 class Customer(models.Model):
