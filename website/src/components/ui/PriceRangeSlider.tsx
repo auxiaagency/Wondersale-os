@@ -66,22 +66,16 @@ export const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
       const clamped = Math.max(stockMin, Math.min(stockMax, stepped));
 
       if (dragging === "min") {
-        setLocalMax((currentMax) => {
-          const nextMin = Math.min(clamped, currentMax);
-          setLocalMin(nextMin);
-          onChangeMin(nextMin <= stockMin ? null : nextMin);
-          return currentMax;
-        });
+        const nextMin = Math.min(clamped, localMax);
+        setLocalMin(nextMin);
+        onChangeMin(nextMin <= stockMin ? null : nextMin);
       } else if (dragging === "max") {
-        setLocalMin((currentMin) => {
-          const nextMax = Math.max(clamped, currentMin);
-          setLocalMax(nextMax);
-          onChangeMax(nextMax >= stockMax ? null : nextMax);
-          return currentMin;
-        });
+        const nextMax = Math.max(clamped, localMin);
+        setLocalMax(nextMax);
+        onChangeMax(nextMax >= stockMax ? null : nextMax);
       }
     },
-    [stockMin, stockMax, rangeSpan, step, onChangeMin, onChangeMax]
+    [stockMin, stockMax, rangeSpan, step, localMin, localMax, onChangeMin, onChangeMax]
   );
 
   const handlePointerUp = useCallback(() => {

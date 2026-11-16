@@ -6,6 +6,7 @@ urlpatterns = [
     path('products/', views.ProductListView.as_view(), name='website-products-list'),
     path('products/<str:identifier>/', views.ProductDetailView.as_view(), name='website-product-detail'),
     path('categories/', views.CategoryListView.as_view(), name='website-categories-list'),
+    path('trending-searches/', views.TrendingSearchesPublicListView.as_view(), name='website-trending-searches-public'),
     path('auth/otp/request/', views.OTPRequestView.as_view(), name='website-otp-request'),
     path('auth/otp/verify/', views.OTPVerifyView.as_view(), name='website-otp-verify'),
     path('orders/', views.OrderCreateView.as_view(), name='website-order-create'),

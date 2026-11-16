@@ -50,6 +50,7 @@ export const SearchModalDrawer: React.FC = () => {
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [trendingSearches, setTrendingSearches] = useState<string[]>(DEFAULT_TRENDING);
 
   // Live previews from real backend (with fallback to DEMO_PRODUCTS)
   const [liveMatches, setLiveMatches] = useState<Array<{
@@ -104,6 +105,27 @@ export const SearchModalDrawer: React.FC = () => {
     } catch {
       // Ignore
     }
+  }, []);
+
+  // Fetch real dynamic trending searches from backend
+  useEffect(() => {
+    let active = true;
+    const fetchTrending = async () => {
+      try {
+        const res = await fetch("/api/trending-searches");
+        if (!res.ok) return;
+        const json = await res.json();
+        if (active && json?.data && Array.isArray(json.data) && json.data.length > 0) {
+          setTrendingSearches(json.data);
+        }
+      } catch {
+        // Fallback to DEFAULT_TRENDING is preserved
+      }
+    };
+    fetchTrending();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Open / Close animation lifecycle
@@ -361,7 +383,7 @@ export const SearchModalDrawer: React.FC = () => {
                   <span>Trending Searches</span>
                 </span>
                 <div className="flex flex-wrap gap-2">
-                  {DEFAULT_TRENDING.map((trend) => (
+                  {trendingSearches.map((trend) => (
                     <button
                       key={trend}
                       type="button"

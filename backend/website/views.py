@@ -344,6 +344,77 @@ class CategoryListView(APIView):
         return Response(serializer.data)
 
 
+class TrendingSearchesPublicListView(APIView):
+    """
+    Public storefront API returning trending search terms derived from:
+    1. Top selling website items from sales orders
+    2. Active popular subcategories with website items
+    3. Promoted or featured website items
+    """
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        from inventory.models import SaleOrderItem, SubCategory
+        from django.db.models import Sum
+
+        terms = []
+        seen = set()
+
+        # 1. Terms from top-selling website products
+        top_sales = SaleOrderItem.objects.filter(
+            item__is_listed_on_website=True
+        ).values('item__name').annotate(total_qty=Sum('quantity')).order_by('-total_qty')[:12]
+
+        for s in top_sales:
+            name = (s['item__name'] or '').strip()
+            # Keep names reasonably concise for clean search pills
+            if name and len(name) <= 30 and name.lower() not in seen:
+                terms.append(name)
+                seen.add(name.lower())
+
+        # 2. Add active website subcategory names
+        subcats = SubCategory.objects.filter(
+            items__is_listed_on_website=True
+        ).distinct().values_list('name', flat=True)[:10]
+
+        for sc in subcats:
+            sc = (sc or '').strip()
+            if sc and sc.lower() not in seen:
+                terms.append(sc)
+                seen.add(sc.lower())
+
+        # 3. Add website listed items if we still need more suggestions
+        if len(terms) < 6:
+            items = Item.objects.filter(
+                is_listed_on_website=True
+            ).values_list('name', flat=True)[:10]
+            for it in items:
+                it = (it or '').strip()
+                if it and len(it) <= 30 and it.lower() not in seen:
+                    terms.append(it)
+                    seen.add(it.lower())
+
+        # Fallback defaults if inventory has no items listed
+        defaults = [
+            "Cookware",
+            "Water Bottle",
+            "Coffee Mug",
+            "Backpack",
+            "Sunglasses",
+            "Audio",
+        ]
+        for d in defaults:
+            if len(terms) >= 8:
+                break
+            if d.lower() not in seen:
+                terms.append(d)
+                seen.add(d.lower())
+
+        return Response(terms[:8])
+
+
+
 class OTPRequestView(APIView):
     """
     Request a 6-digit OTP to mobile phone for customer login.
