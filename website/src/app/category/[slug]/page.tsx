@@ -1201,6 +1201,8 @@ function CategoryContent() {
                             title: prod.name,
                             sellingPricePaise: prod.sellingPricePaise,
                             mrpPaise: prod.mrpPaise,
+                            inStock: prod.inStock,
+                            stockCount: prod.stockQuantity,
                             imageUrl: prod.imageUrl,
                           })
                         }

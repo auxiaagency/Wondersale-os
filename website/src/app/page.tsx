@@ -228,17 +228,19 @@ export default function HomePage() {
 
 
 
-  const handleAddToCart = (item: Partial<DemoProduct> & { id: string; slug: string; title: string; mrpPaise: number; sellingPricePaise: number }) => {
+  const handleAddToCart = (item: Partial<DemoProduct> & { id: string; slug: string; title: string; mrpPaise: number; sellingPricePaise: number; inStock?: boolean; stockCount?: number }) => {
     addToCart({
       id: item.id,
       slug: item.slug,
       title: item.title,
       brand: item.brand,
       variantLabel: item.variants?.[0]?.capacity || "Standard",
-      specNote: item.variants?.[0]?.note || "In Stock",
+      specNote: undefined,
       mrpPaise: item.mrpPaise,
       sellingPricePaise: item.sellingPricePaise,
-      badge: "⚡ Bhopal 2-Hr Express Ready",
+      inStock: item.inStock ?? true,
+      stockCount: item.stockCount,
+      badge: undefined,
       imageUrl: item.imageUrl,
     });
     setAddedItemNotification(item.title);
@@ -581,7 +583,7 @@ export default function HomePage() {
                 stockCount: deal.item_quantity || 10,
                 badge: deal.custom_badge || (discountPct > 0 ? `${discountPct}% OFF` : "Deal of the Day"),
                 description: "Limited-time Deal of the Day promotion directly from Bhopal store inventory.",
-                variants: [{ capacity: "Standard", pricePaise: Math.round(dealSp * 100), note: `${deal.item_quantity || 0} in stock` }],
+                variants: [{ capacity: "Standard", pricePaise: Math.round(dealSp * 100), note: "" }],
                 specs: [{ label: "Condition", value: "Brand New" }],
                 reviews: [],
               };
@@ -668,7 +670,7 @@ export default function HomePage() {
                     bestsellerRank: `#${idx + 1} Best Seller`,
                     badge: `#${idx + 1} Best Seller`,
                     description: item.description || "Top rated customer favourite item directly from our store inventory.",
-                    variants: [{ capacity: "Standard", pricePaise: Math.round(Number(item.selling_price || 0) * 100), note: `${item.quantity || 0} in stock` }],
+                    variants: [{ capacity: "Standard", pricePaise: Math.round(Number(item.selling_price || 0) * 100), note: "" }],
                     specs: [{ label: "Condition", value: "Brand New" }],
                     reviews: [],
                   }))
@@ -707,7 +709,7 @@ export default function HomePage() {
                     stockCount: item.quantity || 10,
                     badge: "New Arrival",
                     description: item.description || "Fresh arrival just added to our warehouse catalogue.",
-                    variants: [{ capacity: "Standard", pricePaise: Math.round(Number(item.selling_price || 0) * 100), note: `${item.quantity || 0} in stock` }],
+                    variants: [{ capacity: "Standard", pricePaise: Math.round(Number(item.selling_price || 0) * 100), note: "" }],
                     specs: [{ label: "Condition", value: "Fresh Stock" }],
                     reviews: [],
                   }))

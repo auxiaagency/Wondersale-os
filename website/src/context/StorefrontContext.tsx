@@ -13,6 +13,8 @@ export interface CartItem {
   mrpPaise: number;
   sellingPricePaise: number;
   quantity: number;
+  inStock?: boolean;
+  stockCount?: number;
   badge?: string;
   imageUrl?: string;
 }
@@ -59,6 +61,7 @@ interface StorefrontContextType {
   cartTotalPaise: number;
   addToCart: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   updateCartQuantity: (id: string, delta: number) => void;
+  syncCartStockCounts: (stockMap: Map<string, { inStock: boolean; stockCount: number }>) => void;
   removeFromCart: (id: string) => void;
   clearCart: () => void;
 
@@ -145,7 +148,18 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem("wondersale_cart");
-      if (savedCart) setCart(JSON.parse(savedCart));
+      if (savedCart) {
+        const parsed = JSON.parse(savedCart);
+        // Clean legacy hardcoded badges like "⚡ Bhopal 2-Hr Express Ready"
+        const cleaned = Array.isArray(parsed)
+          ? parsed.map((item: any) => ({
+              ...item,
+              badge: item.badge && item.badge.includes("Express") ? undefined : item.badge,
+              specNote: item.specNote && item.specNote.toLowerCase().includes("stock") ? undefined : item.specNote,
+            }))
+          : [];
+        setCart(cleaned);
+      }
 
       const savedWishlist = localStorage.getItem("wondersale_wishlist");
       if (savedWishlist) setWishlist(JSON.parse(savedWishlist));
@@ -267,6 +281,19 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
+  const syncCartStockCounts = (stockMap: Map<string, { inStock: boolean; stockCount: number }>) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        const baseId = item.id.split("-")[0];
+        const fresh = stockMap.get(baseId) || stockMap.get(item.slug);
+        if (fresh && (item.stockCount !== fresh.stockCount || item.inStock !== fresh.inStock)) {
+          return { ...item, inStock: fresh.inStock, stockCount: fresh.stockCount };
+        }
+        return item;
+      })
+    );
+  };
+
   const removeFromCart = (id: string) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
@@ -332,6 +359,7 @@ export function StorefrontProvider({ children }: { children: React.ReactNode }) 
         cartTotalPaise,
         addToCart,
         updateCartQuantity,
+        syncCartStockCounts,
         removeFromCart,
         clearCart,
         wishlist,

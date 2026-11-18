@@ -2079,13 +2079,17 @@ export default function BillingView({
         activeStore,
         targetCustomer,
         (feedback) => {
-          const isReturnOrder = Boolean(
+          const isExchangeOrder = Boolean(
+            completedOrder.is_exchange ||
+            (completedOrder.invoice_number && String(completedOrder.invoice_number).startsWith('EXC-'))
+          );
+          const isReturnOrder = !isExchangeOrder && Boolean(
             completedOrder.is_return ||
             (completedOrder.invoice_number && String(completedOrder.invoice_number).startsWith('RET-')) ||
             completedOrder.return_reference ||
             completedOrder.status === 'refunded'
           );
-          const typeLabel = isReturnOrder ? 'Return voucher' : 'Bill';
+          const typeLabel = isExchangeOrder ? 'Exchange bill' : isReturnOrder ? 'Return voucher' : 'Bill';
           if (feedback.success) {
             setWaCooldownActive(false);
             showNotification('success', feedback.message || `${typeLabel} #${completedOrder.invoice_number} sent directly to WhatsApp!`);
@@ -5597,7 +5601,15 @@ export default function BillingView({
               <span style={{ color: 'var(--border-subtle)' }}>|</span>
               <span style={{ color: 'var(--text-muted)' }}>Total Billed:</span>
               <strong style={{ color: '#10B981', fontWeight: 900 }}>
-                ₹{shiftBillingOrders.reduce((acc, o) => acc + (parseFloat(o.total_amount) || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₹{shiftBillingOrders.reduce((acc, o) => {
+                  const isRet = !o.is_exchange && !String(o.invoice_number || '').startsWith('EXC-') && Boolean(
+                    o.is_return ||
+                    String(o.invoice_number || '').startsWith('RET-') ||
+                    o.status === 'refunded'
+                  );
+                  const amt = parseFloat(o.total_amount) || 0;
+                  return acc + (isRet ? -amt : amt);
+                }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </strong>
             </div>
 
@@ -5709,12 +5721,18 @@ export default function BillingView({
                 </tr>
               ) : (
                 filterLogsByTimeRange(shiftBillingOrders, shiftBillsTimeFilter, ['created_at']).map((order) => {
-                  const isReturn = Boolean(
-                    order.is_return ||
-                    (order.invoice_number && order.invoice_number.startsWith('RET-')) ||
-                    order.return_reference ||
-                    order.status === 'refunded'
+                  const isExchange = Boolean(
+                    order.is_exchange ||
+                    (order.invoice_number && order.invoice_number.startsWith('EXC-'))
                   );
+                  const isReturn = Boolean(
+                    !isExchange && (
+                      order.is_return ||
+                      (order.invoice_number && order.invoice_number.startsWith('RET-')) ||
+                      order.status === 'refunded'
+                    )
+                  );
+                  const isRefundedExchange = isExchange && order.status === 'refunded';
                   const payMethod = (order.payment_method || 'cash').toLowerCase();
                   const totalFormatted = parseFloat(order.total_amount || 0).toLocaleString('en-IN', {
                     minimumFractionDigits: 2,
@@ -5747,9 +5765,25 @@ export default function BillingView({
                       {/* Invoice & Time */}
                       <td style={{ padding: '8px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontWeight: 800, fontFamily: 'monospace', color: isReturn ? '#EF4444' : 'var(--text-primary)' }}>
+                          <span style={{ fontWeight: 800, fontFamily: 'monospace', color: isReturn ? '#EF4444' : (isExchange ? '#0284C7' : 'var(--text-primary)') }}>
                             {order.invoice_number}
                           </span>
+                          {isExchange && (
+                            <span
+                              style={{
+                                fontSize: '0.62rem',
+                                fontWeight: 800,
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                background: isRefundedExchange ? 'rgba(239, 68, 68, 0.16)' : 'rgba(2, 132, 199, 0.16)',
+                                color: isRefundedExchange ? '#EF4444' : '#0284C7',
+                                border: isRefundedExchange ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(2, 132, 199, 0.35)',
+                                letterSpacing: '0.5px',
+                              }}
+                            >
+                              {isRefundedExchange ? 'EXCHANGE (REFUND)' : 'EXCHANGE'}
+                            </span>
+                          )}
                           {isReturn && (
                             <span
                               style={{
@@ -5981,15 +6015,21 @@ export default function BillingView({
 
                       {/* Total Paid */}
                       <td style={{ padding: '8px 16px', textAlign: 'right' }}>
-                        <span style={{ fontWeight: 900, color: isReturn ? '#EF4444' : '#10B981', fontSize: '0.90rem' }}>
-                          {isReturn ? `-₹${totalFormatted}` : `₹${totalFormatted}`}
+                        <span
+                          style={{
+                            fontWeight: 900,
+                            color: isReturn || isRefundedExchange ? '#EF4444' : '#10B981',
+                            fontSize: '0.90rem',
+                          }}
+                        >
+                          {isReturn || isRefundedExchange ? `-₹${totalFormatted}` : `₹${totalFormatted}`}
                         </span>
                       </td>
 
                       {/* Actions */}
                       <td style={{ padding: '8px 16px', textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          {!isReturn && order.is_editable !== false ? (
+                          {!isReturn && !isExchange && order.is_editable !== false ? (
                             <>
                               <button
                                 type="button"

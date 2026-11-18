@@ -1180,6 +1180,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         quantity = request.data.get('quantity')
         reason = request.data.get('reason')
         proof_image = request.FILES.get('proof_image') or request.data.get('proof_image')
+        variant_id = request.data.get('variant') or request.data.get('variant_id')
         member = get_current_staff(request)
 
         try:
@@ -1189,7 +1190,8 @@ class ItemViewSet(viewsets.ModelViewSet):
                 reason=reason,
                 proof_image=proof_image,
                 performed_by=member,
-                user_display=getattr(member, 'name', '') or str(request.user)
+                user_display=getattr(member, 'name', '') or str(request.user),
+                variant_id=variant_id
             )
         except Exception as e:
             if hasattr(e, 'detail'):
@@ -3230,7 +3232,7 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         # Order status filter: 'completed', 'returned', 'dues', 'partial'
         order_status = self.request.query_params.get('order_status', '').strip().lower()
         if order_status and order_status != 'all':
-            return_cond = Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')
+            return_cond = (Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')) & ~Q(is_exchange=True) & ~Q(invoice_number__startswith='EXC-')
             if order_status == 'completed':
                 qs = qs.filter(status='completed', balance_due__lte=Decimal('0.00')).exclude(return_cond)
             elif order_status in ('returned', 'refunded'):
@@ -3242,10 +3244,11 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
 
         # Is-return flag filter
         is_return_param = self.request.query_params.get('is_return', '').strip().lower()
+        pure_return_q = (Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')) & ~Q(is_exchange=True) & ~Q(invoice_number__startswith='EXC-')
         if is_return_param in ('true', '1', 'yes'):
-            qs = qs.filter(Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference=''))
+            qs = qs.filter(pure_return_q)
         elif is_return_param in ('false', '0', 'no'):
-            qs = qs.exclude(Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference=''))
+            qs = qs.exclude(pure_return_q)
 
         # Cashier name filter
         cashier_name = self.request.query_params.get('cashier_name', '').strip()
@@ -3695,7 +3698,7 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         from django.db.models import Count, Sum, Case, When, F, IntegerField as DjIntField, DecimalField as DjDecField
         qs = self.get_queryset()  # applies all filter params from query string
 
-        return_q = Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')
+        return_q = (Q(invoice_number__startswith='RET-') | Q(status='refunded') | ~Q(return_reference='')) & ~Q(is_exchange=True) & ~Q(invoice_number__startswith='EXC-')
 
         agg = qs.aggregate(
             order_count=Count('id'),
@@ -4246,13 +4249,19 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         )
 
         if success:
-            is_return = bool(
-                getattr(order, 'is_return', False) or
-                (order.invoice_number and str(order.invoice_number).startswith('RET-')) or
-                getattr(order, 'return_reference', None) or
-                getattr(order, 'status', '') == 'refunded'
+            is_exchange = bool(
+                getattr(order, 'is_exchange', False) or
+                (order.invoice_number and str(order.invoice_number).startswith('EXC-'))
             )
-            item_type = "Return voucher" if is_return else "Bill"
+            is_return = bool(
+                not is_exchange and (
+                    getattr(order, 'is_return', False) or
+                    (order.invoice_number and str(order.invoice_number).startswith('RET-')) or
+                    getattr(order, 'return_reference', None) or
+                    getattr(order, 'status', '') == 'refunded'
+                )
+            )
+            item_type = "Exchange bill" if is_exchange else ("Return voucher" if is_return else "Bill")
             return Response({
                 'success': True,
                 'message': f"{item_type} #{order.invoice_number} sent successfully via WhatsApp Cloud API.",

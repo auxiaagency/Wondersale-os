@@ -1966,6 +1966,9 @@ class SaleOrderSerializer(serializers.ModelSerializer):
         return ""
 
     def get_is_return(self, obj):
+        # An exchange order (is_exchange or EXC- prefix) is not a return voucher
+        if getattr(obj, 'is_exchange', False) or (obj.invoice_number and obj.invoice_number.startswith('EXC-')):
+            return False
         return bool(
             (obj.invoice_number and obj.invoice_number.startswith('RET-')) or
             obj.return_reference or

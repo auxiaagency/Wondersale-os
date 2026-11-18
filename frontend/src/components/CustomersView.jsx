@@ -653,13 +653,17 @@ export default function CustomersView({
         storeObj,
         targetCustomer,
         (feedback) => {
-          const isReturnOrder = Boolean(
+          const isExchangeOrder = Boolean(
+            order.is_exchange ||
+            (order.invoice_number && String(order.invoice_number).startsWith('EXC-'))
+          );
+          const isReturnOrder = !isExchangeOrder && Boolean(
             order.is_return ||
             (order.invoice_number && String(order.invoice_number).startsWith('RET-')) ||
             order.return_reference ||
             order.status === 'refunded'
           );
-          const typeLabel = isReturnOrder ? 'Return voucher' : 'Bill';
+          const typeLabel = isExchangeOrder ? 'Exchange bill' : isReturnOrder ? 'Return voucher' : 'Bill';
           if (feedback.success) {
             setWaCooldownActive(false);
             showNotification('success', feedback.message || `${typeLabel} #${order.invoice_number} sent directly to WhatsApp!`);
@@ -866,13 +870,17 @@ export default function CustomersView({
         .join('\n') || '';
     const storeName = order.store_name || 'Wondersale';
     const custName = selectedCustomerForHistory?.name || order.customer_name || (selectedCustomerForHistory?.display_name && !selectedCustomerForHistory?.display_name.startsWith('Customer (') ? selectedCustomerForHistory?.display_name : '') || selectedCustomerForHistory?.phone || '';
-    const isReturn = Boolean(
+    const isExchange = Boolean(
+      order.is_exchange ||
+      (order.invoice_number && order.invoice_number.startsWith('EXC-'))
+    );
+    const isReturn = !isExchange && Boolean(
       order.is_return ||
       (order.invoice_number && order.invoice_number.startsWith('RET-')) ||
       order.return_reference ||
       order.status === 'refunded'
     );
-    const titleLine = isReturn ? `Return Voucher #${order.invoice_number}` : `Invoice #${order.invoice_number}`;
+    const titleLine = isExchange ? `Exchange Invoice #${order.invoice_number}` : isReturn ? `Return Voucher #${order.invoice_number}` : `Invoice #${order.invoice_number}`;
     const totalLine = isReturn
       ? `Total Refund: -₹${order.total_amount} (Refunded)`
       : `Total Bill: ₹${order.total_amount}` +
@@ -893,7 +901,7 @@ export default function CustomersView({
       termsSection;
 
     navigator.clipboard?.writeText(text);
-    showNotification('success', isReturn ? 'Return voucher summary copied!' : 'Invoice details (with Terms & Conditions & Dues) copied to clipboard!');
+    showNotification('success', isExchange ? 'Exchange invoice summary copied!' : isReturn ? 'Return voucher summary copied!' : 'Invoice details (with Terms & Conditions & Dues) copied to clipboard!');
   };
 
   // Calculate Metrics from server-side aggregated metrics (covering entire filtered directory), falling back to local slice
@@ -2328,11 +2336,20 @@ export default function CustomersView({
                 </div>
               ) : filterLogsByTimeRange(customerHistoryOrders, customerHistoryTimeFilter, ['created_at']).length > 0 ? (
                 filterLogsByTimeRange(customerHistoryOrders, customerHistoryTimeFilter, ['created_at']).map((order) => {
-                  const isReturn = Boolean(
+                  const isExchange = Boolean(
+                    order.is_exchange ||
+                    (order.invoice_number && order.invoice_number.startsWith('EXC-'))
+                  );
+                  const isReturn = !isExchange && Boolean(
                     order.is_return ||
                     (order.invoice_number && order.invoice_number.startsWith('RET-')) ||
                     order.return_reference ||
                     order.status === 'refunded'
+                  );
+                  const isRefundedExchange = isExchange && (
+                    order.status === 'refunded' ||
+                    (order.customer_balance !== null && order.customer_balance !== undefined && parseFloat(order.customer_balance) < 0) ||
+                    (order.total_amount !== null && order.total_amount !== undefined && parseFloat(order.total_amount) < 0)
                   );
                   const orderDueAmt = parseFloat(order.balance_due || 0);
 
@@ -2343,9 +2360,13 @@ export default function CustomersView({
                         borderRadius: 'var(--radius-lg)',
                         background: isReturn
                           ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(249, 115, 22, 0.02))'
+                          : isExchange
+                          ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(16, 185, 129, 0.03))'
                           : 'var(--bg-surface)',
                         border: isReturn
                           ? '1px solid rgba(239, 68, 68, 0.35)'
+                          : isExchange
+                          ? '1px solid rgba(59, 130, 246, 0.35)'
                           : orderDueAmt > 0
                           ? '1px solid rgba(245, 158, 11, 0.45)'
                           : '1px solid var(--border-subtle)',
@@ -2359,10 +2380,12 @@ export default function CustomersView({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           {isReturn ? (
                             <RotateCcw size={16} style={{ color: '#EF4444' }} />
+                          ) : isExchange ? (
+                            <RotateCcw size={16} style={{ color: '#3B82F6' }} />
                           ) : (
                             <Receipt size={16} style={{ color: orderDueAmt > 0 ? '#F59E0B' : 'var(--brand-primary)' }} />
                           )}
-                          <span style={{ fontWeight: 800, fontSize: '0.92rem', color: isReturn ? '#EF4444' : 'var(--text-main)', fontFamily: 'monospace' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.92rem', color: isReturn ? '#EF4444' : isExchange ? '#2563EB' : 'var(--text-main)', fontFamily: 'monospace' }}>
                             {order.invoice_number}
                           </span>
                           {isReturn ? (
@@ -2380,6 +2403,22 @@ export default function CustomersView({
                               }}
                             >
                               PRODUCT RETURN / REFUND
+                            </span>
+                          ) : isExchange ? (
+                            <span
+                              style={{
+                                fontSize: '0.66rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: 'var(--radius-pill)',
+                                background: isRefundedExchange ? 'rgba(239, 68, 68, 0.16)' : 'rgba(59, 130, 246, 0.16)',
+                                color: isRefundedExchange ? '#EF4444' : '#2563EB',
+                                border: isRefundedExchange ? '1px solid rgba(239, 68, 68, 0.35)' : '1px solid rgba(59, 130, 246, 0.35)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                              }}
+                            >
+                              {isRefundedExchange ? 'EXCHANGE (REFUND)' : 'EXCHANGE'}
                             </span>
                           ) : orderDueAmt > 0 ? (
                             <span
@@ -2450,10 +2489,14 @@ export default function CustomersView({
                             <span style={{ fontWeight: 900, fontSize: '1rem', color: '#EF4444' }}>
                               -₹{parseFloat(order.total_amount || 0).toFixed(2)} (Refunded)
                             </span>
+                          ) : isRefundedExchange ? (
+                            <span style={{ fontWeight: 900, fontSize: '1rem', color: '#EF4444' }}>
+                              -₹{Math.abs(parseFloat(order.customer_balance ?? order.total_amount ?? 0)).toFixed(2)} (Refunded)
+                            </span>
                           ) : (
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontWeight: 900, fontSize: '1rem', color: '#10B981' }}>
-                                ₹{order.total_amount}
+                                ₹{parseFloat(order.total_amount || 0).toFixed(2)}
                               </div>
                               {orderDueAmt > 0 && (
                                 <div style={{ fontSize: '0.70rem', fontWeight: 800, color: '#F59E0B' }}>
@@ -3487,7 +3530,11 @@ export default function CustomersView({
                 const rawCustomerName = selectedCustomerForHistory?.name || selectedOrderForReceipt.customer_name || (selectedOrderForReceipt.customer_display_name && !selectedOrderForReceipt.customer_display_name.startsWith('Customer (') ? selectedOrderForReceipt.customer_display_name : '');
                 const customerDisplayName = rawCustomerName && rawCustomerName.trim().toLowerCase() !== 'dear customer' ? rawCustomerName : '';
                 const customerGstNumber = selectedOrderForReceipt.customer_gst_number || selectedCustomerForHistory?.gst_number || '';
-                const isReceiptReturn = Boolean(
+                const isReceiptExchange = Boolean(
+                  selectedOrderForReceipt.is_exchange ||
+                  selectedOrderForReceipt.invoice_number?.startsWith('EXC-')
+                );
+                const isReceiptReturn = !isReceiptExchange && Boolean(
                   selectedOrderForReceipt.is_return ||
                   selectedOrderForReceipt.invoice_number?.startsWith('RET-') ||
                   selectedOrderForReceipt.return_reference ||
@@ -3506,8 +3553,8 @@ export default function CustomersView({
                       <h2 style={{ fontSize: '1.45rem', fontWeight: 900, margin: 0, letterSpacing: '2px', color: '#DC2626', textTransform: 'uppercase' }}>
                         WONDER SALE
                       </h2>
-                      <div style={{ fontSize: '0.64rem', fontWeight: 800, letterSpacing: '2px', color: isReceiptReturn ? '#EF4444' : '#4B5563', textTransform: 'uppercase', marginTop: '2px' }}>
-                        {isReceiptReturn ? 'RETURN & REFUND VOUCHER' : 'FOR BETTER NATION'}
+                      <div style={{ fontSize: '0.64rem', fontWeight: 800, letterSpacing: '2px', color: isReceiptReturn ? '#EF4444' : isReceiptExchange ? '#2563EB' : '#4B5563', textTransform: 'uppercase', marginTop: '2px' }}>
+                        {isReceiptReturn ? 'RETURN & REFUND VOUCHER' : isReceiptExchange ? 'EXCHANGE TAX INVOICE' : 'FOR BETTER NATION'}
                       </div>
                     </div>
 
@@ -3524,8 +3571,8 @@ export default function CustomersView({
                     <div style={{ padding: '6px 0', borderBottom: '1px dashed #000000', fontSize: '0.70rem', color: '#000000' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div><strong>{isReceiptReturn ? 'VOUCHER NO.' : 'INVOICE NO.'} {selectedOrderForReceipt.invoice_number}</strong></div>
-                          {isReceiptReturn && selectedOrderForReceipt.return_reference && (
+                          <div><strong>{isReceiptReturn ? 'VOUCHER NO.' : isReceiptExchange ? 'EXCHANGE BILL NO.' : 'INVOICE NO.'} {selectedOrderForReceipt.invoice_number}</strong></div>
+                          {(isReceiptReturn || isReceiptExchange) && selectedOrderForReceipt.return_reference && (
                             <div><strong>Original Bill:</strong> #{selectedOrderForReceipt.return_reference}</div>
                           )}
                           <div>Name :- {customerDisplayName}</div>

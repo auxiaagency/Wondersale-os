@@ -357,4 +357,48 @@ class BrokenItemReportingTests(TestCase):
         self.assertEqual(res_no_fine.status_code, 400)
         self.assertIn('already been fined', res_no_fine.data['error'])
 
+    def test_report_broken_via_item_action_with_variant(self):
+        """Verifies report_broken action on ItemViewSet forwards variant parameter correctly."""
+        from rest_framework.test import APIClient
+        from inventory.models import ItemVariant
+
+        variant_item = Item.objects.create(
+            uid="VAR-ITEM-001",
+            name="Ceramic Plate Set",
+            quantity=0,
+            cost_price=Decimal("150.00"),
+            selling_price=Decimal("250.00"),
+            store=self.store,
+            has_variants=True,
+        )
+        adjust_stock(variant_item, 10, StockMovement.REASON_INITIAL_IMPORT)
+        v1 = ItemVariant.objects.create(
+            item=variant_item,
+            name="Ocean Blue",
+            quantity=5,
+        )
+        v2 = ItemVariant.objects.create(
+            item=variant_item,
+            name="Emerald Green",
+            quantity=5,
+        )
+
+        client = APIClient()
+        url = f"/api/inventory/items/{variant_item.id}/report-broken/"
+        response = client.post(url, {
+            'quantity': 2,
+            'reason': 'Damaged during shelf restocking',
+            'proof_image': self.fake_photo,
+            'variant_id': v1.id,
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['variant'], v1.id)
+        self.assertEqual(response.data['variant_name'], "Ocean Blue")
+
+        v1.refresh_from_db()
+        self.assertEqual(v1.quantity, 3)
+        variant_item.refresh_from_db()
+        self.assertEqual(variant_item.quantity, 8)
+
 

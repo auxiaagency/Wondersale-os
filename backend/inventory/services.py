@@ -548,7 +548,9 @@ def write_off_expired_stock(store_id=None, item_id=None, actor=None) -> dict:
     total_loss = Decimal('0.00')
 
     with transaction.atomic():
-        for item in qs.select_related('store', 'supplier').select_for_update():
+        # Note: Do not select_related nullable FKs (like supplier) on select_for_update() to avoid
+        # PostgreSQL "FOR UPDATE cannot be applied to the nullable side of an outer join".
+        for item in qs.select_related('store').select_for_update():
             cost = item.cost_price or Decimal('0.00')
             expired_qty = item.quantity
             if expired_qty <= 0:
@@ -645,7 +647,10 @@ def report_broken_item(
 
     with transaction.atomic():
         try:
-            locked_item = Item.objects.select_for_update().select_related('store', 'section').get(pk=item_id)
+            # Note: Do not use select_related with nullable FKs (like section or supplier) alongside
+            # select_for_update(), as PostgreSQL raises:
+            # "FOR UPDATE cannot be applied to the nullable side of an outer join"
+            locked_item = Item.objects.select_for_update().select_related('store').get(pk=item_id)
         except Item.DoesNotExist:
             raise ValidationError({"item": f"Product with ID {item_id} does not exist."})
 

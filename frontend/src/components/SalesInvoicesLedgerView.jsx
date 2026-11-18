@@ -463,12 +463,19 @@ export default function SalesInvoicesLedgerView({
   // ─── Helper: compute gross profit for a single order ──────────────────────
   const computeOrderProfit = useCallback((o) => {
     if (!o) return 0;
-    const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+    const isExc = o.is_exchange || (o.invoice_number || '').startsWith('EXC-');
+    const isRet = !isExc && (o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-'));
     let lineProfit = 0;
     (o.items || []).forEach((it) => {
       const revenue = parseFloat(it.total_price) || 0;
       const cost    = (parseFloat(it.unit_cost_price) || 0) * (parseInt(it.quantity, 10) || 0);
-      lineProfit += revenue - cost;
+      const isItemReturn = it.is_return || Boolean(it.return_item);
+      if (isItemReturn) {
+        // Returned line item reduces profit
+        lineProfit -= (Math.abs(revenue) - cost);
+      } else {
+        lineProfit += revenue - cost;
+      }
     });
     // Returns negate the profit (we gave goods back)
     return isRet ? -Math.abs(lineProfit) : lineProfit;
@@ -492,7 +499,8 @@ export default function SalesInvoicesLedgerView({
       if (!map[name]) {
         map[name] = { name, turnover: 0, profit: 0, orders: 0, units: 0 };
       }
-      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+      const isExc = o.is_exchange || (o.invoice_number || '').startsWith('EXC-');
+      const isRet = !isExc && (o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-'));
       const amt = parseFloat(o.total_amount) || 0;
       map[name].turnover += isRet ? -amt : amt;
       map[name].profit   += computeOrderProfit(o);
@@ -572,7 +580,8 @@ export default function SalesInvoicesLedgerView({
         };
       }
 
-      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+      const isExc = o.is_exchange || (o.invoice_number || '').startsWith('EXC-');
+      const isRet = !isExc && (o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-'));
       const sign = isRet ? -1 : 1;
       const totalAmt = parseFloat(o.total_amount) || 0;
       const rawMethod = (o.payment_method || 'cash').trim().toLowerCase();
@@ -705,7 +714,8 @@ export default function SalesInvoicesLedgerView({
     ];
 
     const rows = allOrders.map((o) => {
-      const isRet = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+      const isExc = o.is_exchange || (o.invoice_number || '').startsWith('EXC-');
+      const isRet = !isExc && (o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-'));
       const dt = new Date(o.created_at);
       const dStr = dt.toLocaleDateString('en-IN');
       const tStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -864,13 +874,17 @@ export default function SalesInvoicesLedgerView({
         storeObj,
         targetCustomer,
         (feedback) => {
-          const isReturnOrder = Boolean(
+          const isExchangeOrder = Boolean(
+            order.is_exchange ||
+            (order.invoice_number && String(order.invoice_number).startsWith('EXC-'))
+          );
+          const isReturnOrder = !isExchangeOrder && Boolean(
             order.is_return ||
             (order.invoice_number && String(order.invoice_number).startsWith('RET-')) ||
             order.return_reference ||
             order.status === 'refunded'
           );
-          const typeLabel = isReturnOrder ? 'Return voucher' : 'Bill';
+          const typeLabel = isExchangeOrder ? 'Exchange bill' : isReturnOrder ? 'Return voucher' : 'Bill';
           if (feedback.success) {
             setWaCooldownActive(false);
             showNotification?.('success', feedback.message || `${typeLabel} #${order.invoice_number} sent directly to WhatsApp!`);
@@ -899,13 +913,17 @@ export default function SalesInvoicesLedgerView({
         .join('\n') || '';
     const storeName = order.store_name || order.store_details?.name || 'Wondersale';
     const custName = order.customer_name || (order.customer_display_name && !order.customer_display_name.startsWith('Customer (') ? order.customer_display_name : '') || order.customer_phone || '';
-    const isReturn = Boolean(
+    const isExchange = Boolean(
+      order.is_exchange ||
+      (order.invoice_number && order.invoice_number.startsWith('EXC-'))
+    );
+    const isReturn = !isExchange && Boolean(
       order.is_return ||
       (order.invoice_number && order.invoice_number.startsWith('RET-')) ||
       order.return_reference ||
       order.status === 'refunded'
     );
-    const titleLine = isReturn ? `Return Voucher #${order.invoice_number}` : `Invoice #${order.invoice_number}`;
+    const titleLine = isExchange ? `Exchange Invoice #${order.invoice_number}` : isReturn ? `Return Voucher #${order.invoice_number}` : `Invoice #${order.invoice_number}`;
     const totalLine = isReturn ? `Total Refund: -₹${order.total_amount} (Refunded)` : `Total: ₹${order.total_amount}`;
     const termsRaw = !isReturn ? getReceiptTermsText() : '';
     const termsSection = termsRaw ? `\n\nTERMS & CONDITIONS\n${termsRaw.replace(/\*\*/g, '')}` : '';
@@ -922,6 +940,7 @@ export default function SalesInvoicesLedgerView({
 
     navigator.clipboard?.writeText(text);
     setCopiedInvoice(order.id);
+    showNotification?.('success', isExchange ? 'Exchange invoice summary copied!' : isReturn ? 'Return voucher summary copied!' : 'Invoice details copied to clipboard!');
     setTimeout(() => setCopiedInvoice(null), 2000);
   };
 
@@ -2124,7 +2143,16 @@ export default function SalesInvoicesLedgerView({
                   const itemsPreview = itemsList.map((it) => `${it.quantity}x ${it.item_name || 'Item'}`).slice(0, 2).join(', ');
                   const hasMoreItems = itemsList.length > 2;
 
-                  const isReturn = o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-');
+                  const isExchange = Boolean(
+                    o.is_exchange ||
+                    (o.invoice_number || '').startsWith('EXC-')
+                  );
+                  const isReturn = !isExchange && (o.is_return || o.status === 'returned' || (o.invoice_number || '').startsWith('RET-'));
+                  const isRefundedExchange = isExchange && (
+                    o.status === 'refunded' ||
+                    (o.customer_balance !== null && o.customer_balance !== undefined && parseFloat(o.customer_balance) < 0) ||
+                    (o.total_amount !== null && o.total_amount !== undefined && parseFloat(o.total_amount) < 0)
+                  );
 
                   // Payment mode color mapping
                   const pm = (o.payment_method || 'cash').toLowerCase();
@@ -2358,17 +2386,17 @@ export default function SalesInvoicesLedgerView({
                               borderRadius: '6px',
                               fontSize: '0.70rem',
                               fontWeight: 700,
-                              backgroundColor: isReturn ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-                              color: isReturn ? '#DC2626' : '#059669',
-                              border: `1px solid ${isReturn ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+                              backgroundColor: isReturn ? 'rgba(239, 68, 68, 0.12)' : isExchange ? (isRefundedExchange ? 'rgba(239, 68, 68, 0.12)' : 'rgba(59, 130, 246, 0.12)') : 'rgba(16, 185, 129, 0.12)',
+                              color: isReturn ? '#DC2626' : isExchange ? (isRefundedExchange ? '#DC2626' : '#2563EB') : '#059669',
+                              border: `1px solid ${isReturn ? 'rgba(239, 68, 68, 0.3)' : isExchange ? (isRefundedExchange ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)') : 'rgba(16, 185, 129, 0.3)'}`,
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {isReturn ? <RotateCcw size={10} /> : <CheckCircle2 size={10} />}
-                            <span>{isReturn ? 'Returned' : 'Completed'}</span>
+                            {isReturn || isExchange ? <RotateCcw size={10} /> : <CheckCircle2 size={10} />}
+                            <span>{isReturn ? 'Returned' : isExchange ? (isRefundedExchange ? 'Exchange (Refund)' : 'Exchange') : 'Completed'}</span>
                           </span>
                         )}
                       </td>
@@ -2379,10 +2407,10 @@ export default function SalesInvoicesLedgerView({
                           style={{
                             fontWeight: 800,
                             fontSize: '0.94rem',
-                            color: isReturn ? '#DC2626' : '#059669',
+                            color: isReturn || isRefundedExchange ? '#DC2626' : '#059669',
                           }}
                         >
-                          ₹{Number(o.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {isReturn ? '-' : isRefundedExchange ? '-' : ''}₹{Number(Math.abs(parseFloat(isRefundedExchange ? (o.customer_balance ?? o.total_amount ?? 0) : (o.total_amount || 0)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         {parseFloat(o.balance_due || 0) > 0 ? (
                           <div style={{ fontSize: '0.68rem', color: '#DB2777', fontWeight: 700 }}>
@@ -2645,7 +2673,11 @@ export default function SalesInvoicesLedgerView({
 
                 const customerReceiptName = selectedReceiptOrder.customer_name || (selectedReceiptOrder.customer_display_name && !selectedReceiptOrder.customer_display_name.startsWith('Customer (') ? selectedReceiptOrder.customer_display_name : '') || '';
                 const customerGstNumber = selectedReceiptOrder.customer_gst_number || '';
-                const isReceiptReturn = Boolean(
+                const isReceiptExchange = Boolean(
+                  selectedReceiptOrder.is_exchange ||
+                  selectedReceiptOrder.invoice_number?.startsWith('EXC-')
+                );
+                const isReceiptReturn = !isReceiptExchange && Boolean(
                   selectedReceiptOrder.is_return ||
                   selectedReceiptOrder.invoice_number?.startsWith('RET-') ||
                   selectedReceiptOrder.return_reference ||
@@ -2664,8 +2696,8 @@ export default function SalesInvoicesLedgerView({
                       <h2 style={{ fontSize: '1.45rem', fontWeight: 900, margin: 0, letterSpacing: '2px', color: '#DC2626', textTransform: 'uppercase' }}>
                         WONDER SALE
                       </h2>
-                      <div style={{ fontSize: '0.64rem', fontWeight: 800, letterSpacing: '2px', color: isReceiptReturn ? '#EF4444' : '#4B5563', textTransform: 'uppercase', marginTop: '2px' }}>
-                        {isReceiptReturn ? 'RETURN & REFUND VOUCHER' : 'FOR BETTER NATION'}
+                      <div style={{ fontSize: '0.64rem', fontWeight: 800, letterSpacing: '2px', color: isReceiptReturn ? '#EF4444' : isReceiptExchange ? '#2563EB' : '#4B5563', textTransform: 'uppercase', marginTop: '2px' }}>
+                        {isReceiptReturn ? 'RETURN & REFUND VOUCHER' : isReceiptExchange ? 'EXCHANGE TAX INVOICE' : 'FOR BETTER NATION'}
                       </div>
                     </div>
 
@@ -2682,8 +2714,8 @@ export default function SalesInvoicesLedgerView({
                     <div style={{ padding: '6px 0', borderBottom: '1px dashed #000000', fontSize: '0.70rem', color: '#000000' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <div><strong>{isReceiptReturn ? 'VOUCHER NO.' : 'INVOICE NO.'} {selectedReceiptOrder.invoice_number}</strong></div>
-                          {isReceiptReturn && selectedReceiptOrder.return_reference && (
+                          <div><strong>{isReceiptReturn ? 'VOUCHER NO.' : isReceiptExchange ? 'EXCHANGE BILL NO.' : 'INVOICE NO.'} {selectedReceiptOrder.invoice_number}</strong></div>
+                          {(isReceiptReturn || isReceiptExchange) && selectedReceiptOrder.return_reference && (
                             <div><strong>Original Bill:</strong> #{selectedReceiptOrder.return_reference}</div>
                           )}
                           <div>Name :- {customerReceiptName}</div>

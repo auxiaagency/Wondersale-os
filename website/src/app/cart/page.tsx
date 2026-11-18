@@ -23,12 +23,16 @@ import {
   ArrowRight,
   Sparkles,
   ShoppingBag,
+  ChevronDown,
+  ChevronUp,
+  Truck,
 } from "lucide-react";
 import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import { StorefrontFooter } from "@/components/layout/StorefrontFooter";
 import { BottomTabBar } from "@/components/layout/BottomTabBar";
 import { formatPrice } from "@/lib/format";
+import { StockLevelBar } from "@/components/ui/StockLevelBar";
 import { useStorefront, CartItem, UserDeliveryAddress } from "@/context/StorefrontContext";
 
 export default function CartPage() {
@@ -37,6 +41,7 @@ export default function CartPage() {
     cart: items,
     updateCartQuantity,
     removeFromCart,
+    syncCartStockCounts,
     location,
     clearCart,
     checkAndApplyPincode,
@@ -63,8 +68,51 @@ export default function CartPage() {
   const [pincodeChecking, setPincodeChecking] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [selectedUpiApp, setSelectedUpiApp] = useState<"phonepe" | "gpay" | "paytm" | "qr">("phonepe");
+  const [isProductsExpanded, setIsProductsExpanded] = useState(false);
 
-  // Address Credentials Form State
+  // Sync fresh stock counts for items currently in cart
+  React.useEffect(() => {
+    if (items.length === 0) return;
+
+    let isMounted = true;
+    const syncCartStock = async () => {
+      try {
+        const res = await fetch("/api/catalog/products?pageSize=100");
+        if (!res.ok) return;
+        const json = await res.json();
+        const results = Array.isArray(json?.data) ? json.data : json?.data?.results || [];
+        if (!results.length || !isMounted) return;
+
+        const stockMap = new Map<string, { inStock: boolean; stockCount: number }>();
+        results.forEach((p: any) => {
+          const qty = p.quantity !== undefined ? p.quantity : 10;
+          const inStk = Boolean(p.in_stock ?? (qty > 0));
+          const val = { inStock: inStk, stockCount: qty };
+          stockMap.set(String(p.id), val);
+          if (p.uid) stockMap.set(String(p.uid), val);
+        });
+
+        // Check if any cart item has missing or mismatched stockCount
+        let needsUpdate = false;
+        items.forEach((cartItem) => {
+          const baseId = cartItem.id.split("-")[0];
+          const fresh = stockMap.get(baseId) || stockMap.get(cartItem.slug);
+          if (fresh && (cartItem.stockCount !== fresh.stockCount || cartItem.inStock !== fresh.inStock)) {
+            needsUpdate = true;
+          }
+        });
+
+        if (needsUpdate && isMounted) {
+          syncCartStockCounts(stockMap);
+        }
+      } catch {}
+    };
+
+    syncCartStock();
+    return () => {
+      isMounted = false;
+    };
+  }, [items.length]);
   const [addressForm, setAddressForm] = useState<UserDeliveryAddress>({
     fullName: deliveryAddress?.fullName || "",
     mobile: deliveryAddress?.mobile || "",
@@ -101,13 +149,22 @@ export default function CartPage() {
     }
   };
 
-  // Calculations from real items
-  const totalQuantity = items.reduce((acc, i) => acc + i.quantity, 0);
-  const totalMrpPaise = items.reduce(
+  // Filter available items vs out-of-stock items
+  const isItemAvailable = (item: CartItem) => {
+    return item.inStock !== false && (item.stockCount === undefined || item.stockCount > 0);
+  };
+
+  const availableItems = items.filter(isItemAvailable);
+  const outOfStockItems = items.filter((item) => !isItemAvailable(item));
+  const hasOutOfStockItems = outOfStockItems.length > 0;
+
+  // Calculations from REAL AVAILABLE items only (out of stock items are excluded from total payable)
+  const totalQuantity = availableItems.reduce((acc, i) => acc + i.quantity, 0);
+  const totalMrpPaise = availableItems.reduce(
     (acc, item) => acc + (item.mrpPaise || item.sellingPricePaise) * item.quantity,
     0
   );
-  const totalSellingPaise = items.reduce(
+  const totalSellingPaise = availableItems.reduce(
     (acc, item) => acc + item.sellingPricePaise * item.quantity,
     0
   );
@@ -174,6 +231,10 @@ export default function CartPage() {
 
   // Open Address pop-up if user credentials are not set up, otherwise open UPI payment modal
   const handleInitiateCheckout = () => {
+    if (availableItems.length === 0) {
+      alert("All items in your cart are currently out of stock. Please add available items to proceed.");
+      return;
+    }
     if (!hasValidDeliveryAddress()) {
       // Sync addressForm with current location defaults or stored address
       setAddressForm({
@@ -276,7 +337,7 @@ export default function CartPage() {
           state: activeAddress.state,
           pincode: activeAddress.pincode,
         },
-        items: items.map((item) => ({
+        items: availableItems.map((item) => ({
           variantId: item.variantId,
           slug: item.slug,
           title: item.title,
@@ -343,92 +404,20 @@ export default function CartPage() {
             <div className="grid grid-cols-12 gap-8 items-start">
               {/* Left Column: Cart Items, Free Delivery Milestone, Delivery Slots */}
               <div className="col-span-12 lg:col-span-8 space-y-6">
-                {/* 1. Header & Location Bar */}
-                <div className="bg-[#EFE0BC] p-5 rounded-3xl shadow-xs border border-[#DBC599] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div>
-                    <h1 className="text-xl font-bold text-[#680114] font-serif">
-                      Your Cart ({totalQuantity} {totalQuantity === 1 ? "item" : "items"})
-                    </h1>
-                    <p className="text-xs text-[#680114]/80 mt-0.5">
-                      Items saved in cart are verified against authentic store stock
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 bg-[#EFE0BC] border border-[#DBC599] px-3 py-2 rounded-2xl text-xs">
-                    <MapPin className="w-4 h-4 text-[#680114] shrink-0" />
-                    <div>
-                      <span className="text-[#680114]/80">Deliver to: </span>
-                      <strong className="text-[#680114] font-bold">
-                        {location.city} {location.pincode}
-                        {location.locality ? ` (${location.locality})` : ""}
-                      </strong>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowPincodeModal(true);
-                        setPincodeInput(location.pincode);
-                        setPincodeModalError("");
-                      }}
-                      className="ml-2 text-[#680114] font-bold hover:underline cursor-pointer"
-                    >
-                      Change
-                    </button>
-                  </div>
+                {/* 1. Header Bar */}
+                <div className="bg-[#EFE0BC] p-5 rounded-3xl shadow-xs border border-[#DBC599]">
+                  <h1 className="text-xl font-bold text-[#680114] font-serif">
+                    Your Cart ({totalQuantity} {totalQuantity === 1 ? "item" : "items"})
+                  </h1>
+                  <p className="text-xs text-[#680114]/80 mt-0.5">
+                    Items saved in cart are verified against authentic store stock
+                  </p>
                 </div>
 
-                {/* 2. Free Delivery Milestone */}
-                <div className="bg-[#EFE0BC] p-5 rounded-3xl shadow-xs border border-[#DBC599] space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-[#3E010C] text-[#F6E9C8] flex items-center justify-center shrink-0">
-                        <Zap className="w-4 h-4 fill-current" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-[#680114]">
-                          {neededForFreeExpressPaise > 0 ? (
-                            <>
-                              Add{" "}
-                              <span className="text-[#680114] font-extrabold">
-                                {formatPrice(neededForFreeExpressPaise)}
-                              </span>{" "}
-                              more for{" "}
-                              <span className="text-[#680114] font-bold">
-                                {location.isExpressAvailable
-                                  ? "FREE Express 2-Hour Delivery"
-                                  : "FREE Standard Delivery"}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-[#1E824C] font-extrabold">
-                              🎉 You unlocked FREE Delivery to {location.city || "your location"}!
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[11px] text-[#680114]/80">
-                          {location.isExpressAvailable
-                            ? `Guaranteed dispatch straight from Fulfillment Hub`
-                            : `Fast Nationwide courier to ${location.pincode} (${location.city})`}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-[#680114] bg-[#F6E9C8] border border-[#DBC599] px-3 py-1 rounded-full">
-                      {progressPercent}% Complete
-                    </span>
-                  </div>
+                {/* 1. Free Delivery Milestone */}
+                {/* (Delivery progress milestone banner removed) */}
 
-                  <div className="w-full bg-[#DBC599] h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-[#680114] h-full rounded-full transition-all duration-500 ease-out"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center text-[11px] text-[#680114]/80 font-medium">
-                    <span>Current Cart: {formatPrice(totalSellingPaise)}</span>
-                    <span>Target: {formatPrice(freeDeliveryThresholdPaise)} for zero delivery fees</span>
-                  </div>
-                </div>
-
-                {/* 3. Items List */}
+                {/* 2. Items List */}
                 <div className="bg-[#EFE0BC] rounded-3xl shadow-xs border border-[#DBC599] divide-y divide-[#DBC599] overflow-hidden">
                   <div className="px-6 py-4 bg-[#EFE0BC] border-b border-[#DBC599] flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-[#680114]/80">
@@ -443,8 +432,15 @@ export default function CartPage() {
                     </button>
                   </div>
 
-                  {items.map((item) => (
-                    <article key={item.id} className="p-6 transition-colors hover:bg-[#EFE0BC]/40">
+                  {(isProductsExpanded ? items : items.slice(0, 5)).map((item) => {
+                    const available = isItemAvailable(item);
+                    return (
+                    <article
+                      key={item.id}
+                      className={`p-6 transition-all ${
+                        available ? "hover:bg-[#EFE0BC]/40" : "bg-[#EAE0D0]/70 opacity-60 grayscale-[40%]"
+                      }`}
+                    >
                       <div className="flex gap-5 items-start">
                         {/* Thumbnail */}
                         <div className="relative w-28 h-28 rounded-2xl bg-[#EFE0BC] shrink-0 overflow-hidden flex items-center justify-center p-2 border border-[#DBC599]">
@@ -453,19 +449,26 @@ export default function CartPage() {
                             <img
                               src={item.imageUrl}
                               alt={item.title}
-                              className="w-full h-full object-contain"
+                              className={`w-full h-full object-contain ${!available ? "opacity-50" : ""}`}
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-full bg-[#DBC599] flex items-center justify-center text-[#680114]/80 font-bold text-xs">
                               WS
                             </div>
                           )}
-                          <span className="absolute top-1.5 left-1.5 bg-[#3E010C] text-[#F6E9C8] text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs">
-                            {Math.round(
-                              ((item.mrpPaise - item.sellingPricePaise) / item.mrpPaise) * 100
-                            )}
-                            % OFF
-                          </span>
+                          {available && item.mrpPaise > item.sellingPricePaise && (
+                            <span className="absolute top-1.5 left-1.5 bg-[#3E010C] text-[#F6E9C8] text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs">
+                              {Math.round(
+                                ((item.mrpPaise - item.sellingPricePaise) / item.mrpPaise) * 100
+                              )}
+                              % OFF
+                            </span>
+                          )}
+                          {!available && (
+                            <span className="absolute inset-x-1 bottom-1 text-center bg-gray-700/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                              Out of Stock
+                            </span>
+                          )}
                         </div>
 
                         {/* Info */}
@@ -475,7 +478,7 @@ export default function CartPage() {
                               href={item.slug ? `/product/${item.slug}` : "#"}
                               className="hover:text-[#680114] transition-colors"
                             >
-                              <h2 className="text-sm font-bold text-[#680114] leading-snug">
+                              <h2 className={`text-sm font-bold leading-snug ${available ? "text-[#680114]" : "text-gray-600 line-through"}`}>
                                 {item.title}
                               </h2>
                             </Link>
@@ -489,143 +492,129 @@ export default function CartPage() {
                             </button>
                           </div>
 
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className="inline-flex text-[11px] font-semibold bg-[#EFE0BC] border border-[#DBC599] px-2.5 py-0.5 rounded-full text-[#4A3428]">
-                              {item.variantLabel}
-                            </span>
-                            <span className="text-[11px] text-[#680114]/80">•</span>
-                            <span className="text-[11px] text-[#680114]/80">{item.specNote}</span>
-                          </div>
+                          {(item.variantLabel || item.specNote) && (
+                            <div className="mt-2 flex items-center gap-2">
+                              {item.variantLabel && (
+                                <span className="inline-flex text-[11px] font-semibold bg-[#EFE0BC] border border-[#DBC599] px-2.5 py-0.5 rounded-full text-[#4A3428]">
+                                  {item.variantLabel}
+                                </span>
+                              )}
+                              {item.variantLabel && item.specNote && (
+                                <span className="text-[11px] text-[#680114]/80">•</span>
+                              )}
+                              {item.specNote && (
+                                <span className="text-[11px] text-[#680114]/80">{item.specNote}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#680114]">
-                            <Zap className="w-3.5 h-3.5 fill-current" />
-                            <span>{item.badge}</span>
+                          {item.badge && (
+                            <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-[#680114]">
+                              <span>{item.badge}</span>
+                            </div>
+                          )}
+
+                          {/* Dynamic Stock Indicator Bar */}
+                          <div className="mt-2.5 max-w-[200px]">
+                            <StockLevelBar
+                              inStock={available}
+                              stockCount={item.stockCount}
+                              size="sm"
+                              showLabel={true}
+                            />
                           </div>
 
                           {/* Price & Quantity Controls */}
                           <div className="mt-4 pt-3 border-t border-[#DBC599] flex items-center justify-between">
                             <div className="flex items-baseline gap-2">
-                              <span className="text-base font-extrabold text-[#680114]">
-                                {formatPrice(item.sellingPricePaise * item.quantity)}
-                              </span>
-                              <span className="text-xs text-[#680114]/80 line-through">
-                                {formatPrice(item.mrpPaise * item.quantity)}
-                              </span>
-                              <span className="text-xs font-bold text-[#1E824C] bg-[#EFE0BC] px-2 py-0.5 rounded border border-[#DBC599]">
-                                Save {formatPrice((item.mrpPaise - item.sellingPricePaise) * item.quantity)}
-                              </span>
+                              {available ? (
+                                <>
+                                  <span className="text-base font-extrabold text-[#680114]">
+                                    {formatPrice(item.sellingPricePaise * item.quantity)}
+                                  </span>
+                                  {item.mrpPaise > item.sellingPricePaise && (
+                                    <>
+                                      <span className="text-xs text-[#680114]/80 line-through">
+                                        {formatPrice(item.mrpPaise * item.quantity)}
+                                      </span>
+                                      <span className="text-xs font-bold text-[#1E824C] bg-[#EFE0BC] px-2 py-0.5 rounded border border-[#DBC599]">
+                                        Save {formatPrice((item.mrpPaise - item.sellingPricePaise) * item.quantity)}
+                                      </span>
+                                    </>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-xs font-bold text-gray-500 italic">
+                                  Item currently unavailable — excluded from order total
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-3">
-                              <div className="flex items-center border border-[#DBC599] rounded-xl bg-[#EFE0BC] shadow-2xs overflow-hidden">
+                              {available ? (
+                                <div className="flex items-center border border-[#DBC599] rounded-xl bg-[#EFE0BC] shadow-2xs overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQuantity(item.id, -1)}
+                                    aria-label="Decrease quantity"
+                                    className="w-8 h-8 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] transition-colors cursor-pointer"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className="w-10 text-center text-xs font-bold text-[#680114]">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQuantity(item.id, 1)}
+                                    aria-label="Increase quantity"
+                                    className="w-8 h-8 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] transition-colors cursor-pointer"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
                                 <button
                                   type="button"
-                                  onClick={() => updateQuantity(item.id, -1)}
-                                  aria-label="Decrease quantity"
-                                  className="w-8 h-8 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] transition-colors cursor-pointer"
+                                  onClick={() => removeItem(item.id)}
+                                  className="text-xs text-[#680114] hover:underline font-bold"
                                 >
-                                  <Minus className="w-3.5 h-3.5" />
+                                  Remove Item
                                 </button>
-                                <span className="w-10 text-center text-xs font-bold text-[#680114]">
-                                  {item.quantity}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => updateQuantity(item.id, 1)}
-                                  aria-label="Increase quantity"
-                                  className="w-8 h-8 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] transition-colors cursor-pointer"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              )}
                             </div>
                           </div>
                         </div>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
+
+                  {/* Dropdown toggle for remaining items if more than 5 */}
+                  {items.length > 5 && (
+                    <div className="p-4 bg-[#EFE0BC] text-center border-t border-[#DBC599]">
+                      <button
+                        type="button"
+                        onClick={() => setIsProductsExpanded(!isProductsExpanded)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#F6E9C8] hover:bg-[#680114] text-[#680114] hover:text-[#F6E9C8] border-2 border-[#680114] font-bold text-xs transition-all cursor-pointer shadow-2xs"
+                      >
+                        {isProductsExpanded ? (
+                          <>
+                            <span>Show Less (Show First 5)</span>
+                            <ChevronUp className="w-4 h-4" />
+                          </>
+                        ) : (
+                          <>
+                            <span>View All {items.length} Products (+{items.length - 5} More)</span>
+                            <ChevronDown className="w-4 h-4" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* 4. Delivery Preferences */}
-                <div className="bg-[#EFE0BC] p-5 rounded-3xl shadow-xs border border-[#DBC599] space-y-3">
-                  <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wider flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#680114]" />
-                    Delivery Preference for {location.city} ({location.pincode})
-                  </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {location.isExpressAvailable ? (
-                      <>
-                        <label
-                          onClick={() => setDeliverySlot("express")}
-                          className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                            deliverySlot === "express"
-                              ? "border-[#680114] bg-[#EFE0BC]"
-                              : "border-[#DBC599] hover:bg-[#EFE0BC]/50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <span className="text-xs font-bold text-[#680114]">⚡ 2-Hour Express</span>
-                            <span className="text-[10px] font-bold bg-[#3E010C] text-[#F6E9C8] px-2 py-0.5 rounded-full">
-                              FREE
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#680114] font-semibold mt-2">
-                            Express direct dispatch
-                          </p>
-                        </label>
-
-                        <label
-                          onClick={() => setDeliverySlot("evening")}
-                          className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                            deliverySlot === "evening"
-                              ? "border-[#680114] bg-[#EFE0BC]"
-                              : "border-[#DBC599] hover:bg-[#EFE0BC]/50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <span className="text-xs font-bold text-[#680114]">Today Evening</span>
-                            <span className="text-[10px] font-bold text-[#1E824C] bg-[#EFE0BC] border border-[#DBC599] px-2 py-0.5 rounded-full">
-                              FREE
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#680114]/80 mt-2">5:00 PM - 8:00 PM slot</p>
-                        </label>
-
-                        <label
-                          onClick={() => setDeliverySlot("tomorrow")}
-                          className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                            deliverySlot === "tomorrow"
-                              ? "border-[#680114] bg-[#EFE0BC]"
-                              : "border-[#DBC599] hover:bg-[#EFE0BC]/50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <span className="text-xs font-bold text-[#680114]">Tomorrow Morning</span>
-                            <span className="text-[10px] font-bold text-[#1E824C] bg-[#EFE0BC] border border-[#DBC599] px-2 py-0.5 rounded-full">
-                              FREE
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-[#680114]/80 mt-2">9:00 AM - 12:00 PM slot</p>
-                        </label>
-                      </>
-                    ) : (
-                      <div className="col-span-3 p-4 rounded-2xl border-2 border-[#680114] bg-[#EFE0BC]">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#680114]">
-                            Standard Nationwide Shipping (BlueDart / Delhivery)
-                          </span>
-                          <span className="text-xs font-bold text-[#1E824C] bg-[#EFE0BC] border border-[#DBC599] px-2 py-0.5 rounded">
-                            FREE
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-[#680114]/80 mt-1">
-                          Delivery to {location.pincode} ({location.city}) within 3-5 business days with live tracking.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
 
               {/* Right Column: Order Summary & Checkout */}
@@ -791,31 +780,19 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={handleInitiateCheckout}
-                    className="w-full h-12 bg-[#3E010C] hover:bg-[#680114] text-[#F6E9C8] rounded-2xl font-bold text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                    disabled={availableItems.length === 0}
+                    className={`w-full h-12 rounded-2xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
+                      availableItems.length === 0
+                        ? "bg-gray-400 text-gray-200 cursor-not-allowed opacity-75"
+                        : "bg-[#3E010C] hover:bg-[#680114] text-[#F6E9C8] active:scale-95 cursor-pointer"
+                    }`}
                   >
-                    <span>Proceed to Checkout</span>
+                    <span>{availableItems.length === 0 ? "Items Out of Stock" : "Proceed to Checkout"}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* 3. Trust Highlights */}
-                <div className="bg-[#EFE0BC] p-5 rounded-3xl shadow-xs border border-[#DBC599] grid grid-cols-3 gap-3 text-center">
-                  <div>
-                    <ShieldCheck className="w-5 h-5 text-[#680114] mx-auto" />
-                    <p className="text-[11px] font-bold text-[#680114] mt-1">100% Genuine</p>
-                    <p className="text-[10px] text-[#680114]/80">Direct Store Warranty</p>
-                  </div>
-                  <div>
-                    <RefreshCw className="w-5 h-5 text-[#680114] mx-auto" />
-                    <p className="text-[11px] font-bold text-[#680114] mt-1">7-Day Return</p>
-                    <p className="text-[10px] text-[#680114]/80">Easy Doorstep Pickup</p>
-                  </div>
-                  <div>
-                    <Lock className="w-5 h-5 text-[#680114] mx-auto" />
-                    <p className="text-[11px] font-bold text-[#680114] mt-1">256-Bit SSL</p>
-                    <p className="text-[10px] text-[#680114]/80">Secure Payments</p>
-                  </div>
-                </div>
+                {/* (Trust highlights removed per request) */}
               </div>
             </div>
           ) : (
@@ -924,11 +901,8 @@ export default function CartPage() {
                       {deliveryAddress.houseFlatNo}, {deliveryAddress.streetArea}
                       {deliveryAddress.landmark ? `, Near ${deliveryAddress.landmark}` : ""}
                     </p>
-                    <div className="flex items-center justify-between mt-1 text-[11px] text-[#680114]/80">
+                    <div className="mt-1 text-[11px] text-[#680114]/80">
                       <span>{deliveryAddress.city}, {deliveryAddress.pincode}</span>
-                      <span className="text-[10px] font-bold uppercase bg-[#DBC599] px-1.5 py-0.5 rounded text-[#680114]">
-                        {deliveryAddress.addressType}
-                      </span>
                     </div>
                   </div>
                 ) : (
@@ -960,89 +934,153 @@ export default function CartPage() {
 
               {/* 3. ITEMS LIST */}
               <section aria-label="Shopping Cart Products" className="space-y-2.5">
-                {items.map((item) => (
-                  <article
-                    key={item.id}
-                    className="bg-[#EFE0BC] rounded-2xl p-3 shadow-xs border border-[#DBC599]"
-                  >
-                    <div className="flex gap-3">
-                      {/* Product Image */}
-                      <div className="relative w-20 h-20 rounded-xl bg-[#EFE0BC] shrink-0 overflow-hidden flex items-center justify-center p-1.5 border border-[#DBC599]">
-                        {item.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.imageUrl}
-                            alt={item.title}
-                            className="w-full h-full object-contain rounded-lg"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-[#DBC599] flex items-center justify-center text-[#680114]/80 font-bold text-[10px]">
-                            WS
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Details */}
-                      <div className="flex-1 min-w-0 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-start justify-between gap-1">
-                            <h2 className="text-xs font-bold text-[#680114] leading-snug line-clamp-2">
-                              {item.title}
-                            </h2>
-                            <button
-                              onClick={() => removeItem(item.id)}
-                              aria-label="Remove item"
-                              className="text-[#680114]/80 hover:text-[#680114] p-1 -mr-1 cursor-pointer"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                          {item.variantLabel && (
-                            <span className="inline-block mt-1 text-[10px] font-medium bg-[#EFE0BC] border border-[#DBC599] px-1.5 py-0.5 rounded text-[#4A3428]">
-                              {item.variantLabel}
-                            </span>
+                {(isProductsExpanded ? items : items.slice(0, 5)).map((item) => {
+                  const available = isItemAvailable(item);
+                  return (
+                    <article
+                      key={item.id}
+                      className={`rounded-2xl p-3 shadow-xs border transition-all ${
+                        available
+                          ? "bg-[#EFE0BC] border-[#DBC599]"
+                          : "bg-[#EAE0D0]/70 border-[#DBC599]/60 opacity-60 grayscale-[35%]"
+                      }`}
+                    >
+                      <div className="flex gap-3">
+                        {/* Product Image */}
+                        <div className="relative w-20 h-20 rounded-xl bg-[#EFE0BC] shrink-0 overflow-hidden flex items-center justify-center p-1.5 border border-[#DBC599]">
+                          {item.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-contain rounded-lg"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-[#DBC599] flex items-center justify-center text-[#680114]/80 font-bold text-[10px]">
+                              WS
+                            </div>
+                          )}
+                          {!available && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-1">
+                              <span className="text-[9px] font-bold text-white bg-black/75 px-1.5 py-0.5 rounded text-center leading-tight">
+                                Out of Stock
+                              </span>
+                            </div>
                           )}
                         </div>
 
-                        {/* Price & Quantity in one clean row */}
-                        <div className="mt-2 flex items-center justify-between">
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-sm font-black text-[#680114]">
-                              {formatPrice(item.sellingPricePaise)}
-                            </span>
-                            {item.mrpPaise > item.sellingPricePaise && (
-                              <span className="text-[11px] text-[#680114]/80 line-through">
-                                {formatPrice(item.mrpPaise)}
+                        {/* Details */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-start justify-between gap-1">
+                              <h2 className={`text-xs font-bold leading-snug line-clamp-2 ${available ? "text-[#680114]" : "text-gray-600 line-through"}`}>
+                                {item.title}
+                              </h2>
+                              <button
+                                onClick={() => removeItem(item.id)}
+                                aria-label="Remove item"
+                                className="text-[#680114]/80 hover:text-[#680114] p-1 -mr-1 cursor-pointer"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                            {item.variantLabel && (
+                              <span className="inline-block mt-1 text-[10px] font-medium bg-[#EFE0BC] border border-[#DBC599] px-1.5 py-0.5 rounded text-[#4A3428]">
+                                {item.variantLabel}
                               </span>
                             )}
                           </div>
 
-                          {/* Stepper */}
-                          <div className="flex items-center border border-[#DBC599] rounded-lg bg-[#EFE0BC] shadow-2xs">
-                            <button
-                              onClick={() => updateQuantity(item.id, -1)}
-                              aria-label="Decrease quantity"
-                              className="w-7 h-7 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] active:scale-90 rounded-l-lg transition-transform cursor-pointer"
-                            >
-                              <Minus className="h-3 w-3" />
-                            </button>
-                            <span className="w-7 text-center text-xs font-bold text-[#680114]">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => updateQuantity(item.id, 1)}
-                              aria-label="Increase quantity"
-                              className="w-7 h-7 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] active:scale-90 rounded-r-lg transition-transform cursor-pointer"
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
+                          {/* Dynamic Stock Indicator Bar (Mobile) */}
+                          <div className="mt-2 w-full max-w-[170px]">
+                            <StockLevelBar
+                              inStock={available}
+                              stockCount={item.stockCount}
+                              size="sm"
+                              showLabel={true}
+                            />
+                          </div>
+
+                          {/* Price & Quantity in one clean row */}
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="flex items-baseline gap-1.5">
+                              {available ? (
+                                <>
+                                  <span className="text-sm font-black text-[#680114]">
+                                    {formatPrice(item.sellingPricePaise)}
+                                  </span>
+                                  {item.mrpPaise > item.sellingPricePaise && (
+                                    <span className="text-[11px] text-[#680114]/80 line-through">
+                                      {formatPrice(item.mrpPaise)}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-[10px] font-bold text-gray-500 italic">
+                                  Unavailable (excluded)
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Stepper or Remove */}
+                            {available ? (
+                              <div className="flex items-center border border-[#DBC599] rounded-lg bg-[#EFE0BC] shadow-2xs">
+                                <button
+                                  onClick={() => updateQuantity(item.id, -1)}
+                                  aria-label="Decrease quantity"
+                                  className="w-7 h-7 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] active:scale-90 rounded-l-lg transition-transform cursor-pointer"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                                <span className="w-7 text-center text-xs font-bold text-[#680114]">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  onClick={() => updateQuantity(item.id, 1)}
+                                  aria-label="Increase quantity"
+                                  className="w-7 h-7 flex items-center justify-center text-[#680114]/80 hover:bg-[#DBC599] active:scale-90 rounded-r-lg transition-transform cursor-pointer"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => removeItem(item.id)}
+                                className="text-[11px] font-bold text-red-700 bg-red-100/80 px-2 py-1 rounded-lg border border-red-200 hover:bg-red-200 transition-colors cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
+
+                {items.length > 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsProductsExpanded(!isProductsExpanded)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#EFE0BC] hover:bg-[#680114] text-[#680114] hover:text-[#F6E9C8] border border-[#DFCBA0] font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-2xs"
+                  >
+                    {isProductsExpanded ? (
+                      <>
+                        <span>Show First 5 Items</span>
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </>
+                    ) : (
+                      <>
+                        <span>Show All {items.length} Items (+{items.length - 5} More)</span>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </>
+                    )}
+                  </button>
+                )}
               </section>
+
+
 
               {/* 4. SIMPLE COUPON ACCORDION / BOX */}
               <div className="bg-[#EFE0BC] rounded-2xl p-3.5 shadow-xs border border-[#DBC599]">
@@ -1080,36 +1118,52 @@ export default function CartPage() {
                 )}
               </div>
 
-              {/* 5. CLEAN PRICE BREAKDOWN */}
-              <div className="bg-[#EFE0BC] rounded-2xl p-4 shadow-xs border border-[#DBC599] space-y-2">
-                <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wide">
-                  Bill Details
+              {/* 5. ORDER SUMMARY (Matches Desktop) */}
+              <div className="bg-[#EFE0BC] rounded-2xl p-4 shadow-xs border border-[#DBC599] space-y-3">
+                <h3 className="text-xs font-bold text-[#680114] uppercase tracking-wide font-serif pb-2 border-b border-[#DBC599]">
+                  Order Summary
                 </h3>
-                <div className="space-y-1.5 text-xs text-[#680114]/80 pt-1">
+                <div className="space-y-2 text-xs text-[#680114]/80">
                   <div className="flex justify-between">
-                    <span>Items Total</span>
-                    <span className="font-semibold text-[#680114]">{formatPrice(totalSellingPaise)}</span>
+                    <span>Total MRP</span>
+                    <span className="font-semibold text-[#680114]">{formatPrice(totalMrpPaise)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Product Discount</span>
+                    <span className="font-semibold text-[#680114]">
+                      -{formatPrice(productDiscountPaise)}
+                    </span>
                   </div>
                   {isCouponApplied && (
                     <div className="flex justify-between text-[#680114]">
-                      <span>Coupon Discount</span>
-                      <span className="font-bold">-{formatPrice(appliedDiscountPaise)}</span>
+                      <span>Coupon Discount ({couponCode})</span>
+                      <span className="font-semibold text-[#680114]">
+                        -{formatPrice(appliedDiscountPaise)}
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span>Delivery Fee</span>
                     <span className="font-bold text-[#1E824C]">FREE</span>
                   </div>
-                  <div className="border-t border-[#DBC599] pt-2 mt-1 flex justify-between items-baseline font-bold text-[#680114]">
-                    <span className="text-sm">Total Payable</span>
-                    <span className="text-lg font-black">{formatPrice(totalPayablePaise)}</span>
+                  <div className="flex justify-between">
+                    <span>Packaging &amp; Handling</span>
+                    <span className="font-bold text-[#1E824C]">FREE</span>
+                  </div>
+                  <div className="border-t border-dashed border-[#DBC599] pt-2.5 mt-1 flex justify-between items-baseline font-bold text-[#680114]">
+                    <div>
+                      <span className="text-sm font-bold text-[#680114]">Total Payable</span>
+                      <p className="text-[10px] text-[#680114]/80 font-normal">Inclusive of all GST</p>
+                    </div>
+                    <span className="text-xl font-black">{formatPrice(totalPayablePaise)}</span>
                   </div>
                 </div>
 
                 {totalSavingsPaise > 0 && (
-                  <div className="bg-[#EFE0BC] border border-[#DBC599] rounded-xl p-2 text-center mt-2">
-                    <p className="text-xs font-bold text-[#680114]">
-                      🎉 You are saving {formatPrice(totalSavingsPaise)} on this order
+                  <div className="bg-[#EFE0BC] border border-[#DBC599] rounded-xl p-2.5 text-center mt-2">
+                    <p className="text-xs font-bold text-[#680114] flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      You are saving {formatPrice(totalSavingsPaise)} on this order!
                     </p>
                   </div>
                 )}
@@ -1149,9 +1203,14 @@ export default function CartPage() {
               </div>
               <button
                 onClick={handleInitiateCheckout}
-                className="flex-1 max-w-[240px] bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] py-3 px-4 rounded-xl font-serif font-bold text-sm shadow-md border-2 border-[#680114] active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                disabled={availableItems.length === 0}
+                className={`flex-1 max-w-[240px] py-3 px-4 rounded-xl font-serif font-bold text-sm shadow-md border-2 transition-all flex items-center justify-center gap-1.5 ${
+                  availableItems.length === 0
+                    ? "bg-gray-400 text-gray-200 border-gray-400 cursor-not-allowed opacity-75"
+                    : "bg-[#680114] hover:bg-[#88091E] text-[#F6E9C8] border-[#680114] active:scale-95 cursor-pointer"
+                }`}
               >
-                <span>Proceed to Checkout</span>
+                <span>{availableItems.length === 0 ? "Items Out of Stock" : "Proceed to Checkout"}</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -1161,17 +1220,17 @@ export default function CartPage() {
 
       {/* MANDATORY DELIVERY CREDENTIALS POP-UP MODAL */}
       {showAddressModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="w-full max-w-lg bg-[#EFE0BC] rounded-3xl shadow-2xl overflow-hidden border border-[#DBC599] my-8 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-lg max-h-[90vh] sm:max-h-[85vh] bg-[#EFE0BC] rounded-3xl shadow-2xl overflow-hidden border border-[#DBC599] my-auto flex flex-col animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="bg-[#3E010C] text-[#F6E9C8] p-5 flex items-center justify-between border-b border-[#680114]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#EFE0BC]/15 backdrop-blur-xs flex items-center justify-center text-[#F6E9C8]">
-                  <MapPin className="w-5 h-5 text-amber-300" />
+            <div className="bg-[#3E010C] text-[#F6E9C8] p-4 sm:p-5 flex items-center justify-between border-b border-[#680114] shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#EFE0BC]/15 backdrop-blur-xs flex items-center justify-center text-[#F6E9C8] shrink-0">
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
                 </div>
                 <div>
-                  <h3 className="font-black text-base tracking-tight text-[#F6E9C8]">Delivery &amp; Contact Details</h3>
-                  <p className="text-xs text-[#F4D3D8]">
+                  <h3 className="font-black text-sm sm:text-base tracking-tight text-[#F6E9C8]">Delivery &amp; Contact Details</h3>
+                  <p className="text-[11px] sm:text-xs text-[#F4D3D8]">
                     Mandatory address credentials required for doorstep delivery
                   </p>
                 </div>
@@ -1185,8 +1244,8 @@ export default function CartPage() {
               </button>
             </div>
 
-            {/* Modal Body / Form */}
-            <form onSubmit={handleSaveAddress} className="p-6 space-y-4 bg-[#EFE0BC]">
+            {/* Modal Body / Form - Scrollable */}
+            <form onSubmit={handleSaveAddress} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 bg-[#EFE0BC] overflow-y-auto flex-1">
               {addressFormError && (
                 <div className="p-3 bg-[#EFE0BC] border border-[#DBC599] text-[#680114] rounded-2xl text-xs font-semibold flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#680114] shrink-0"></span>
@@ -1206,7 +1265,7 @@ export default function CartPage() {
                     placeholder="e.g. Rahul Sharma"
                     value={addressForm.fullName}
                     onChange={(e) => setAddressForm({ ...addressForm, fullName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden shadow-2xs"
                   />
                 </div>
                 <div>
@@ -1214,7 +1273,7 @@ export default function CartPage() {
                     10-Digit Mobile Number <span className="text-[#680114]">*</span>
                   </label>
                   <div className="flex">
-                    <span className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-[#DBC599] bg-[#EFE0BC] text-[#680114]/80 text-xs font-bold">
+                    <span className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-[#DBC599] bg-[#E8D7B0] text-[#680114] text-xs font-bold">
                       +91
                     </span>
                     <input
@@ -1229,7 +1288,7 @@ export default function CartPage() {
                           mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
                         })
                       }
-                      className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden font-mono"
+                      className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden font-mono shadow-2xs"
                     />
                   </div>
                 </div>
@@ -1238,10 +1297,10 @@ export default function CartPage() {
               {/* Alternate Mobile (Optional) */}
               <div>
                 <label className="block text-xs font-semibold text-[#680114]/80 mb-1">
-                  Alternate Phone Number <span className="text-[#680114]/80/70 font-normal">(Optional)</span>
+                  Alternate Phone Number <span className="text-[#680114]/60 font-normal">(Optional)</span>
                 </label>
                 <div className="flex">
-                  <span className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-[#DBC599] bg-[#EFE0BC] text-[#680114]/80 text-xs font-bold">
+                  <span className="inline-flex items-center px-2.5 rounded-l-xl border border-r-0 border-[#DBC599] bg-[#E8D7B0] text-[#680114] text-xs font-bold">
                     +91
                   </span>
                   <input
@@ -1255,7 +1314,7 @@ export default function CartPage() {
                         alternatePhone: e.target.value.replace(/\D/g, "").slice(0, 10),
                       })
                     }
-                    className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden font-mono"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-r-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden font-mono shadow-2xs"
                   />
                 </div>
               </div>
@@ -1271,7 +1330,7 @@ export default function CartPage() {
                   placeholder="e.g. Flat 402, Signature Heights"
                   value={addressForm.houseFlatNo}
                   onChange={(e) => setAddressForm({ ...addressForm, houseFlatNo: e.target.value })}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden shadow-2xs"
                 />
               </div>
 
@@ -1286,7 +1345,7 @@ export default function CartPage() {
                   placeholder="e.g. 10 No. Market, Arera Colony"
                   value={addressForm.streetArea}
                   onChange={(e) => setAddressForm({ ...addressForm, streetArea: e.target.value })}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden shadow-2xs"
                 />
               </div>
 
@@ -1294,14 +1353,14 @@ export default function CartPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#680114]/80 mb-1">
-                    Landmark <span className="text-[#680114]/80/70 font-normal">(Optional)</span>
+                    Landmark <span className="text-[#680114]/60 font-normal">(Optional)</span>
                   </label>
                   <input
                     type="text"
                     placeholder="e.g. Near Habibganj Station"
                     value={addressForm.landmark || ""}
                     onChange={(e) => setAddressForm({ ...addressForm, landmark: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden shadow-2xs"
                   />
                 </div>
                 <div>
@@ -1320,7 +1379,7 @@ export default function CartPage() {
                         pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
                       })
                     }
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden font-mono tracking-wider"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden font-mono tracking-wider shadow-2xs"
                   />
                 </div>
               </div>
@@ -1337,7 +1396,7 @@ export default function CartPage() {
                     placeholder="Bhopal"
                     value={addressForm.city}
                     onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden shadow-2xs"
                   />
                 </div>
                 <div>
@@ -1350,55 +1409,26 @@ export default function CartPage() {
                     placeholder="Madhya Pradesh"
                     value={addressForm.state}
                     onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
-                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#EFE0BC] text-[#680114] focus:border-[#680114] focus:bg-[#F6E9C8] focus:ring-1 focus:ring-[#680114] outline-hidden"
+                    className="w-full px-3 py-2 text-xs font-medium rounded-xl border border-[#DBC599] bg-[#F6E9C8] text-[#680114] placeholder:text-[#680114]/40 focus:border-[#680114] focus:bg-[#FAF3E0] focus:ring-1 focus:ring-[#680114] outline-hidden shadow-2xs"
                   />
                 </div>
               </div>
 
-              {/* Address Type Tag */}
-              <div>
-                <label className="block text-xs font-bold text-[#680114] mb-2">
-                  Address Type
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { id: "home", label: "🏠 Home (All-day delivery)" },
-                    { id: "work", label: "🏢 Office / Work (10 AM - 6 PM)" },
-                    { id: "other", label: "📍 Other" },
-                  ].map((type) => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() =>
-                        setAddressForm({ ...addressForm, addressType: type.id as any })
-                      }
-                      className={`flex-1 py-2 px-2 text-xs font-bold rounded-xl border transition-all cursor-pointer text-center ${
-                        addressForm.addressType === type.id
-                          ? "border-[#680114] bg-[#EFE0BC] text-[#680114] shadow-xs"
-                          : "border-[#DBC599] text-[#680114]/80 hover:bg-[#EFE0BC]/60"
-                      }`}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Modal Actions */}
-              <div className="pt-3 border-t border-[#DBC599] flex items-center justify-end gap-3">
+              <div className="pt-3 border-t border-[#DBC599] flex items-center justify-end gap-2.5 sm:gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowAddressModal(false)}
-                  className="px-4 py-2.5 text-xs font-bold text-[#680114]/80 hover:text-[#680114] rounded-xl hover:bg-[#EFE0BC] transition-colors cursor-pointer"
+                  className="px-4 py-2 text-xs font-bold text-[#680114]/80 hover:text-[#680114] rounded-xl hover:bg-[#E8D7B0] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-[#3E010C] hover:bg-[#680114] text-[#F6E9C8] text-xs font-bold rounded-2xl shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  className="px-5 sm:px-6 py-2.5 bg-[#3E010C] hover:bg-[#680114] text-[#F6E9C8] text-xs font-bold rounded-2xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer"
                 >
                   <span>Save Address &amp; Proceed to Payment</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </form>

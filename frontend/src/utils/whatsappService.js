@@ -32,7 +32,11 @@ export function buildWhatsAppInvoiceMessage(order, activeStore = null, customer 
     cleanPhone ||
     'Dear Customer';
 
-  const isReturn = Boolean(
+  const isExchange = Boolean(
+    order.is_exchange ||
+    (order.invoice_number && String(order.invoice_number).startsWith('EXC-'))
+  );
+  const isReturn = !isExchange && Boolean(
     order.is_return ||
     (order.invoice_number && String(order.invoice_number).startsWith('RET-')) ||
     order.return_reference ||
@@ -44,6 +48,16 @@ export function buildWhatsAppInvoiceMessage(order, activeStore = null, customer 
     order.items?.reduce((sum, it) => sum + (it.quantity || 1), 0) ||
     order.items?.length ||
     1;
+
+  if (isExchange) {
+    return (
+      `🔄 *${storeName.toUpperCase()} - EXCHANGE INVOICE*\n\n` +
+      `Hello *${custName}*,\n` +
+      `Your exchange order *#${invoiceNumber}* for *₹${grandTotalVal}* has been processed.\n` +
+      `Please find your detailed exchange invoice attached below.\n\n` +
+      `✨ *Thank you for shopping with ${storeName}!*`
+    );
+  }
 
   if (isReturn) {
     return (
@@ -114,13 +128,17 @@ export async function sendWhatsAppReceipt(order, activeStore = null, customer = 
     return false;
   }
 
-  const isReturn = Boolean(
+  const isExchange = Boolean(
+    order.is_exchange ||
+    (order.invoice_number && String(order.invoice_number).startsWith('EXC-'))
+  );
+  const isReturn = !isExchange && Boolean(
     order.is_return ||
     (order.invoice_number && String(order.invoice_number).startsWith('RET-')) ||
     order.return_reference ||
     order.status === 'refunded'
   );
-  const itemLabel = isReturn ? 'Return voucher' : 'Bill';
+  const itemLabel = isExchange ? 'Exchange bill' : isReturn ? 'Return voucher' : 'Bill';
 
   try {
     const res = await sendSaleOrderWhatsApp(order.id, cleanPhone, pdfBlob || null, forceResend);

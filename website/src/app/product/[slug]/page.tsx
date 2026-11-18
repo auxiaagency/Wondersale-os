@@ -39,6 +39,7 @@ import { WondersaleLogo } from "@/components/ui/WondersaleLogo";
 import { GlobalHeader } from "@/components/layout/GlobalHeader";
 import { StorefrontFooter } from "@/components/layout/StorefrontFooter";
 import { ProductCard } from "@/components/ui/ProductCard";
+import { StockLevelBar } from "@/components/ui/StockLevelBar";
 import { DEMO_PRODUCTS, getDemoProductBySlug } from "@/data/demo-products";
 
 interface SuggestedProduct {
@@ -397,7 +398,7 @@ function ProductDetailContent() {
             },
             {
               label: "Stock Status",
-              value: (p.quantity || 0) > 0 ? `${p.quantity} Units Available` : "Out of Stock",
+              value: (p.quantity || 0) > 0 ? ((p.quantity || 0) <= 3 ? "Very Low Stock" : (p.quantity || 0) <= 10 ? "Low Stock" : "In Stock") : "Out of Stock",
             },
             ...parsedSpecs,
           ];
@@ -423,7 +424,7 @@ function ProductDetailContent() {
               {
                 capacity: "Standard",
                 pricePaise: sellingPricePaise,
-                note: p.quantity > 0 ? `${p.quantity} in stock` : "Out of stock",
+                note: (p.quantity || 0) > 0 ? "In Stock" : "Out of Stock",
               },
             ],
             specs: finalSpecs,
@@ -618,9 +619,11 @@ function ProductDetailContent() {
       slug: product.slug,
       title: product.title,
       variantLabel: `Variant: ${selectedVariant?.capacity || "Standard"}`,
-      specNote: selectedVariant?.note || "In Stock",
+      specNote: undefined,
       mrpPaise: currentMrpPaise,
       sellingPricePaise: currentSellingPricePaise,
+      inStock: product.inStock,
+      stockCount: product.stockCount,
       badge: undefined,
       imageUrl: currentDisplayImage,
     });
@@ -634,9 +637,11 @@ function ProductDetailContent() {
       slug: product.slug,
       title: product.title,
       variantLabel: `Variant: ${selectedVariant?.capacity || "Standard"}`,
-      specNote: selectedVariant?.note || "In Stock",
+      specNote: undefined,
       mrpPaise: currentMrpPaise,
       sellingPricePaise: currentSellingPricePaise,
+      inStock: product.inStock,
+      stockCount: product.stockCount,
       badge: undefined,
       imageUrl: currentDisplayImage,
     });
@@ -814,11 +819,14 @@ function ProductDetailContent() {
                   <span className="text-xs font-bold text-[#680114] tracking-wider uppercase font-serif">
                     {product.brand}
                   </span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    product.inStock ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
-                  }`}>
-                    {product.inStock ? "In Stock" : "Out of Stock"}
-                  </span>
+                  <div className="w-44">
+                    <StockLevelBar
+                      inStock={product.inStock}
+                      stockCount={product.stockCount}
+                      size="sm"
+                      showLabel={true}
+                    />
+                  </div>
                 </div>
                 <h1 className="font-serif font-extrabold text-2xl lg:text-3xl text-[#680114] leading-snug">
                   {product.title}
@@ -980,6 +988,8 @@ function ProductDetailContent() {
                           title: sp.title,
                           sellingPricePaise: sp.sellingPricePaise,
                           mrpPaise: sp.mrpPaise,
+                          inStock: sp.inStock,
+                          stockCount: 10,
                           imageUrl: sp.imageUrl,
                         })
                       }
@@ -1263,12 +1273,13 @@ function ProductDetailContent() {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center gap-2 text-xs font-bold text-emerald-800 bg-[#EAF7EE] border-2 border-emerald-600/30 rounded-xl p-2.5">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
-              </span>
-              <span>{product.inStock ? "In Stock (Central Bhopal Store)" : "Out of Stock"}</span>
+            <div className="mt-3 bg-[#F6E9C8] border-2 border-[#680114] rounded-xl p-3">
+              <StockLevelBar
+                inStock={product.inStock}
+                stockCount={product.stockCount}
+                size="md"
+                showLabel={true}
+              />
             </div>
           </section>
 
@@ -1315,6 +1326,8 @@ function ProductDetailContent() {
                           title: sp.title,
                           sellingPricePaise: sp.sellingPricePaise,
                           mrpPaise: sp.mrpPaise,
+                          inStock: sp.inStock,
+                          stockCount: 10,
                           imageUrl: sp.imageUrl,
                         })
                       }
