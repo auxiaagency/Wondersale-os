@@ -3163,11 +3163,27 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
 
         since = self.request.query_params.get('since') or self.request.query_params.get('created_at__gte') or self.request.query_params.get('start_date')
         if since:
-            qs = qs.filter(created_at__gte=since)
+            since_str = str(since).strip()
+            if len(since_str) == 10:
+                qs = qs.filter(created_at__date__gte=since_str)
+            else:
+                dt = parse_filter_datetime(since_str)
+                if dt:
+                    qs = qs.filter(created_at__gte=dt)
+                else:
+                    qs = qs.filter(created_at__gte=since)
 
         until = self.request.query_params.get('until') or self.request.query_params.get('created_at__lte') or self.request.query_params.get('end_date')
         if until:
-            qs = qs.filter(created_at__lte=until)
+            until_str = str(until).strip()
+            if len(until_str) == 10:
+                qs = qs.filter(created_at__date__lte=until_str)
+            else:
+                dt = parse_filter_datetime(until_str)
+                if dt:
+                    qs = qs.filter(created_at__lte=dt)
+                else:
+                    qs = qs.filter(created_at__lte=until)
 
         phone = self.request.query_params.get('phone')
         if phone:

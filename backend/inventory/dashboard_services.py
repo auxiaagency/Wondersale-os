@@ -753,20 +753,25 @@ def get_product_analytics(item: Item, request=None):
         end_date_param = request.query_params.get('end_date') or request.query_params.get('until')
         store_id_param = request.query_params.get('store') or request.query_params.get('store_id')
         if start_date_param:
-            sale_qs = sale_qs.filter(sale_order__created_at__gte=start_date_param)
+            start_str = str(start_date_param).strip()
+            if len(start_str) == 10:
+                sale_qs = sale_qs.filter(sale_order__created_at__date__gte=start_str)
+            else:
+                sale_qs = sale_qs.filter(sale_order__created_at__gte=start_str)
             try:
                 from datetime import datetime as dt_cls
-                start_date = dt_cls.strptime(str(start_date_param)[:10], '%Y-%m-%d').date()
+                start_date = dt_cls.strptime(start_str[:10], '%Y-%m-%d').date()
             except Exception:
                 pass
         if end_date_param:
-            if len(str(end_date_param)) == 10:
-                sale_qs = sale_qs.filter(sale_order__created_at__lte=f"{end_date_param} 23:59:59")
+            end_str = str(end_date_param).strip()
+            if len(end_str) == 10:
+                sale_qs = sale_qs.filter(sale_order__created_at__date__lte=end_str)
             else:
-                sale_qs = sale_qs.filter(sale_order__created_at__lte=end_date_param)
+                sale_qs = sale_qs.filter(sale_order__created_at__lte=end_str)
             try:
                 from datetime import datetime as dt_cls
-                end_date = dt_cls.strptime(str(end_date_param)[:10], '%Y-%m-%d').date()
+                end_date = dt_cls.strptime(end_str[:10], '%Y-%m-%d').date()
             except Exception:
                 pass
         if store_id_param and store_id_param != 'all':
