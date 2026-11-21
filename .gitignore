@@ -1,5 +1,6 @@
 # Python & Django
 *.pyc
+*.whl
 __pycache__/
 *.pyo
 *.pyd

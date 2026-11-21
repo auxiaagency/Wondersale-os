@@ -3,6 +3,7 @@ import FinancialAnalysisDashboard from './FinancialAnalysisDashboard';
 import SalesInvoicesLedgerView from './SalesInvoicesLedgerView';
 import CounterPayoutsLedgerView from './CounterPayoutsLedgerView';
 import OwnerExpenseLedger from './OwnerExpenseLedger';
+import ProductReportView from './ProductReportView';
 import TimelineRangeSelector, { calculateDatesForDuration } from './TimelineRangeSelector';
 
 import {
@@ -44,6 +45,7 @@ import {
   Truck,
   Megaphone,
   Package,
+  PackageSearch,
   FileText,
   FileSpreadsheet,
   Layers,
@@ -448,6 +450,12 @@ export default function AccountsView({
                 ? 'Comprehensive monthly financial intelligence, sales contribution, expenses, and dual profit analysis.'
                 : activeTab === 'invoices_ledger'
                 ? 'Search, filter, sort, and inspect all customer sales orders and itemized tax invoice receipts.'
+                : activeTab === 'product_report'
+                ? 'Search any product to analyze sales performance, profit margins, inventory value, and itemized bill history.'
+                : activeTab === 'counter_payouts'
+                ? 'Audit and inspect all register cash payouts, counter expenses, and daily staff draws.'
+                : activeTab === 'owner_ledger'
+                ? 'Track owner expenses, purchases, supplier delivery outlays, and personal draw settlements.'
                 : 'Track monthly store overhead, rent, utility bills, maintenance, freight, and daily expenses.'}
             </p>
           </div>
@@ -914,6 +922,28 @@ export default function AccountsView({
           <CreditCard size={16} />
           Expense &amp; Delivery Ledger
         </button>
+
+        <button
+          onClick={() => setActiveTab('product_report')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 18px',
+            borderRadius: '9px',
+            border: 'none',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            backgroundColor: activeTab === 'product_report' ? '#10B981' : 'transparent',
+            color: activeTab === 'product_report' ? '#FFFFFF' : 'var(--text-secondary, #94A3B8)',
+            boxShadow: activeTab === 'product_report' ? '0 2px 10px rgba(16, 185, 129, 0.4)' : 'none',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <PackageSearch size={16} />
+          Product Report
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -923,6 +953,20 @@ export default function AccountsView({
         <OwnerExpenseLedger
           currentUser={currentUser}
           stores={stores}
+          timelineRange={masterTimelineRange}
+          onTimelineRangeChange={handleMasterTimelineRangeChange}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW: PRODUCT FINANCIAL & SALES REPORT                                    */}
+      {/* ========================================================================= */}
+      {activeTab === 'product_report' && (
+        <ProductReportView
+          stores={stores}
+          activeStoreId={activeStoreQueryString}
+          isCombined={isCombinedView}
+          currentUser={currentUser}
           timelineRange={masterTimelineRange}
           onTimelineRangeChange={handleMasterTimelineRangeChange}
         />

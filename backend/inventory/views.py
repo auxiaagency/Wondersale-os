@@ -3161,11 +3161,11 @@ class SaleOrderViewSet(viewsets.ModelViewSet):
         if cashier_id:
             qs = qs.filter(cashier_id=cashier_id)
 
-        since = self.request.query_params.get('since') or self.request.query_params.get('created_at__gte')
+        since = self.request.query_params.get('since') or self.request.query_params.get('created_at__gte') or self.request.query_params.get('start_date')
         if since:
             qs = qs.filter(created_at__gte=since)
 
-        until = self.request.query_params.get('created_at__lte')
+        until = self.request.query_params.get('until') or self.request.query_params.get('created_at__lte') or self.request.query_params.get('end_date')
         if until:
             qs = qs.filter(created_at__lte=until)
 

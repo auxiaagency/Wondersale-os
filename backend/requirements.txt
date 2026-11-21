@@ -29,7 +29,7 @@ numpy==2.5.3
 packageurl-python==0.17.6
 packaging==26.3
 pi_heif==1.4.0
-pillow==12.3.0
+pillow>=11.0.0
 pip-requirements-parser==32.0.1
 pip_api==0.0.35
 pip_audit==2.10.1

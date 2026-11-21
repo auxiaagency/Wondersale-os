@@ -744,10 +744,35 @@ def get_product_analytics(item: Item, request=None):
         })
 
     # 3. Sales Performance Aggregation
-    sale_items = list(SaleOrderItem.objects.filter(
+    sale_qs = SaleOrderItem.objects.filter(
         item=item,
         sale_order__status='completed'
-    ).select_related('sale_order', 'sale_order__cashier').order_by('sale_order__created_at'))
+    )
+    if request:
+        start_date_param = request.query_params.get('start_date') or request.query_params.get('since')
+        end_date_param = request.query_params.get('end_date') or request.query_params.get('until')
+        store_id_param = request.query_params.get('store') or request.query_params.get('store_id')
+        if start_date_param:
+            sale_qs = sale_qs.filter(sale_order__created_at__gte=start_date_param)
+            try:
+                from datetime import datetime as dt_cls
+                start_date = dt_cls.strptime(str(start_date_param)[:10], '%Y-%m-%d').date()
+            except Exception:
+                pass
+        if end_date_param:
+            if len(str(end_date_param)) == 10:
+                sale_qs = sale_qs.filter(sale_order__created_at__lte=f"{end_date_param} 23:59:59")
+            else:
+                sale_qs = sale_qs.filter(sale_order__created_at__lte=end_date_param)
+            try:
+                from datetime import datetime as dt_cls
+                end_date = dt_cls.strptime(str(end_date_param)[:10], '%Y-%m-%d').date()
+            except Exception:
+                pass
+        if store_id_param and store_id_param != 'all':
+            sale_qs = sale_qs.filter(sale_order__store_id=store_id_param)
+
+    sale_items = list(sale_qs.select_related('sale_order', 'sale_order__cashier').order_by('sale_order__created_at'))
 
     total_units_sold = 0
     total_revenue = Decimal('0.00')
