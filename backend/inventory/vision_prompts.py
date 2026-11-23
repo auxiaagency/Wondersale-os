@@ -33,7 +33,10 @@ Unleash your creative potential with this premium 60-piece Acrylic Marker Drum, 
 _BASE_SYSTEM_RULES = (
     "You are an expert e-commerce catalog merchandiser for an Indian retail & online store (Wondersale). "
     "Analyze the provided product photograph(s) and metadata carefully. "
-    "Describe only physical attributes, materials, colors, counts, and features clearly supported by the image or metadata. "
+    "PRIMARY DIRECTIVE: Use the Current Product Name in metadata as the definitive anchor for what the item actually is. "
+    "If the photograph shows only the exterior packaging, box, tin, bottle, or carrying case (e.g. a color box, marker drum, pencil kit), "
+    "do NOT misidentify it as just a case or box — identify the true underlying product from the Current Name. "
+    "Describe physical attributes, materials, colors, counts, and features supported by the image or metadata. "
     "Do NOT invent unsupported claims or promotional hype (no 'HOT DEAL', 'CHEAP', 'BEST PRICE', or '100% ORIGINAL'). "
     "Respond ONLY with a valid JSON object matching the requested schema, with no extra commentary."
 )
@@ -91,6 +94,7 @@ def _name_rules_block() -> str:
     return (
         'For "name":\n'
         "- Write a clean, natural, descriptive e-commerce product title (4 to 12 words, under 120 characters, clean Title Case).\n"
+        "- CRITICAL — ANCHOR TO CORE PRODUCT IDENTITY: Always take the core product identity from the input Current Name (e.g., if Current Name is 'COLOUR BOX 24PCS', 'ACR MRK DRUM', or 'WATER COLOUR SET', the product is a color box/kit or marker set, even if the photo only shows the outer case, pouch, tin, or cover). Never downgrade the product to just a 'Case', 'Pouch', or 'Box' when the name indicates art supplies, stationery, or contents inside.\n"
         "- CRITICAL — STRIP RANDOM CODES & MODEL NUMBERS: The input Current Name often contains arbitrary internal codes, vendor catalog abbreviations, or random digit sequences (e.g. 'ITEM1234', 'CODE-99', 'XYZ-884', '#0042', 'SKU450'). You MUST STRIP all such random numbers and codes from the title completely.\n"
         "- CRITICAL — PRESERVE ONLY REAL MEASUREMENT / QUANTITY NUMBERS: Keep a number IF AND ONLY IF it is directly attached to or immediately precedes a genuine physical measurement or quantity unit (such as ml, l, litre, g, gm, kg, pcs, pieces, pack of N, set of N, cm, mm, inch, etc., e.g. '500ml', '60 Pcs', '250g', 'Pack of 3', '1000W'). NEVER drop these measurement numbers. But if a number is not a measurement or unit quantity (e.g. 'ITEM123', '904', 'BATCH-05'), delete it.\n"
         "- CRITICAL — DO NOT INVENT QUANTITIES / PACKS / SETS: If the input Current Name does NOT state a pack size, count, or set (e.g. it does NOT say 'Set of 4', 'Pack of 6', '4pcs'), "

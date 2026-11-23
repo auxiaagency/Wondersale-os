@@ -682,6 +682,9 @@ You are an expert e-commerce catalog copywriter and retail merchandising special
 TASK:
 Analyze the provided product image and product metadata (name, category, price, MRP, etc.) and generate an informative, rich, high-converting, professional, and SEO-friendly e-commerce product description in clean Markdown.
 
+PRIMARY DIRECTIVE:
+Use the Product Title / Name in metadata as the primary anchor for what the item is. If the photo shows packaging, a case, or an outer box (such as a colour box, art kit, stationery set, watch case, or bottle tube), describe the actual product indicated by the name and category, not merely the outer container.
+
 TARGET LENGTH & STRUCTURE:
 - Target length: approx. 1,100 to 1,250 characters (approx. 170–220 words) to provide thorough, actionable customer insights.
 - STRICT LIMIT: The entire description MUST NOT exceed 1,500 characters total.
@@ -935,6 +938,9 @@ You are an expert e-commerce catalog specialist and brand merchandising editor.
 
 TASK:
 Analyze the provided product image and existing catalog details (such as current internal name, description notes, category, specifications) to generate an attractive, high-converting, professional, and SEO-optimized e-commerce Product Title for an online storefront.
+
+PRIMARY DIRECTIVE:
+Always anchor to the core product identity from the Current / Internal Name. If the photo displays packaging, a carrying box, tin, or outer case (for example, a colour box, paint set, marker kit, or grooming kit), do NOT mislabel it as just a "Case", "Cover", or "Box". Recognize the full product based on its name and category.
 
 NAMING CONVENTIONS & GUIDELINES:
 1. Product Title Formula:
