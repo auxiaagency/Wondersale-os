@@ -58,7 +58,8 @@ import {
   deleteSaleOrder,
 } from '../api';
 import CardLookupModal from './CardLookupModal';
-import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
+import TimelineRangeSelector from './TimelineRangeSelector';
+import { filterLogsByTimeRange } from './TimeRangeFilter';
 import { getVipSettings } from '../utils/vipSettings';
 import {
   connectRfidReader,
@@ -146,7 +147,7 @@ export default function CustomersView({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState(null);
   const [customerHistoryOrders, setCustomerHistoryOrders] = useState([]);
-  const [customerHistoryTimeFilter, setCustomerHistoryTimeFilter] = useState(null);
+  const [customerHistoryTimelineRange, setCustomerHistoryTimelineRange] = useState({ isAllTime: true });
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Receipt Preview / Print Modal
@@ -600,9 +601,17 @@ export default function CustomersView({
       }).catch(() => {});
 
       const params = {};
-      if (customerHistoryTimeFilter?.active) {
-        if (customerHistoryTimeFilter.startTime) params.start_time = customerHistoryTimeFilter.startTime;
-        if (customerHistoryTimeFilter.endTime) params.end_time = customerHistoryTimeFilter.endTime;
+      if (customerHistoryTimelineRange && !customerHistoryTimelineRange.isAllTime) {
+        if (customerHistoryTimelineRange.startDate) {
+          const s = new Date(customerHistoryTimelineRange.startDate);
+          s.setHours(0, 0, 0, 0);
+          params.start_time = s.toISOString();
+        }
+        if (customerHistoryTimelineRange.endDate) {
+          const e = new Date(customerHistoryTimelineRange.endDate);
+          e.setHours(23, 59, 59, 999);
+          params.end_time = e.toISOString();
+        }
       }
       const orders = await getCustomerHistory(cust.id, params);
       setCustomerHistoryOrders(Array.isArray(orders) ? orders : []);
@@ -618,7 +627,7 @@ export default function CustomersView({
     if (isHistoryOpen && selectedCustomerForHistory) {
       handleViewHistory(selectedCustomerForHistory);
     }
-  }, [customerHistoryTimeFilter]);
+  }, [customerHistoryTimelineRange]);
 
   // ---------------- Receipt & WhatsApp Actions for Customer Invoices ----------------
 
@@ -2312,10 +2321,12 @@ export default function CustomersView({
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <TimeRangeFilter
+                <TimelineRangeSelector
                   compact={true}
-                  filterState={customerHistoryTimeFilter}
-                  onFilterChange={setCustomerHistoryTimeFilter}
+                  showXAxis={false}
+                  allowAllTime={true}
+                  value={customerHistoryTimelineRange}
+                  onChange={setCustomerHistoryTimelineRange}
                 />
                 <button
                   type="button"
@@ -2334,8 +2345,8 @@ export default function CustomersView({
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   Loading customer bills...
                 </div>
-              ) : filterLogsByTimeRange(customerHistoryOrders, customerHistoryTimeFilter, ['created_at']).length > 0 ? (
-                filterLogsByTimeRange(customerHistoryOrders, customerHistoryTimeFilter, ['created_at']).map((order) => {
+              ) : filterLogsByTimeRange(customerHistoryOrders, customerHistoryTimelineRange, ['created_at']).length > 0 ? (
+                filterLogsByTimeRange(customerHistoryOrders, customerHistoryTimelineRange, ['created_at']).map((order) => {
                   const isExchange = Boolean(
                     order.is_exchange ||
                     (order.invoice_number && order.invoice_number.startsWith('EXC-'))

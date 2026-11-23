@@ -73,7 +73,8 @@ import {
   updateOrderCustomer,
   lookupSaleOrderForReturn,
 } from '../api';
-import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
+import TimelineRangeSelector from './TimelineRangeSelector';
+import { filterLogsByTimeRange } from './TimeRangeFilter';
 import ProductReturnModal from './ProductReturnModal';
 import HistoricalBillMigrationModal from './HistoricalBillMigrationModal';
 import VariantSelectionModal from './VariantSelectionModal';
@@ -224,9 +225,9 @@ export default function BillingView({
   // Active Shift Cashier Billing Records State
   const [shiftBillingOrders, setShiftBillingOrders] = useState([]);
   const [loadingShiftOrders, setLoadingShiftOrders] = useState(false);
-  const [shiftBillsTimeFilter, setShiftBillsTimeFilter] = useState(null);
-  const [payoutsTimeFilter, setPayoutsTimeFilter] = useState(null);
-  const [shiftsHistoryTimeFilter, setShiftsHistoryTimeFilter] = useState(null);
+  const [shiftBillsTimelineRange, setShiftBillsTimelineRange] = useState({ isAllTime: true });
+  const [payoutsTimelineRange, setPayoutsTimelineRange] = useState({ isAllTime: true });
+  const [shiftsHistoryTimelineRange, setShiftsHistoryTimelineRange] = useState({ isAllTime: true });
   const [editingOrderForPayment, setEditingOrderForPayment] = useState(null);
   const [editCustomerPhone, setEditCustomerPhone] = useState('');
   const [editCustomerName, setEditCustomerName] = useState('');
@@ -1210,9 +1211,17 @@ export default function BillingView({
     try {
       const params = {};
       if (activeStore?.id) params.store = activeStore.id;
-      if (payoutsTimeFilter?.active) {
-        if (payoutsTimeFilter.startTime) params.start_time = payoutsTimeFilter.startTime;
-        if (payoutsTimeFilter.endTime) params.end_time = payoutsTimeFilter.endTime;
+      if (payoutsTimelineRange && !payoutsTimelineRange.isAllTime) {
+        if (payoutsTimelineRange.startDate) {
+          const s = new Date(payoutsTimelineRange.startDate);
+          s.setHours(0, 0, 0, 0);
+          params.start_time = s.toISOString();
+        }
+        if (payoutsTimelineRange.endDate) {
+          const e = new Date(payoutsTimelineRange.endDate);
+          e.setHours(23, 59, 59, 999);
+          params.end_time = e.toISOString();
+        }
       }
       const data = await getCounterPayouts(params);
       const list = Array.isArray(data) ? data : data.results || [];
@@ -1228,7 +1237,7 @@ export default function BillingView({
     if (isPayoutModalOpen) {
       loadRecentPayouts();
     }
-  }, [payoutsTimeFilter]);
+  }, [payoutsTimelineRange]);
 
   const handleSubmitPayout = async (e) => {
     e.preventDefault();
@@ -1561,9 +1570,17 @@ export default function BillingView({
       const storeId = activeStore?.id || effectiveStoreId;
       const params = {};
       if (storeId) params.store = storeId;
-      if (shiftsHistoryTimeFilter?.active) {
-        if (shiftsHistoryTimeFilter.startTime) params.start_time = shiftsHistoryTimeFilter.startTime;
-        if (shiftsHistoryTimeFilter.endTime) params.end_time = shiftsHistoryTimeFilter.endTime;
+      if (shiftsHistoryTimelineRange && !shiftsHistoryTimelineRange.isAllTime) {
+        if (shiftsHistoryTimelineRange.startDate) {
+          const s = new Date(shiftsHistoryTimelineRange.startDate);
+          s.setHours(0, 0, 0, 0);
+          params.start_time = s.toISOString();
+        }
+        if (shiftsHistoryTimelineRange.endDate) {
+          const e = new Date(shiftsHistoryTimelineRange.endDate);
+          e.setHours(23, 59, 59, 999);
+          params.end_time = e.toISOString();
+        }
       }
       const data = await getRegisterShifts(params);
       const list = Array.isArray(data) ? data : data.results || [];
@@ -1579,7 +1596,7 @@ export default function BillingView({
     if (isRegisterModalOpen && showRegisterHistory) {
       loadRegisterHistory();
     }
-  }, [shiftsHistoryTimeFilter]);
+  }, [shiftsHistoryTimelineRange]);
 
   const handleOpenRegisterModal = () => {
     setOpeningCashInput('');
@@ -5613,10 +5630,12 @@ export default function BillingView({
               </strong>
             </div>
 
-            <TimeRangeFilter
+            <TimelineRangeSelector
               compact={true}
-              filterState={shiftBillsTimeFilter}
-              onFilterChange={setShiftBillsTimeFilter}
+              showXAxis={false}
+              allowAllTime={true}
+              value={shiftBillsTimelineRange}
+              onChange={setShiftBillsTimelineRange}
             />
 
             <button
@@ -5708,19 +5727,19 @@ export default function BillingView({
                     </div>
                   </td>
                 </tr>
-              ) : filterLogsByTimeRange(shiftBillingOrders, shiftBillsTimeFilter, ['created_at']).length === 0 ? (
+              ) : filterLogsByTimeRange(shiftBillingOrders, shiftBillsTimelineRange, ['created_at']).length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
                     <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '2px' }}>
                       No bills found matching selected time range
                     </div>
                     <div style={{ fontSize: '0.78rem' }}>
-                      Adjust the time window or click Clear on the time filter.
+                      Adjust the time window or click All Time on the range selector.
                     </div>
                   </td>
                 </tr>
               ) : (
-                filterLogsByTimeRange(shiftBillingOrders, shiftBillsTimeFilter, ['created_at']).map((order) => {
+                filterLogsByTimeRange(shiftBillingOrders, shiftBillsTimelineRange, ['created_at']).map((order) => {
                   const isExchange = Boolean(
                     order.is_exchange ||
                     (order.invoice_number && order.invoice_number.startsWith('EXC-'))
@@ -8480,10 +8499,12 @@ export default function BillingView({
                         style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '34px', fontSize: '0.82rem' }}
                       />
                     </div>
-                    <TimeRangeFilter
+                    <TimelineRangeSelector
                       compact={true}
-                      filterState={payoutsTimeFilter}
-                      onFilterChange={setPayoutsTimeFilter}
+                      showXAxis={false}
+                      allowAllTime={true}
+                      value={payoutsTimelineRange}
+                      onChange={setPayoutsTimelineRange}
                     />
                     <button
                       type="button"
@@ -8510,7 +8531,7 @@ export default function BillingView({
                         </tr>
                       </thead>
                       <tbody>
-                        {filterLogsByTimeRange(payoutsList, payoutsTimeFilter, ['paid_at', 'created_at'])
+                        {filterLogsByTimeRange(payoutsList, payoutsTimelineRange, ['paid_at', 'created_at'])
                           .filter((p) => {
                             if (!payoutSearchQuery.trim()) return true;
                             const q = payoutSearchQuery.toLowerCase();
@@ -8954,10 +8975,12 @@ export default function BillingView({
                       Shift Audit History
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <TimeRangeFilter
+                      <TimelineRangeSelector
                         compact={true}
-                        filterState={shiftsHistoryTimeFilter}
-                        onFilterChange={setShiftsHistoryTimeFilter}
+                        showXAxis={false}
+                        allowAllTime={true}
+                        value={shiftsHistoryTimelineRange}
+                        onChange={setShiftsHistoryTimelineRange}
                       />
                       <button
                         type="button"
@@ -8994,7 +9017,7 @@ export default function BillingView({
                         </tr>
                       </thead>
                       <tbody>
-                        {filterLogsByTimeRange(registerHistoryList, shiftsHistoryTimeFilter, ['opened_at', 'closed_at']).map((shift) => {
+                        {filterLogsByTimeRange(registerHistoryList, shiftsHistoryTimelineRange, ['opened_at', 'closed_at']).map((shift) => {
                           const diff = parseFloat(shift.cash_difference || 0);
                           const isClosed = shift.status === 'closed';
 

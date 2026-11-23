@@ -51,19 +51,68 @@ function toLocalTimeString(date) {
  * Utility: Checks if an ISO timestamp or date falls within the active filter window.
  */
 export function isWithinTimeRange(itemTimestamp, filterState) {
-  if (!filterState || !filterState.active) return true;
+  if (!filterState) return true;
+  if (filterState.isAllTime) return true;
+  if (!filterState.active && filterState.active !== undefined) return true;
   if (!itemTimestamp) return false;
 
   try {
     const t = new Date(itemTimestamp).getTime();
     if (isNaN(t)) return true;
-    const { startTimestamp, endTimestamp } = filterState;
+    const { startTimestamp, endTimestamp, startDate, endDate } = filterState;
     if (startTimestamp && t < startTimestamp) return false;
     if (endTimestamp && t > endTimestamp) return false;
+    if (!startTimestamp && startDate) {
+      const s = new Date(startDate).setHours(0, 0, 0, 0);
+      if (t < s) return false;
+    }
+    if (!endTimestamp && endDate) {
+      const e = new Date(endDate).setHours(23, 59, 59, 999);
+      if (t > e) return false;
+    }
     return true;
   } catch (e) {
     return true;
   }
+}
+
+/**
+ * Helper to convert TimelineRangeSelector value to log filterState
+ */
+export function timelineRangeToFilterState(range) {
+  if (!range || range.isAllTime) {
+    return {
+      active: false,
+      isAllTime: true,
+      startDate: null,
+      endDate: null,
+      startTimestamp: null,
+      endTimestamp: null,
+      startTime: null,
+      endTime: null,
+      from_date: null,
+      to_date: null,
+    };
+  }
+
+  const s = range.startDate ? new Date(range.startDate) : null;
+  const e = range.endDate ? new Date(range.endDate) : null;
+
+  if (s) s.setHours(0, 0, 0, 0);
+  if (e) e.setHours(23, 59, 59, 999);
+
+  return {
+    active: true,
+    isAllTime: false,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    startTimestamp: s ? s.getTime() : null,
+    endTimestamp: e ? e.getTime() : null,
+    startTime: s ? s.toISOString() : null,
+    endTime: e ? e.toISOString() : null,
+    from_date: range.startDate,
+    to_date: range.endDate,
+  };
 }
 
 /**

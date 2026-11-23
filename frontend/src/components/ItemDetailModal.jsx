@@ -50,7 +50,8 @@ import {
 } from '../api';
 import { Skeleton } from './Skeleton';
 import CategorySubcategoryPicker from './CategorySubcategoryPicker';
-import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
+import TimelineRangeSelector from './TimelineRangeSelector';
+import { filterLogsByTimeRange } from './TimeRangeFilter';
 import ImageCropModal from './ImageCropModal';
 import BrokenItemModal from './BrokenItemModal';
 import { calculateVolumeMetrics } from './ItemTable';
@@ -123,7 +124,7 @@ export default function ItemDetailModal({
   // Stock movements ledger
   const [movements, setMovements] = useState([]);
   const [loadingLedger, setLoadingLedger] = useState(false);
-  const [ledgerTimeFilter, setLedgerTimeFilter] = useState(null);
+  const [ledgerTimelineRange, setLedgerTimelineRange] = useState({ isAllTime: true });
 
   // Status
   const [saving, setSaving] = useState(false);
@@ -315,7 +316,7 @@ export default function ItemDetailModal({
     if (activeTab === 'ledger' && item) {
       loadLedger();
     }
-  }, [activeTab, item, ledgerTimeFilter]);
+  }, [activeTab, item, ledgerTimelineRange]);
 
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerPageSize, setLedgerPageSize] = useState(15);
@@ -324,9 +325,17 @@ export default function ItemDetailModal({
     setLoadingLedger(true);
     try {
       const params = {};
-      if (ledgerTimeFilter?.active) {
-        if (ledgerTimeFilter.from_date) params.from_date = ledgerTimeFilter.from_date;
-        if (ledgerTimeFilter.to_date) params.to_date = ledgerTimeFilter.to_date;
+      if (ledgerTimelineRange && !ledgerTimelineRange.isAllTime) {
+        if (ledgerTimelineRange.startDate) {
+          const s = new Date(ledgerTimelineRange.startDate);
+          s.setHours(0, 0, 0, 0);
+          params.start_time = s.toISOString();
+        }
+        if (ledgerTimelineRange.endDate) {
+          const e = new Date(ledgerTimelineRange.endDate);
+          e.setHours(23, 59, 59, 999);
+          params.end_time = e.toISOString();
+        }
       }
       const data = await fetchStockMovements(item.id, params);
       const list = Array.isArray(data) ? data : (data?.results || []);
@@ -341,8 +350,8 @@ export default function ItemDetailModal({
   };
 
   const filteredLedgerMovements = React.useMemo(() => {
-    return filterLogsByTimeRange(movements, ledgerTimeFilter, ['created_at']);
-  }, [movements, ledgerTimeFilter]);
+    return filterLogsByTimeRange(movements, ledgerTimelineRange, ['created_at']);
+  }, [movements, ledgerTimelineRange]);
 
   const ledgerTotalPages = Math.max(1, Math.ceil(filteredLedgerMovements.length / ledgerPageSize));
   const paginatedLedgerMovements = React.useMemo(() => {
@@ -1540,10 +1549,12 @@ export default function ItemDetailModal({
                 </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <TimeRangeFilter
+                <TimelineRangeSelector
                   compact={true}
-                  filterState={ledgerTimeFilter}
-                  onFilterChange={setLedgerTimeFilter}
+                  showXAxis={false}
+                  allowAllTime={true}
+                  value={ledgerTimelineRange}
+                  onChange={setLedgerTimelineRange}
                 />
                 <button
                   type="button"
@@ -1591,7 +1602,7 @@ export default function ItemDetailModal({
               </div>
             ) : filteredLedgerMovements.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                {ledgerTimeFilter?.active
+                {!ledgerTimelineRange?.isAllTime
                   ? 'No stock movements logged for this product within the selected time range.'
                   : 'No stock movements logged for this product.'}
               </div>

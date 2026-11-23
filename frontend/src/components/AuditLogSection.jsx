@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { fetchAllStockMovements, fetchStockMovementsSummary, fetchEmployees } from '../api';
 import { SkeletonAuditRows } from './Skeleton';
-import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
+import TimelineRangeSelector from './TimelineRangeSelector';
 
 const REASON_METAS = {
   initial_import: { label: 'Initial Import', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.14)', icon: Package },
@@ -134,8 +134,7 @@ export default function AuditLogSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
   const [staffFilter, setStaffFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', '7days', '30days'
-  const [timeFilter, setTimeFilter] = useState(null);
+  const [timelineRange, setTimelineRange] = useState({ isAllTime: true });
   const [filterStoreId, setFilterStoreId] = useState(selectedStore || '');
 
   // Keep store filter in sync if active session store changes
@@ -151,24 +150,20 @@ export default function AuditLogSection({
     if (reasonFilter) params.reason = reasonFilter;
     if (staffFilter) params.staff = staffFilter;
     if (filterStoreId) params.store = filterStoreId;
-    if (timeFilter?.active) {
-      if (timeFilter.startTime) params.start_time = timeFilter.startTime;
-      if (timeFilter.endTime) params.end_time = timeFilter.endTime;
-    } else if (dateFilter !== 'all') {
-      const now = new Date();
-      if (dateFilter === 'today') {
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        params.start_time = startOfDay.toISOString();
-      } else if (dateFilter === '7days') {
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        params.start_time = sevenDaysAgo.toISOString();
-      } else if (dateFilter === '30days') {
-        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        params.start_time = thirtyDaysAgo.toISOString();
+    if (timelineRange && !timelineRange.isAllTime) {
+      if (timelineRange.startDate) {
+        const s = new Date(timelineRange.startDate);
+        s.setHours(0, 0, 0, 0);
+        params.start_time = s.toISOString();
+      }
+      if (timelineRange.endDate) {
+        const e = new Date(timelineRange.endDate);
+        e.setHours(23, 59, 59, 999);
+        params.end_time = e.toISOString();
       }
     }
     return params;
-  }, [searchQuery, reasonFilter, staffFilter, filterStoreId, timeFilter, dateFilter]);
+  }, [searchQuery, reasonFilter, staffFilter, filterStoreId, timelineRange]);
 
   const loadMovements = useCallback(async (targetPage = auditPage) => {
     setLoading(true);
@@ -712,28 +707,15 @@ export default function AuditLogSection({
           </div>
         )}
 
-        {/* Exact Time & Range Filter */}
-        <TimeRangeFilter
-          filterState={timeFilter}
-          onFilterChange={(st) => {
-            setTimeFilter(st);
-            if (st?.active) setDateFilter('all');
-          }}
-        />
-
-        {/* Date Filter */}
-        <div className="audit-filter-item" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="form-select audit-filter-select"
-            style={{ height: '38px', fontSize: '0.84rem', minWidth: '130px' }}
-          >
-            <option value="all">All Time</option>
-            <option value="today">Today (Last 24h)</option>
-            <option value="7days">Last 7 Days</option>
-            <option value="30days">Last 30 Days</option>
-          </select>
+        {/* Universal Timeline Range Filter (No X-Axis) */}
+        <div className="audit-filter-item" style={{ display: 'flex', alignItems: 'center' }}>
+          <TimelineRangeSelector
+            compact={true}
+            showXAxis={false}
+            allowAllTime={true}
+            value={timelineRange}
+            onChange={setTimelineRange}
+          />
         </div>
 
         {/* Store Location Filter (for owner) */}

@@ -38,7 +38,8 @@ import {
   recordStakeholderPayout,
   getStakeholderPayouts,
 } from '../api';
-import TimeRangeFilter, { filterLogsByTimeRange } from './TimeRangeFilter';
+import TimelineRangeSelector from './TimelineRangeSelector';
+import { filterLogsByTimeRange } from './TimeRangeFilter';
 import { calculatePointChange } from '../utils/chartChangeHelper';
 
 const TIMELINE_PRESETS = [
@@ -167,7 +168,7 @@ export default function StakeholdersView({
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [stakeholderForHistory, setStakeholderForHistory] = useState(null);
   const [payoutHistoryList, setPayoutHistoryList] = useState([]);
-  const [historyTimeFilter, setHistoryTimeFilter] = useState(null);
+  const [historyTimelineRange, setHistoryTimelineRange] = useState({ isAllTime: true });
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const showNotification = (type, message) => {
@@ -358,9 +359,17 @@ export default function StakeholdersView({
 
     try {
       const params = {};
-      if (historyTimeFilter?.active) {
-        if (historyTimeFilter.startTime) params.start_time = historyTimeFilter.startTime;
-        if (historyTimeFilter.endTime) params.end_time = historyTimeFilter.endTime;
+      if (historyTimelineRange && !historyTimelineRange.isAllTime) {
+        if (historyTimelineRange.startDate) {
+          const s = new Date(historyTimelineRange.startDate);
+          s.setHours(0, 0, 0, 0);
+          params.start_time = s.toISOString();
+        }
+        if (historyTimelineRange.endDate) {
+          const e = new Date(historyTimelineRange.endDate);
+          e.setHours(23, 59, 59, 999);
+          params.end_time = e.toISOString();
+        }
       }
       const history = await getStakeholderPayouts(s.id, params);
       setPayoutHistoryList(Array.isArray(history) ? history : []);
@@ -375,7 +384,7 @@ export default function StakeholdersView({
     if (isHistoryModalOpen && stakeholderForHistory) {
       handleViewHistory(stakeholderForHistory);
     }
-  }, [historyTimeFilter]);
+  }, [historyTimelineRange]);
 
   const filteredStakeholders = useMemo(() => {
     return stakeholders.filter((s) => {
@@ -2614,10 +2623,12 @@ export default function StakeholdersView({
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <TimeRangeFilter
+                <TimelineRangeSelector
                   compact={true}
-                  filterState={historyTimeFilter}
-                  onFilterChange={setHistoryTimeFilter}
+                  showXAxis={false}
+                  allowAllTime={true}
+                  value={historyTimelineRange}
+                  onChange={setHistoryTimelineRange}
                 />
                 <button
                   type="button"
@@ -2635,9 +2646,9 @@ export default function StakeholdersView({
                 <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                   Loading transaction history...
                 </div>
-              ) : filterLogsByTimeRange(payoutHistoryList, historyTimeFilter, ['payout_date', 'created_at']).length > 0 ? (
+              ) : filterLogsByTimeRange(payoutHistoryList, historyTimelineRange, ['payout_date', 'created_at']).length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {filterLogsByTimeRange(payoutHistoryList, historyTimeFilter, ['payout_date', 'created_at']).map((p) => (
+                  {filterLogsByTimeRange(payoutHistoryList, historyTimelineRange, ['payout_date', 'created_at']).map((p) => (
                     <div
                       key={p.id}
                       style={{

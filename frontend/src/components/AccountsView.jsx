@@ -14,7 +14,7 @@ import {
   deleteOperatingExpense,
   fetchStores,
 } from '../api';
-import TimeRangeFilter, { filterLogsByTimeRange, isWithinTimeRange } from './TimeRangeFilter';
+import { filterLogsByTimeRange, isWithinTimeRange } from './TimeRangeFilter';
 import { playVipAcceptedSound, playVipRejectedSound } from '../utils/vipCardSounds';
 import {
   DollarSign,
@@ -273,7 +273,7 @@ export default function AccountsView({
   const [expenseSearchQuery, setExpenseSearchQuery] = useState('');
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('all');
   const [expensePaymentMethodFilter, setExpensePaymentMethodFilter] = useState('all');
-  const [expenseTimeFilter, setExpenseTimeFilter] = useState(null);
+  const [expenseTimelineRange, setExpenseTimelineRange] = useState({ isAllTime: true });
 
   // Operating Expense Modals state
   const [addExpenseModalOpen, setAddExpenseModalOpen] = useState(false);
@@ -299,9 +299,17 @@ export default function AccountsView({
         params.month = selectedMonth;
       }
 
-      if (expenseTimeFilter?.active) {
-        if (expenseTimeFilter.startTime) params.start_time = expenseTimeFilter.startTime;
-        if (expenseTimeFilter.endTime) params.end_time = expenseTimeFilter.endTime;
+      if (expenseTimelineRange && !expenseTimelineRange.isAllTime) {
+        if (expenseTimelineRange.startDate) {
+          const s = new Date(expenseTimelineRange.startDate);
+          s.setHours(0, 0, 0, 0);
+          params.start_time = s.toISOString();
+        }
+        if (expenseTimelineRange.endDate) {
+          const e = new Date(expenseTimelineRange.endDate);
+          e.setHours(23, 59, 59, 999);
+          params.end_time = e.toISOString();
+        }
       }
 
       const summaryParams = {
@@ -327,7 +335,7 @@ export default function AccountsView({
     } finally {
       setExpenseLoading(false);
     }
-  }, [activeStoreQueryString, masterTimelineRange, selectedYear, selectedMonth, expenseCategoryFilter, expensePaymentMethodFilter, expenseSearchQuery, expenseTimeFilter, showToast]);
+  }, [activeStoreQueryString, masterTimelineRange, selectedYear, selectedMonth, expenseCategoryFilter, expensePaymentMethodFilter, expenseSearchQuery, expenseTimelineRange, showToast]);
 
   // Load data - only fetch operating expenses when on the operating_expenses tab
   useEffect(() => {
@@ -338,14 +346,14 @@ export default function AccountsView({
 
   // Derived filtered expenses based on time filter
   const displayedExpenses = useMemo(() => {
-    if (!expenseTimeFilter || !expenseTimeFilter.active) {
+    if (!expenseTimelineRange || expenseTimelineRange.isAllTime) {
       return expenses;
     }
     return expenses.filter((item) => {
       const timeStr = item.created_at || item.expense_date;
-      return isWithinTimeRange(timeStr, expenseTimeFilter);
+      return isWithinTimeRange(timeStr, expenseTimelineRange);
     });
-  }, [expenses, expenseTimeFilter]);
+  }, [expenses, expenseTimelineRange]);
 
 
 
@@ -1305,10 +1313,12 @@ export default function AccountsView({
                   </select>
                 </div>
 
-                <TimeRangeFilter
+                <TimelineRangeSelector
                   compact={true}
-                  filterState={expenseTimeFilter}
-                  onFilterChange={setExpenseTimeFilter}
+                  showXAxis={false}
+                  allowAllTime={true}
+                  value={expenseTimelineRange}
+                  onChange={setExpenseTimelineRange}
                 />
               </div>
             </div>
@@ -1340,16 +1350,16 @@ export default function AccountsView({
                       <td colSpan={7} style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-secondary, #94A3B8)' }}>
                         <Receipt size={36} color="var(--text-muted, #64748B)" style={{ margin: '0 auto 12px' }} />
                         <div style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary, #F8FAFC)', marginBottom: '4px' }}>
-                          {expenseTimeFilter?.active
+                          {!expenseTimelineRange?.isAllTime
                             ? 'No expenses found matching the selected time range'
                             : 'No operating expenses found'}
                         </div>
                         <div style={{ fontSize: '0.82rem', maxWidth: '380px', margin: '0 auto 16px auto' }}>
-                          {expenseTimeFilter?.active
+                          {!expenseTimelineRange?.isAllTime
                             ? 'Adjust the time range or clear the time filter to see all recorded expenses.'
                             : 'Record store overhead, rent, electricity, freight, or refreshments using the "Add Expense" button above.'}
                         </div>
-                        {!expenseTimeFilter?.active && (
+                        {expenseTimelineRange?.isAllTime && (
                           <button
                             type="button"
                             onClick={() => setAddExpenseModalOpen(true)}
