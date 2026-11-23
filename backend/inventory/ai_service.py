@@ -703,6 +703,7 @@ STRUCTURE OF OUTPUT (CLEAN MARKDOWN):
 RULES:
 - Do NOT output preamble, conversational remarks, or code fences (e.g. do not write ```markdown).
 - Output ONLY the markdown description.
+- Strip any arbitrary internal codes, random model numbers, or vendor tags found in the input name; do not repeat them in the description.
 - Keep the entire output informative, complete, and strictly under 1,500 characters.
 """
 
@@ -939,16 +940,20 @@ NAMING CONVENTIONS & GUIDELINES:
 1. Product Title Formula:
    [Brand / Brand Style if evident] + [Core Product Identity] + [Key Defining Features / Materials / Color / Variant] + [Pack / Size / Net Qty if applicable]
    - Example (messy name "BLU DEN JKT" or "jacket 42"): "Men's Classic Slim-Fit Denim Jacket with Washed Finish"
-   - Example (messy name "BOTTLE-750"): "Stainless Steel Double-Wall Vacuum Insulated Water Bottle (750ml)"
-   - Example (messy name "CUSH CV 2P"): "Boho Tufted Cotton Decorative Cushion Covers (Pack of 2)"
-   - Example (messy name "KIDS TOY CAR"): "Die-Cast Pull-Back Racing Toy Car with Light & Sound Effects"
+   - Example (messy name "BOTTLE-750ML CODE123"): "Stainless Steel Double-Wall Vacuum Insulated Water Bottle (750ml)"
+   - Example (messy name "CUSH CV 2P SKU99"): "Boho Tufted Cotton Decorative Cushion Covers (Pack of 2)"
+   - Example (messy name "KIDS TOY CAR 404"): "Die-Cast Pull-Back Racing Toy Car with Light & Sound Effects"
 
-2. Upgrading Weak Names:
+2. Removing Random Codes & Model Numbers:
+   - Input names often contain arbitrary internal product codes, SKU sequences, or random numbers (e.g. 'ITEM123', 'PROD-404', '884', '#002'). You MUST completely STRIP these random codes.
+   - PRESERVE ONLY REAL MEASUREMENT / QUANTITY NUMBERS: A number must only be retained if it directly belongs to a genuine physical specification or measurement unit (e.g. 500ml, 750ml, 1L, 250g, 1kg, 60 Pcs, Pack of 3, Size L, 55cm, 1000W). If a number is just an arbitrary tag or barcode piece without a physical unit, remove it.
+
+3. Upgrading Weak Names:
    - Expand shorthand abbreviations, vendor catalog codes, smudged OCR artifacts, or vague 1-word names.
    - Look at the actual photo: verify visible color, pattern, material (wood, ceramic, cotton, leather, steel), utility, and silhouette.
    - If existing description notes or category provide helpful context, utilize them.
 
-3. Conciseness & Clarity:
+4. Conciseness & Clarity:
    - Target length: 4 to 12 words (approx. 35 to 80 characters, strictly maximum 120 characters).
    - Natural, clean title case (e.g. "Wireless Bluetooth Over-Ear Headphones with Deep Bass").
    - Do NOT include promotional gimmicks (no "HOT DEAL", "CHEAP", "BEST PRICE", "100% ORIGINAL").
@@ -995,6 +1000,10 @@ def generate_product_name(
     meta_text = ""
     if current_name:
         meta_text += f"Current / Internal Name: {current_name}\n"
+        from .vision_prompts import extract_spec_tokens
+        specs = extract_spec_tokens(current_name)
+        if specs:
+            meta_text += f"Detected Quantity / Size Specs: {', '.join(specs)}\n"
     if category_name:
         meta_text += f"Category: {category_name}\n"
     if subcategory_name:

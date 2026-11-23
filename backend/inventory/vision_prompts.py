@@ -52,7 +52,10 @@ def _format_item_context(item_data: Dict[str, Any]) -> str:
     variant_names = item_data.get("variant_names") or []
 
     if name:
-        lines.append(f"Original Name: {name}")
+        lines.append(f"Current Name: {name}")
+        specs = extract_spec_tokens(name)
+        if specs:
+            lines.append(f"Detected Quantity / Size Specs: {', '.join(specs)}")
     if category_name or subcategory_name:
         cat_display = " / ".join([p for p in (category_name, subcategory_name) if p])
         lines.append(f"Category & Subcategory: {cat_display}")
@@ -87,13 +90,12 @@ def _format_item_context(item_data: Dict[str, Any]) -> str:
 def _name_rules_block() -> str:
     return (
         'For "name":\n'
-        "- Write a simple, clear, descriptive e-commerce product title (4 to 12 words, under 120 characters, clean Title Case).\n"
-        "- Expand shorthand codes/abbreviations using visual evidence from the photo (material, color, style, product type).\n"
-        "- CRITICAL — Spec Preservation: Preserve any original quantity, piece count, pack size, volume, weight, and dimension. "
-        "Keep all exact quantities, sizes, weights, and capacities from Original Name (e.g., 60pcs, 500ml, 12-inch, Size L, Pack of 3) in the new name. Never drop them.\n"
-        "- CRITICAL — DO NOT INVENT QUANTITIES / PACKS / SETS: If Original Name does NOT state a pack size, count, or set (e.g. it does NOT say 'Set of 4', 'Pack of 6', '4pcs'), "
+        "- Write a clean, natural, descriptive e-commerce product title (4 to 12 words, under 120 characters, clean Title Case).\n"
+        "- CRITICAL — STRIP RANDOM CODES & MODEL NUMBERS: The input Current Name often contains arbitrary internal codes, vendor catalog abbreviations, or random digit sequences (e.g. 'ITEM1234', 'CODE-99', 'XYZ-884', '#0042', 'SKU450'). You MUST STRIP all such random numbers and codes from the title completely.\n"
+        "- CRITICAL — PRESERVE ONLY REAL MEASUREMENT / QUANTITY NUMBERS: Keep a number IF AND ONLY IF it is directly attached to or immediately precedes a genuine physical measurement or quantity unit (such as ml, l, litre, g, gm, kg, pcs, pieces, pack of N, set of N, cm, mm, inch, etc., e.g. '500ml', '60 Pcs', '250g', 'Pack of 3', '1000W'). NEVER drop these measurement numbers. But if a number is not a measurement or unit quantity (e.g. 'ITEM123', '904', 'BATCH-05'), delete it.\n"
+        "- CRITICAL — DO NOT INVENT QUANTITIES / PACKS / SETS: If the input Current Name does NOT state a pack size, count, or set (e.g. it does NOT say 'Set of 4', 'Pack of 6', '4pcs'), "
         "you MUST NEVER invent or add 'Set of N', 'Pack of N', 'N Pcs', or 'N Pieces' to the product name. "
-        "Even if the photo shows multiple items or pieces, they are solely design/variant references for a single unit. Never count items in the photo to create a set title unless Original Name explicitly specifies it.\n"
+        "Even if the photo shows multiple items or pieces, they are solely design/variant references for a single unit. Never count items in the photo to create a set title unless input explicitly specifies it.\n"
         "- CRITICAL — Multi-Design Rule: If multiple photos or design variations are shown, write a GENERAL product-type title "
         "that fits ALL designs (e.g. 'Traditional Chinese Figurine' or 'Cartoon Doll Keychain' not 'Set of 4 Figurines' or 'Pink Dress Doll Keychain'). Do NOT name a specific color/design.\n"
         "- Plain text only (no quotes, no markdown, no emojis)."
@@ -107,8 +109,9 @@ def _description_rules_block() -> str:
         "- MUST follow this EXACT 3-section Markdown structure with all 3 section headings present:\n\n"
         f"{CATALOG_DESCRIPTION_STYLE_EXAMPLE}\n\n"
         "- DO NOT output a single plain paragraph. The description MUST include all 3 sections: '### Overview', '### Key Highlights & Features' (with 4-5 bullet points), and '### Product Specifications'.\n"
+        "- CRITICAL — Strip Internal Codes: Do NOT repeat random internal codes or vendor SKUs from the input title in the overview or headings.\n"
         "- CRITICAL — Selling Unit Rule: Write the title and description strictly for the specified Selling Unit in the metadata. "
-        "If Selling Unit is '1 piece' or Original Name has no set/pack count, treat extra items in the photo as design reference only and do NOT call it a set or pack.\n"
+        "If Selling Unit is '1 piece' or Current Name has no set/pack count, treat extra items in the photo as design reference only and do NOT call it a set or pack.\n"
         "- CRITICAL — Multi-Design Rule: If is_multi_design is true or multiple design variants exist, write description for the product TYPE. "
         "Mention 'available in assorted designs/colors' in the Overview section."
     )

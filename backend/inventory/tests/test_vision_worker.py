@@ -354,7 +354,7 @@ class LocalVisionPullWorkerTests(TestCase):
             job_type="name_and_description",
         )
         self.assertIn("Acrylic Marker Drum", msgs_both[1]["content"])
-        self.assertIn("Preserve any original quantity", msgs_both[1]["content"])
+        self.assertIn("PRESERVE ONLY REAL MEASUREMENT / QUANTITY NUMBERS", msgs_both[1]["content"])
         self.assertIn('"name"', msgs_both[1]["content"])
         self.assertIn('"description"', msgs_both[1]["content"])
 
@@ -406,7 +406,7 @@ class LocalVisionPullWorkerTests(TestCase):
             {"name": "Special Fountain Pen"},
             job_type="description_only"
         )
-        self.assertIn("Original Name: Special Fountain Pen", msgs_desc[1]["content"])
+        self.assertIn("Current Name: Special Fountain Pen", msgs_desc[1]["content"])
         self.assertIn('{ "description": "..." }', msgs_desc[1]["content"])
 
     def test_bulk_generate_names_only_endpoint(self):
