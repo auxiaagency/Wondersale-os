@@ -241,6 +241,148 @@ class SupplierViewSet(viewsets.ModelViewSet):
     queryset = Supplier.objects.select_related('store').prefetch_related('items').all()
     serializer_class = SupplierSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Precompute supplier metrics map in bulk to avoid N+1 queries during list/retrieve
+        try:
+            from django.db.models import Sum, F, DecimalField, ExpressionWrapper
+            from inventory.models import Item, SaleOrderItem, SupplierOrder, SupplierLedgerEntry
+            
+            # Map of supplier_id -> metrics dict
+            metrics_map = {}
+
+            # 1. Stock values per supplier
+            items_qs = Item.objects.filter(supplier__isnull=False)
+            store_id = self.request.query_params.get('store')
+            if store_id:
+                items_qs = items_qs.filter(store_id=store_id)
+            
+            for item in items_qs.values('supplier_id', 'quantity', 'cost_price', 'selling_price'):
+                s_id = item['supplier_id']
+                if s_id not in metrics_map:
+                    metrics_map[s_id] = {
+                        'stock_cost_value': 0.0,
+                        'stock_retail_value': 0.0,
+                        'items_count': 0,
+                        'orders_count': 0,
+                        'total_sold_units': 0,
+                        'total_sold_revenue': 0.0,
+                        'total_cogs_sold': 0.0,
+                        'total_profit': 0.0,
+                        'profit_margin_pct': 0.0,
+                        'total_ordered_amount': 0.0,
+                        'total_owed': 0.0,
+                    }
+                qty = float(item['quantity'] or 0)
+                cost = float(item['cost_price'] or 0.0)
+                selling = float(item['selling_price'] or cost)
+                metrics_map[s_id]['stock_cost_value'] += (qty * cost)
+                metrics_map[s_id]['stock_retail_value'] += (qty * selling)
+                metrics_map[s_id]['items_count'] += 1
+
+            # 2. Sales per supplier
+            sales_qs = SaleOrderItem.objects.filter(item__supplier__isnull=False, is_return=False)
+            if store_id:
+                sales_qs = sales_qs.filter(sale_order__store_id=store_id)
+            
+            sales_by_supplier = sales_qs.values('item__supplier_id').annotate(
+                sold_units=Sum('quantity'),
+                sold_revenue=Sum('total_price'),
+                cogs=Sum(ExpressionWrapper(F('quantity') * F('unit_cost_price'), output_field=DecimalField(max_digits=14, decimal_places=2)))
+            )
+            for row in sales_by_supplier:
+                s_id = row['item__supplier_id']
+                if s_id not in metrics_map:
+                    metrics_map[s_id] = {
+                        'stock_cost_value': 0.0,
+                        'stock_retail_value': 0.0,
+                        'items_count': 0,
+                        'orders_count': 0,
+                        'total_sold_units': 0,
+                        'total_sold_revenue': 0.0,
+                        'total_cogs_sold': 0.0,
+                        'total_profit': 0.0,
+                        'profit_margin_pct': 0.0,
+                        'total_ordered_amount': 0.0,
+                        'total_owed': 0.0,
+                    }
+                units = int(row['sold_units'] or 0)
+                rev = float(row['sold_revenue'] or 0.0)
+                cogs = float(row['cogs'] or 0.0)
+                profit = rev - cogs
+                metrics_map[s_id]['total_sold_units'] = units
+                metrics_map[s_id]['total_sold_revenue'] = rev
+                metrics_map[s_id]['total_cogs_sold'] = cogs
+                metrics_map[s_id]['total_profit'] = profit
+                metrics_map[s_id]['profit_margin_pct'] = round((profit / rev * 100), 2) if rev > 0 else 0.0
+
+            # 3. Orders and Owed per supplier
+            orders_qs = SupplierOrder.objects.all()
+            if store_id:
+                orders_qs = orders_qs.filter(store_id=store_id)
+            orders_by_sup = orders_qs.values('supplier_id').annotate(
+                order_count=Count('id'),
+                total_ordered=Sum('total_amount'),
+                total_paid=Sum('paid_amount')
+            )
+            order_data = {}
+            for row in orders_by_sup:
+                s_id = row['supplier_id']
+                order_data[s_id] = {
+                    'orders_count': int(row['order_count'] or 0),
+                    'total_ordered': float(row['total_ordered'] or 0.0),
+                    'total_paid': float(row['total_paid'] or 0.0)
+                }
+
+            # 4. Ledger entries per supplier
+            ledger_qs = SupplierLedgerEntry.objects.all()
+            if store_id:
+                ledger_qs = ledger_qs.filter(Q(store_id=store_id) | Q(store__isnull=True))
+            
+            ledger_by_sup = ledger_qs.values('supplier_id', 'entry_type').annotate(
+                total_amount=Sum('amount')
+            )
+            ledger_data = {}
+            for row in ledger_by_sup:
+                s_id = row['supplier_id']
+                etype = row['entry_type']
+                amt = float(row['total_amount'] or 0.0)
+                if s_id not in ledger_data:
+                    ledger_data[s_id] = {'payment': 0.0, 'credit': 0.0, 'debit': 0.0}
+                ledger_data[s_id][etype] = amt
+
+            # Combine order & ledger owed calculation for all known suppliers
+            all_s_ids = set(metrics_map.keys()) | set(order_data.keys()) | set(ledger_data.keys())
+            for s_id in all_s_ids:
+                if s_id not in metrics_map:
+                    metrics_map[s_id] = {
+                        'stock_cost_value': 0.0,
+                        'stock_retail_value': 0.0,
+                        'items_count': 0,
+                        'orders_count': 0,
+                        'total_sold_units': 0,
+                        'total_sold_revenue': 0.0,
+                        'total_cogs_sold': 0.0,
+                        'total_profit': 0.0,
+                        'profit_margin_pct': 0.0,
+                        'total_ordered_amount': 0.0,
+                        'total_owed': 0.0,
+                    }
+                o_info = order_data.get(s_id, {'orders_count': 0, 'total_ordered': 0.0, 'total_paid': 0.0})
+                l_info = ledger_data.get(s_id, {'payment': 0.0, 'credit': 0.0, 'debit': 0.0})
+                metrics_map[s_id]['orders_count'] = o_info['orders_count']
+                metrics_map[s_id]['total_ordered_amount'] = o_info['total_ordered']
+                
+                effective_paid = max(l_info['payment'], o_info['total_paid'])
+                net_owed = o_info['total_ordered'] + l_info['debit'] - effective_paid - l_info['credit']
+                metrics_map[s_id]['total_owed'] = float(net_owed)
+
+            context['supplier_metrics_map'] = metrics_map
+        except Exception as e:
+            # Fallback gracefully
+            pass
+        return context
+
     def get_queryset(self):
         qs = super().get_queryset()
         store_id = self.request.query_params.get('store')

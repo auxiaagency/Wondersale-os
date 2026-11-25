@@ -100,6 +100,13 @@ class SupplierSerializer(serializers.ModelSerializer):
     items_count = serializers.SerializerMethodField()
     orders_count = serializers.SerializerMethodField()
     total_owed = serializers.SerializerMethodField()
+    stock_cost_value = serializers.SerializerMethodField()
+    stock_retail_value = serializers.SerializerMethodField()
+    total_sold_units = serializers.SerializerMethodField()
+    total_sold_revenue = serializers.SerializerMethodField()
+    total_profit = serializers.SerializerMethodField()
+    profit_margin_pct = serializers.SerializerMethodField()
+    total_ordered_amount = serializers.SerializerMethodField()
     store_name = serializers.CharField(source='store.name', read_only=True, allow_null=True)
 
     class Meta:
@@ -122,28 +129,113 @@ class SupplierSerializer(serializers.ModelSerializer):
             'items_count',
             'orders_count',
             'total_owed',
+            'stock_cost_value',
+            'stock_retail_value',
+            'total_sold_units',
+            'total_sold_revenue',
+            'total_profit',
+            'profit_margin_pct',
+            'total_ordered_amount',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'store_name', 'items_count', 'orders_count', 'total_owed', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id',
+            'store_name',
+            'items_count',
+            'orders_count',
+            'total_owed',
+            'stock_cost_value',
+            'stock_retail_value',
+            'total_sold_units',
+            'total_sold_revenue',
+            'total_profit',
+            'profit_margin_pct',
+            'total_ordered_amount',
+            'created_at',
+            'updated_at',
+        ]
+
+    def _get_metrics(self, obj):
+        # Cache metrics on object instance during serialization to prevent duplicate calculations
+        if not hasattr(obj, '_cached_supplier_metrics'):
+            metrics = getattr(self.context.get('supplier_metrics_map', {}), 'get', lambda k, default: None)(obj.id, None)
+            if metrics is not None:
+                obj._cached_supplier_metrics = metrics
+            else:
+                from django.db.models import Sum, F
+                # Fallback calculation if not pre-aggregated by viewset
+                items = obj.items.all()
+                cost_val = sum(((it.quantity or 0) * (it.cost_price or Decimal('0.00'))) for it in items)
+                retail_val = sum(((it.quantity or 0) * (getattr(it, 'selling_price', None) or it.cost_price or Decimal('0.00'))) for it in items)
+                
+                # Sales for items from this supplier
+                item_ids = [it.id for it in items]
+                from inventory.models import SaleOrderItem
+                sale_items = SaleOrderItem.objects.filter(item_id__in=item_ids, is_return=False)
+                sales_agg = sale_items.aggregate(
+                    units=Sum('quantity'),
+                    rev=Sum('total_price'),
+                    cogs=Sum(F('quantity') * F('unit_cost_price'))
+                )
+                sold_units = sales_agg['units'] or 0
+                sold_rev = float(sales_agg['rev'] or Decimal('0.00'))
+                cogs = float(sales_agg['cogs'] or Decimal('0.00'))
+                profit = sold_rev - cogs
+                margin = round((profit / sold_rev * 100), 2) if sold_rev > 0 else 0.0
+
+                orders_total = obj.orders.aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+                ledger_qs = obj.ledger_entries.all()
+                ledger_payments = ledger_qs.filter(entry_type='payment').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                ledger_credits = ledger_qs.filter(entry_type='credit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                ledger_debits = ledger_qs.filter(entry_type='debit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+                order_paid_total = obj.orders.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
+                effective_paid = max(ledger_payments, order_paid_total)
+                net_owed = orders_total + ledger_debits - effective_paid - ledger_credits
+
+                obj._cached_supplier_metrics = {
+                    'stock_cost_value': float(cost_val),
+                    'stock_retail_value': float(retail_val),
+                    'total_sold_units': int(sold_units),
+                    'total_sold_revenue': float(sold_rev),
+                    'total_profit': float(profit),
+                    'profit_margin_pct': float(margin),
+                    'total_ordered_amount': float(orders_total),
+                    'total_owed': float(net_owed),
+                    'items_count': len(items),
+                    'orders_count': obj.orders.count(),
+                }
+        return obj._cached_supplier_metrics
 
     def get_items_count(self, obj):
-        return obj.items.count()
+        return self._get_metrics(obj)['items_count']
 
     def get_orders_count(self, obj):
-        return obj.orders.count()
+        return self._get_metrics(obj)['orders_count']
 
     def get_total_owed(self, obj):
-        from django.db.models import Sum
-        orders_total = obj.orders.aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
-        ledger_qs = obj.ledger_entries.all()
-        ledger_payments = ledger_qs.filter(entry_type='payment').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        ledger_credits = ledger_qs.filter(entry_type='credit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        ledger_debits = ledger_qs.filter(entry_type='debit').aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        order_paid_total = obj.orders.aggregate(total=Sum('paid_amount'))['total'] or Decimal('0.00')
-        effective_paid = max(ledger_payments, order_paid_total)
-        net_owed = orders_total + ledger_debits - effective_paid - ledger_credits
-        return float(net_owed)
+        return self._get_metrics(obj)['total_owed']
+
+    def get_stock_cost_value(self, obj):
+        return self._get_metrics(obj)['stock_cost_value']
+
+    def get_stock_retail_value(self, obj):
+        return self._get_metrics(obj)['stock_retail_value']
+
+    def get_total_sold_units(self, obj):
+        return self._get_metrics(obj)['total_sold_units']
+
+    def get_total_sold_revenue(self, obj):
+        return self._get_metrics(obj)['total_sold_revenue']
+
+    def get_total_profit(self, obj):
+        return self._get_metrics(obj)['total_profit']
+
+    def get_profit_margin_pct(self, obj):
+        return self._get_metrics(obj)['profit_margin_pct']
+
+    def get_total_ordered_amount(self, obj):
+        return self._get_metrics(obj)['total_ordered_amount']
 
 
 class SupplierOrderItemSerializer(serializers.ModelSerializer):
