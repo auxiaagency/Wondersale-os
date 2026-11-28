@@ -25,6 +25,7 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
   const [autoMarkPrinted, setAutoMarkPrinted] = useState(true);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [barcodeBase64, setBarcodeBase64] = useState('');
   const [printFeedback, setPrintFeedback] = useState('');
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
@@ -33,23 +34,71 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
   const barcodeUrl = `${getBarcodeUrl(item.id, false)}?v=ocrb1`;
   const downloadUrl = getBarcodeUrl(item.id, true);
 
-  // Preload barcode image
+  // Preload barcode image and convert to data URI for bulletproof printing
   useEffect(() => {
+    let active = true;
     setImageLoaded(false);
     setImageError(false);
-    const img = new Image();
-    img.src = barcodeUrl;
-    img.onload = () => setImageLoaded(true);
-    img.onerror = () => {
-      setImageLoaded(false);
-      setImageError(true);
+    setBarcodeBase64('');
+
+    fetch(barcodeUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to load barcode');
+        return res.blob();
+      })
+      .then((blob) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      })
+      .then((dataUri) => {
+        if (!active) return;
+        setBarcodeBase64(dataUri);
+        const img = new Image();
+        img.src = dataUri;
+        img.onload = () => {
+          if (!active) return;
+          setImageLoaded(true);
+        };
+        img.onerror = () => {
+          if (!active) return;
+          setImageError(true);
+        };
+      })
+      .catch((err) => {
+        console.warn('Barcode preload error:', err);
+        if (!active) return;
+        // Fallback to normal img loading if fetch fails
+        const img = new Image();
+        img.src = barcodeUrl;
+        img.onload = () => {
+          if (!active) return;
+          setImageLoaded(true);
+        };
+        img.onerror = () => {
+          if (!active) return;
+          setImageLoaded(false);
+          setImageError(true);
+        };
+      });
+
+    return () => {
+      active = false;
     };
   }, [barcodeUrl]);
 
   const handlePrint = async () => {
     if (!imageLoaded && !imageError) {
       setPrintFeedback('Preparing barcode image for crisp printing...');
-      await new Promise((r) => setTimeout(r, 800));
+      // Wait up to 2 seconds for image to load
+      let attempts = 0;
+      while (!imageLoaded && !imageError && attempts < 20) {
+        await new Promise((r) => setTimeout(r, 100));
+        attempts++;
+      }
     }
 
     if (autoMarkPrinted && item.needs_new_barcode_printed) {
@@ -73,12 +122,14 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
     const pageWidth  = labelFormat === '38x25_2up' ? '80mm'         : labelFormat === '38x25_1up' ? '38mm'       : '3.5in';
     const pageHeight = labelFormat === '38x25_2up' ? '25mm'         : labelFormat === '38x25_1up' ? '25mm'       : '1.5in';
 
-    // Resolve absolute URLs for images in the cloned HTML
+    // Resolve absolute URLs and inline base64 for images in the cloned HTML
     const clone = printEl.cloneNode(true);
     clone.style.cssText = ''; // strip screen inline styles entirely
     clone.querySelectorAll('img').forEach((img) => {
       const src = img.getAttribute('src') || '';
-      if (src && !src.startsWith('http') && !src.startsWith('data:')) {
+      if (barcodeBase64 && (img.classList.contains('barcode-code-img') || src.includes('/barcode/'))) {
+        img.src = barcodeBase64;
+      } else if (src && !src.startsWith('http') && !src.startsWith('data:')) {
         img.src = `${window.location.origin}${src.startsWith('/') ? '' : '/'}${src}`;
       }
     });
@@ -284,22 +335,42 @@ ${clone.outerHTML}
 </html>`);
     pw.document.close();
 
-    // Wait for fonts + images to load, then print
-    pw.onload = () => {
+    // Ensure all images inside popup window are fully decoded before triggering print
+    const triggerPrint = async () => {
+      try {
+        const popupImages = Array.from(pw.document.images || []);
+        if (popupImages.length > 0) {
+          await Promise.all(
+            popupImages.map((img) => {
+              if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+              if (img.decode) return img.decode().catch(() => {});
+              return new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+                setTimeout(resolve, 500);
+              });
+            })
+          );
+        }
+      } catch (e) {
+        // Continue even if decode threw
+      }
+
       pw.focus();
       setTimeout(() => {
         pw.print();
         setTimeout(() => pw.close(), 1000);
-      }, 600);
+      }, 250);
     };
-    // Fallback if onload doesn't fire
-    setTimeout(() => {
-      if (!pw.closed) {
-        pw.focus();
-        pw.print();
-        setTimeout(() => pw.close(), 1000);
-      }
-    }, 1800);
+
+    if (pw.document.readyState === 'complete') {
+      triggerPrint();
+    } else {
+      pw.onload = triggerPrint;
+      setTimeout(() => {
+        if (!pw.closed) triggerPrint();
+      }, 1500);
+    }
   };
 
   const handleManualMarkPrinted = async () => {
@@ -475,7 +546,7 @@ ${clone.outerHTML}
             <div style={{ fontSize: '6px', color: '#64748B' }}>Loading...</div>
           ) : (
             <img
-              src={barcodeUrl}
+              src={barcodeBase64 || barcodeUrl}
               alt=""
               className="barcode-code-img"
               style={{
@@ -648,7 +719,7 @@ ${clone.outerHTML}
           </div>
         ) : (
           <img
-            src={barcodeUrl}
+            src={barcodeBase64 || barcodeUrl}
             alt=""
             className="barcode-code-img"
             style={{
