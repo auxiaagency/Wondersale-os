@@ -2920,8 +2920,12 @@ export async function fetchActiveAIDescriptionJob(storeId = null) {
   return res.json();
 }
 
-export async function fetchAIDescriptionJobDetail(jobId) {
-  const res = await fetch(`${API_BASE}/items/ai-description-jobs/${jobId}/`, {
+export async function fetchAIDescriptionJobDetail(jobId, storeId = null) {
+  const url = new URL(`${window.location.origin}${API_BASE}/items/ai-description-jobs/${jobId}/`);
+  if (storeId) {
+    url.searchParams.append('store', storeId);
+  }
+  const res = await fetch(url.toString(), {
     headers: getAuthHeaders(),
   });
   const data = await res.json().catch(() => ({}));

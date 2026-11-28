@@ -3030,3 +3030,62 @@ class AIDescriptionBatchJobSerializer(serializers.ModelSerializer):
             return 0
         return Item.objects.filter(id__in=obj.item_ids, ai_description_status='generating').count()
 
+
+class AIStudioItemSerializer(serializers.ModelSerializer):
+    """
+    Lightweight, high-performance serializer specifically for the AI Description & Title Studio.
+    Omits heavy recursive sibling variant trees and nested order calculations to eliminate
+    N+1 database queries when serializing batches of catalog items.
+    """
+    primary_image_url = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    images = ItemImageSerializer(many=True, read_only=True)
+    subcategories = SubCategoryNestedSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Item
+        fields = [
+            'id',
+            'uid',
+            'name',
+            'selling_price',
+            'cost_price',
+            'mrp',
+            'quantity',
+            'description',
+            'category_name',
+            'subcategories',
+            'primary_image_url',
+            'images',
+            'needs_better_name',
+            'ai_name_draft',
+            'ai_name_status',
+            'ai_name_error',
+            'ai_name_updated_at',
+            'ai_description_draft',
+            'ai_description_status',
+            'ai_description_error',
+            'ai_description_updated_at',
+            'created_at',
+            'updated_at',
+        ]
+
+    def get_primary_image_url(self, obj):
+        request = self.context.get('request')
+        primary = obj.primary_image
+        if primary and primary.image:
+            if request:
+                return request.build_absolute_uri(primary.image.url)
+            return primary.image.url
+        return None
+
+    def get_category_name(self, obj):
+        # Prefer preloaded subcategories first
+        subs = list(obj.subcategories.all()) if hasattr(obj, 'subcategories') else []
+        if subs:
+            cat = subs[0].category
+            if cat:
+                return cat.name
+        return None
+
+

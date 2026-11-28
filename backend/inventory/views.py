@@ -90,6 +90,7 @@ from .serializers import (
     DailyRegisterShiftSerializer,
     ProcessReturnSerializer,
     AIDescriptionBatchJobSerializer,
+    AIStudioItemSerializer,
     BrokenItemReportSerializer,
     OrderCustomerUpdateSerializer,
     generate_next_return_number,
@@ -1968,6 +1969,12 @@ class ItemViewSet(viewsets.ModelViewSet):
                     item_ids=store_ai_ids
                 )
                 sync_batch_job_progress(job)
+            elif job_id in ['active', 'latest', 'all', 'virtual'] or not job_id:
+                # Store has never run AI jobs yet — return empty job structure instead of 404
+                return Response({
+                    'job': None,
+                    'items': []
+                })
             else:
                 return Response({'error': 'AI Description job not found.'}, status=status.HTTP_404_NOT_FOUND)
         else:
@@ -1991,7 +1998,7 @@ class ItemViewSet(viewsets.ModelViewSet):
 
         return Response({
             'job': AIDescriptionBatchJobSerializer(job).data,
-            'items': ItemSerializer(ordered_items, many=True, context={'request': request}).data
+            'items': AIStudioItemSerializer(ordered_items, many=True, context={'request': request}).data
         })
 
     @action(detail=True, methods=['post'], url_path='ai-generate-description')

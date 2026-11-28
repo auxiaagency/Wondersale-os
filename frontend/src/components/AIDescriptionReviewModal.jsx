@@ -44,6 +44,7 @@ import {
 
 export default function AIDescriptionReviewModal({
   jobId,
+  activeStoreId,
   isOpen,
   onClose,
   onItemUpdated
@@ -52,6 +53,7 @@ export default function AIDescriptionReviewModal({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
+  const isInitialLoadRef = useRef(true);
   const [filter, setFilter] = useState('all'); // 'all', 'in_progress', 'ready', 'skipped', 'failed', 'applied', 'names'
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
@@ -93,11 +95,13 @@ export default function AIDescriptionReviewModal({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const loadJobData = useCallback(async () => {
-    setErrorMessage(null);
+  const loadJobData = useCallback(async (isPolling = false) => {
+    if (!isPolling) {
+      setErrorMessage(null);
+    }
     try {
       const targetJobId = jobId || 'active';
-      const data = await fetchAIDescriptionJobDetail(targetJobId);
+      const data = await fetchAIDescriptionJobDetail(targetJobId, activeStoreId || job?.store);
       if (data) {
         setJob(data.job || null);
         setItems(data.items || []);
@@ -129,28 +133,30 @@ export default function AIDescriptionReviewModal({
       }
     } catch (err) {
       console.error("Failed to load AI Studio data:", err);
-      setErrorMessage(err.message || "Failed to load AI Studio status. Please check server connectivity or the local Vision worker.");
+      if (!isPolling) {
+        setErrorMessage(err.message || "Failed to load AI Studio status. Please check server connectivity or the local Vision worker.");
+      }
     } finally {
       setLoading(false);
     }
-  }, [jobId]);
+  }, [jobId, activeStoreId, job?.store]);
 
   useEffect(() => {
     if (isOpen) {
       setLoading(true);
-      loadJobData();
+      loadJobData(false);
 
-      // Poll every 2.5s while drawer is open so generated descriptions update in real time
+      // Poll every 3s while drawer is open so generated descriptions update in real time
       const interval = setInterval(() => {
-        loadJobData();
-      }, 2500);
+        loadJobData(true);
+      }, 3000);
 
       const handleDraftsUpdated = () => {
-        loadJobData();
+        loadJobData(true);
       };
 
       const handleJobStarted = () => {
-        loadJobData();
+        loadJobData(false);
       };
 
       window.addEventListener('ai-drafts-updated', handleDraftsUpdated);
@@ -1288,6 +1294,62 @@ export default function AIDescriptionReviewModal({
                 >
                   View Applied Products ({appliedCount})
                 </button>
+              </div>
+            ) : items.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '16px', textAlign: 'center' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '20px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#818cf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={32} />
+                </div>
+                <div style={{ maxWidth: '420px' }}>
+                  <h3 style={{ margin: '0 0 6px 0', fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)' }}>No AI Drafts for this Store Yet</h3>
+                  <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Generate AI descriptions or upgraded titles for products in this branch using the buttons above.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={handleBulkGenerateDescsOnly}
+                    disabled={bulkGeneratingDescsOnly}
+                    style={{
+                      borderRadius: 'var(--radius-pill)',
+                      padding: '8px 18px',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      background: 'rgba(16, 185, 129, 0.2)',
+                      border: '1px solid #10B981',
+                      color: '#34d399',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <FileText size={14} />
+                    <span>Generate Descriptions</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkGenerateNamesOnly}
+                    disabled={bulkGeneratingNamesOnly}
+                    style={{
+                      borderRadius: 'var(--radius-pill)',
+                      padding: '8px 18px',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      background: 'rgba(124, 58, 237, 0.2)',
+                      border: '1px solid #7C3AED',
+                      color: '#c084fc',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Sparkles size={14} />
+                    <span>Generate AI Titles</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: '8px', color: 'var(--text-muted)' }}>

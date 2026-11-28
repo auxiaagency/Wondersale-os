@@ -1662,6 +1662,7 @@ export default function App() {
       {reviewJobId && (
         <AIDescriptionReviewModal
           jobId={reviewJobId}
+          activeStoreId={selectedStore}
           isOpen={Boolean(reviewJobId)}
           onClose={() => setReviewJobId(null)}
           onItemUpdated={() => {
