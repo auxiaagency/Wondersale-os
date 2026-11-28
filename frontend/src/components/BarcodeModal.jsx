@@ -214,7 +214,7 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
       max-width: 38mm;
       height: 24.5mm;
       max-height: 24.5mm;
-      padding: 0.6mm 1mm;
+      padding: 0.5mm 0.6mm;
       margin: 0;
       box-sizing: border-box;
       background: #FFFFFF;
@@ -255,7 +255,7 @@ export default function BarcodeModal({ item, onClose, onUpdateItem }) {
       max-width: 100%;
       height: 10.8mm;
       max-height: 10.8mm;
-      object-fit: contain;
+      object-fit: fill;
       image-rendering: pixelated;
       image-rendering: -moz-crisp-edges;
       image-rendering: crisp-edges;
@@ -553,7 +553,7 @@ ${clone.outerHTML}
                 width: '100%',
                 maxWidth: '100%',
                 height: '10.8mm',
-                objectFit: 'contain',
+                objectFit: 'fill',
                 imageRendering: 'crisp-edges',
               }}
             />

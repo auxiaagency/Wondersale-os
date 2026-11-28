@@ -693,7 +693,7 @@ input[type=number] {
     max-width: 38mm !important;
     height: 24.5mm !important;
     max-height: 24.5mm !important;
-    padding: 0.6mm 1mm !important;
+    padding: 0.5mm 0.6mm !important;
     margin: 0 !important;
     box-sizing: border-box !important;
     background: #FFFFFF !important;
@@ -710,6 +710,7 @@ input[type=number] {
   .barcode-sticker-38x25 .barcode-graphic-box {
     height: 11mm !important;
     max-height: 11mm !important;
+    width: 100% !important;
   }
 
   .barcode-sticker-38x25 img.barcode-logo-img {
@@ -722,8 +723,11 @@ input[type=number] {
     image-rendering: pixelated !important;
     image-rendering: -moz-crisp-edges !important;
     image-rendering: crisp-edges !important;
+    width: 100% !important;
+    max-width: 100% !important;
     height: 10.8mm !important;
     max-height: 10.8mm !important;
+    object-fit: fill !important;
   }
 
   /* 1UP single-sticker roll */

@@ -280,9 +280,9 @@ def generate_barcode_image(uid: str) -> io.BytesIO:
     )
 
     writer_options = {
-        'module_width': 0.68,
+        'module_width': 0.88,
         'module_height': 13.5,
-        'quiet_zone': 1.5,
+        'quiet_zone': 1.0,
         'font_size': 11,
         'text_distance': 6.5,
         'write_text': True,
