@@ -2920,10 +2920,16 @@ export async function fetchActiveAIDescriptionJob(storeId = null) {
   return res.json();
 }
 
-export async function fetchAIDescriptionJobDetail(jobId, storeId = null) {
+export async function fetchAIDescriptionJobDetail(jobId, storeId = null, { limit = 20, offset = 0 } = {}) {
   const url = new URL(`${window.location.origin}${API_BASE}/items/ai-description-jobs/${jobId}/`);
   if (storeId) {
     url.searchParams.append('store', storeId);
+  }
+  if (limit !== undefined && limit !== null) {
+    url.searchParams.append('limit', limit);
+  }
+  if (offset !== undefined && offset !== null) {
+    url.searchParams.append('offset', offset);
   }
   const res = await fetch(url.toString(), {
     headers: getAuthHeaders(),

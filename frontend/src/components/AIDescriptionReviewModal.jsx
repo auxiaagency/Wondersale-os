@@ -52,8 +52,13 @@ export default function AIDescriptionReviewModal({
   const [job, setJob] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-  const isInitialLoadRef = useRef(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCatalogCount, setTotalCatalogCount] = useState(0);
+  const [serverCounts, setServerCounts] = useState(null);
+  const offsetRef = useRef(0);
+  const PAGE_SIZE = 20;
   const [filter, setFilter] = useState('all'); // 'all', 'in_progress', 'ready', 'skipped', 'failed', 'applied', 'names'
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
@@ -101,10 +106,97 @@ export default function AIDescriptionReviewModal({
     }
     try {
       const targetJobId = jobId || 'active';
-      const data = await fetchAIDescriptionJobDetail(targetJobId, activeStoreId || job?.store);
+      // When polling, fetch currently loaded limit so far to keep loaded items fresh
+      const currentLoadedCount = Math.max(PAGE_SIZE, offsetRef.current + PAGE_SIZE);
+      const limitToFetch = isPolling ? currentLoadedCount : PAGE_SIZE;
+      const offsetToFetch = 0;
+
+      const data = await fetchAIDescriptionJobDetail(targetJobId, activeStoreId || job?.store, {
+        limit: limitToFetch,
+        offset: offsetToFetch,
+      });
+
       if (data) {
         setJob(data.job || null);
-        setItems(data.items || []);
+        if (data.counts) {
+          setServerCounts(data.counts);
+        }
+        if (data.total_count !== undefined) {
+          setTotalCatalogCount(data.total_count);
+        }
+        if (data.has_more !== undefined) {
+          setHasMore(data.has_more);
+        } else {
+          setHasMore(false);
+        }
+
+        const newItems = data.items || [];
+        setItems(newItems);
+        if (!isPolling) {
+          offsetRef.current = 0;
+        }
+
+        setDraftEdits(prev => {
+          const next = { ...prev };
+          newItems.forEach(item => {
+            const currentVal = next[item.id];
+            if (item.ai_description_draft) {
+              if (currentVal === undefined || currentVal === '' || currentVal === item.description) {
+                next[item.id] = item.ai_description_draft;
+              }
+            } else if (currentVal === undefined) {
+              next[item.id] = item.description || '';
+            }
+          });
+          return next;
+        });
+
+        setNameEdits(prev => {
+          const next = { ...prev };
+          newItems.forEach(item => {
+            if (item.ai_name_draft && next[item.id] === undefined) {
+              next[item.id] = item.ai_name_draft;
+            }
+          });
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load AI Studio data:", err);
+      if (!isPolling) {
+        setErrorMessage(err.message || "Failed to load AI Studio status. Please check server connectivity or the local Vision worker.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId, activeStoreId, job?.store]);
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextOffset = offsetRef.current + PAGE_SIZE;
+      const targetJobId = jobId || 'active';
+      const data = await fetchAIDescriptionJobDetail(targetJobId, activeStoreId || job?.store, {
+        limit: PAGE_SIZE,
+        offset: nextOffset,
+      });
+
+      if (data && data.items) {
+        offsetRef.current = nextOffset;
+        setItems(prev => {
+          const existingIds = new Set(prev.map(i => i.id));
+          const appended = data.items.filter(i => !existingIds.has(i.id));
+          return [...prev, ...appended];
+        });
+
+        if (data.counts) {
+          setServerCounts(data.counts);
+        }
+        if (data.total_count !== undefined) {
+          setTotalCatalogCount(data.total_count);
+        }
+        setHasMore(Boolean(data.has_more));
 
         setDraftEdits(prev => {
           const next = { ...prev };
@@ -132,14 +224,12 @@ export default function AIDescriptionReviewModal({
         });
       }
     } catch (err) {
-      console.error("Failed to load AI Studio data:", err);
-      if (!isPolling) {
-        setErrorMessage(err.message || "Failed to load AI Studio status. Please check server connectivity or the local Vision worker.");
-      }
+      console.error("Failed to load more products:", err);
+      showToast(err.message || "Failed to load more products.");
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  }, [jobId, activeStoreId, job?.store]);
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -469,14 +559,37 @@ export default function AIDescriptionReviewModal({
 
   if (!isOpen) return null;
 
-  const inProgressCount = items.filter(it => it.ai_description_status === 'pending' || it.ai_description_status === 'generating' || it.ai_name_status === 'pending' || it.ai_name_status === 'generating').length;
-  const readyCount = items.filter(it => it.ai_description_status === 'ready').length;
-  const readyNameCount = items.filter(it => it.ai_name_status === 'ready' || (it.ai_name_draft && it.ai_name_status !== 'applied')).length;
-  const totalNamesCount = items.filter(it => it.ai_name_draft || it.ai_name_status !== 'none' || it.needs_better_name).length;
-  const skippedCount = items.filter(it => it.ai_description_status === 'skipped_no_image').length;
-  const failedCount = items.filter(it => it.ai_description_status === 'failed' || it.ai_name_status === 'failed').length;
-  const appliedCount = items.filter(it => it.ai_description_status === 'applied').length;
-  const pendingCount = items.filter(it => it.ai_description_status !== 'applied').length;
+  const inProgressCount = serverCounts?.in_progress !== undefined
+    ? serverCounts.in_progress
+    : items.filter(it => it.ai_description_status === 'pending' || it.ai_description_status === 'generating' || it.ai_name_status === 'pending' || it.ai_name_status === 'generating').length;
+
+  const readyCount = serverCounts?.ready !== undefined
+    ? serverCounts.ready
+    : items.filter(it => it.ai_description_status === 'ready').length;
+
+  const readyNameCount = serverCounts?.ready_names !== undefined
+    ? serverCounts.ready_names
+    : items.filter(it => it.ai_name_status === 'ready' || (it.ai_name_draft && it.ai_name_status !== 'applied')).length;
+
+  const totalNamesCount = serverCounts?.total_names !== undefined
+    ? serverCounts.total_names
+    : items.filter(it => it.ai_name_draft || it.ai_name_status !== 'none' || it.needs_better_name).length;
+
+  const skippedCount = serverCounts?.skipped !== undefined
+    ? serverCounts.skipped
+    : items.filter(it => it.ai_description_status === 'skipped_no_image').length;
+
+  const failedCount = serverCounts?.failed !== undefined
+    ? serverCounts.failed
+    : items.filter(it => it.ai_description_status === 'failed' || it.ai_name_status === 'failed').length;
+
+  const appliedCount = serverCounts?.applied !== undefined
+    ? serverCounts.applied
+    : items.filter(it => it.ai_description_status === 'applied').length;
+
+  const pendingCount = serverCounts?.pending !== undefined
+    ? serverCounts.pending
+    : items.filter(it => it.ai_description_status !== 'applied').length;
 
   const handleResetFilters = () => {
     setSearchQuery('');
@@ -1944,6 +2057,47 @@ export default function AIDescriptionReviewModal({
               );
             })
           )}
+
+          {/* Backend Pagination: "Show More" Button */}
+          {!loading && hasMore && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 0 12px 0', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
+                  borderRadius: 'var(--radius-pill)',
+                  padding: '10px 28px',
+                  color: '#a5b4fc',
+                  fontSize: '0.84rem',
+                  fontWeight: 700,
+                  cursor: loadingMore ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 16px rgba(99, 102, 241, 0.25)',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {loadingMore ? (
+                  <>
+                    <RefreshCw size={15} className="animate-spin" />
+                    <span>Loading next 20 products...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={15} />
+                    <span>Show More Products (20 more)</span>
+                  </>
+                )}
+              </button>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Loaded {items.length} of {totalCatalogCount || items.length} products
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Drawer Footer */}
@@ -1961,7 +2115,7 @@ export default function AIDescriptionReviewModal({
           }}
         >
           <div>
-            Total: <strong style={{ color: 'var(--text-primary)' }}>{items.length}</strong> • In Progress: <strong style={{ color: '#A855F7' }}>{inProgressCount}</strong> • Ready: <strong style={{ color: '#10B981' }}>{readyCount}</strong> • Done: <strong style={{ color: '#3B82F6' }}>{appliedCount}</strong>
+            Total in Batch: <strong style={{ color: 'var(--text-primary)' }}>{totalCatalogCount || items.length}</strong> (showing {items.length}) • In Progress: <strong style={{ color: '#A855F7' }}>{inProgressCount}</strong> • Ready: <strong style={{ color: '#10B981' }}>{readyCount}</strong> • Done: <strong style={{ color: '#3B82F6' }}>{appliedCount}</strong>
           </div>
           <button
             type="button"

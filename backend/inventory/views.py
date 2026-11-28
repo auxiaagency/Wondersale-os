@@ -1973,7 +1973,22 @@ class ItemViewSet(viewsets.ModelViewSet):
                 # Store has never run AI jobs yet — return empty job structure instead of 404
                 return Response({
                     'job': None,
-                    'items': []
+                    'items': [],
+                    'total_count': 0,
+                    'limit': int(request.query_params.get('limit', 20)),
+                    'offset': int(request.query_params.get('offset', 0)),
+                    'has_more': False,
+                    'counts': {
+                        'total': 0,
+                        'pending': 0,
+                        'in_progress': 0,
+                        'ready': 0,
+                        'ready_names': 0,
+                        'total_names': 0,
+                        'skipped': 0,
+                        'failed': 0,
+                        'applied': 0,
+                    }
                 })
             else:
                 return Response({'error': 'AI Description job not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -1992,13 +2007,57 @@ class ItemViewSet(viewsets.ModelViewSet):
             sync_batch_job_progress(job)
 
         item_pks = job.item_ids or []
-        items = Item.objects.filter(id__in=item_pks).select_related('store').prefetch_related('subcategories', 'subcategories__category', 'images')
+        total_count = len(item_pks)
+
+        # Calculate high-level counts across all items in this job for the header & tabs
+        all_job_items_qs = Item.objects.filter(id__in=item_pks)
+        counts = {
+            'total': total_count,
+            'in_progress': all_job_items_qs.filter(
+                Q(ai_description_status__in=['pending', 'generating']) |
+                Q(ai_name_status__in=['pending', 'generating'])
+            ).count(),
+            'ready': all_job_items_qs.filter(ai_description_status='ready').count(),
+            'ready_names': all_job_items_qs.filter(
+                Q(ai_name_status='ready') | (Q(ai_name_draft__gt='') & ~Q(ai_name_status='applied'))
+            ).count(),
+            'total_names': all_job_items_qs.filter(
+                Q(ai_name_draft__gt='') | ~Q(ai_name_status='none') | Q(needs_better_name=True)
+            ).count(),
+            'skipped': all_job_items_qs.filter(ai_description_status='skipped_no_image').count(),
+            'failed': all_job_items_qs.filter(
+                Q(ai_description_status='failed') | Q(ai_name_status='failed')
+            ).count(),
+            'applied': all_job_items_qs.filter(ai_description_status='applied').count(),
+            'pending': all_job_items_qs.exclude(ai_description_status='applied').count(),
+        }
+
+        # Backend pagination: support limit & offset (defaults: limit=20, offset=0)
+        try:
+            limit = int(request.query_params.get('limit', 20))
+        except (ValueError, TypeError):
+            limit = 20
+        try:
+            offset = int(request.query_params.get('offset', 0))
+        except (ValueError, TypeError):
+            offset = 0
+
+        # Optional slice of item_pks
+        paginated_pks = item_pks[offset:offset + limit] if limit > 0 else item_pks
+        has_more = (offset + len(paginated_pks)) < total_count
+
+        items = Item.objects.filter(id__in=paginated_pks).select_related('store').prefetch_related('subcategories', 'subcategories__category', 'images')
         item_map = {item.id: item for item in items}
-        ordered_items = [item_map[pk] for pk in item_pks if pk in item_map]
+        ordered_items = [item_map[pk] for pk in paginated_pks if pk in item_map]
 
         return Response({
             'job': AIDescriptionBatchJobSerializer(job).data,
-            'items': AIStudioItemSerializer(ordered_items, many=True, context={'request': request}).data
+            'items': AIStudioItemSerializer(ordered_items, many=True, context={'request': request}).data,
+            'total_count': total_count,
+            'limit': limit,
+            'offset': offset,
+            'has_more': has_more,
+            'counts': counts,
         })
 
     @action(detail=True, methods=['post'], url_path='ai-generate-description')
