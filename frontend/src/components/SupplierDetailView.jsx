@@ -1073,11 +1073,11 @@ export default function SupplierDetailView({
 
                         {/* Expanded details row */}
                         {isExpanded && (
-                          <tr style={{ background: 'rgba(0, 0, 0, 0.15)', borderBottom: '1px solid var(--border-color)' }}>
+                          <tr className="supplier-order-expanded-row">
                             <td colSpan={9} style={{ padding: '16px 20px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#14B8A6' }}>
+                                  <div className="supplier-line-item-header-label">
                                     Line Items Procured in this Order:
                                   </div>
                                   {fileList.length > 0 && (
@@ -1103,76 +1103,45 @@ export default function SupplierDetailView({
                                 </div>
 
                                 {ord.items && ord.items.length > 0 ? (
-                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     {ord.items.map((it) => (
                                       <div
                                         key={it.id}
-                                        style={{
-                                          padding: '12px 14px',
-                                          borderRadius: 'var(--radius-md)',
-                                          background: 'rgba(255, 255, 255, 0.04)',
-                                          border: '1px solid var(--border-color)',
-                                          fontSize: '0.8rem',
-                                          display: 'flex',
-                                          flexDirection: 'column',
-                                          gap: '8px',
-                                        }}
+                                        className="supplier-order-line-item-row"
                                       >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                                          <div>
-                                            <div style={{ fontWeight: 600, fontSize: '0.84rem' }}>{it.item_name}</div>
-                                            {it.item_uid && (
-                                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                                                UID: {it.item_uid}
-                                              </div>
-                                            )}
+                                        <div style={{ minWidth: '220px', flex: '1 1 auto' }}>
+                                          <div className="supplier-line-item-title">{it.item_name}</div>
+                                          {it.item_uid && (
+                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                                              UID: {it.item_uid}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Stock Metrics: Qty Added, Sold, and Current Stock arranged horizontally */}
+                                        <div className="supplier-line-item-badge-grid">
+                                          <div style={{ textAlign: 'center', minWidth: '55px' }}>
+                                            <div className="supplier-line-item-stat-label">Added</div>
+                                            <div className="supplier-line-item-stat-added">{it.quantity}</div>
                                           </div>
-                                          <div style={{ textAlign: 'right' }}>
-                                            <div style={{ fontWeight: 700, color: '#14B8A6' }}>
-                                              {currencySymbol}{parseFloat(it.line_total).toFixed(2)}
-                                            </div>
-                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                              @{currencySymbol}{parseFloat(it.cost_price).toFixed(2)}
-                                            </div>
+                                          <div style={{ width: '1px', height: '22px', background: 'var(--border-color)' }}></div>
+                                          <div style={{ textAlign: 'center', minWidth: '55px' }}>
+                                            <div className="supplier-line-item-stat-label">Sold</div>
+                                            <div className="supplier-line-item-stat-sold">{it.sold_quantity ?? 0}</div>
+                                          </div>
+                                          <div style={{ width: '1px', height: '22px', background: 'var(--border-color)' }}></div>
+                                          <div style={{ textAlign: 'center', minWidth: '55px' }}>
+                                            <div className="supplier-line-item-stat-label">Current</div>
+                                            <div className="supplier-line-item-stat-current">{it.current_quantity ?? 0}</div>
                                           </div>
                                         </div>
 
-                                        {/* Stock Metrics: Qty Added, Sold, and Current Stock */}
-                                        <div
-                                          style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '1fr 1fr 1fr',
-                                            gap: '6px',
-                                            padding: '8px 10px',
-                                            borderRadius: '6px',
-                                            background: 'rgba(0, 0, 0, 0.2)',
-                                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                                            textAlign: 'center',
-                                          }}
-                                        >
-                                          <div>
-                                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                              Added
-                                            </div>
-                                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#38BDF8', marginTop: '2px' }}>
-                                              {it.quantity}
-                                            </div>
+                                        <div style={{ textAlign: 'right', minWidth: '120px', flex: '0 0 auto' }}>
+                                          <div className="supplier-line-item-total">
+                                            {currencySymbol}{parseFloat(it.line_total).toFixed(2)}
                                           </div>
-                                          <div>
-                                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                              Sold
-                                            </div>
-                                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#F59E0B', marginTop: '2px' }}>
-                                              {it.sold_quantity ?? 0}
-                                            </div>
-                                          </div>
-                                          <div>
-                                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
-                                              Current
-                                            </div>
-                                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#10B981', marginTop: '2px' }}>
-                                              {it.current_quantity ?? 0}
-                                            </div>
+                                          <div className="supplier-line-item-unit-cost">
+                                            @{currencySymbol}{parseFloat(it.cost_price).toFixed(2)}
                                           </div>
                                         </div>
                                       </div>
